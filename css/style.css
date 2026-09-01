@@ -1,0 +1,48 @@
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overscroll-behavior: none;
+  background: #0b1622;
+}
+
+#map {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100dvh;
+}
+
+#loading {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #eaf2ff;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 1rem;
+  background: #0b1622;
+  z-index: 10;
+  pointer-events: none;
+}
+
+#loading.hidden {
+  display: none;
+}
+
+/* MapLibre control buttons: enlarge tap targets for touch use on a phone */
+.maplibregl-ctrl-group button {
+  width: 40px;
+  height: 40px;
+}
+
+.maplibregl-ctrl-top-right {
+  top: env(safe-area-inset-top, 0);
+  right: env(safe-area-inset-right, 0);
+}
+
+.maplibregl-ctrl-bottom-right {
+  bottom: env(safe-area-inset-bottom, 0);
+  right: env(safe-area-inset-right, 0);
+}

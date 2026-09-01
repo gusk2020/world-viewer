@@ -1,0 +1,10 @@
+{
+  "id": "kasoku-sekai",
+  "name": "過速世界",
+  "styleUrl": "https://demotiles.maplibre.org/style.json",
+  "center": [15, 25],
+  "zoom": 1.3,
+  "minZoom": 0,
+  "maxZoom": 18,
+  "defaultProjection": "globe"
+}
