@@ -102,17 +102,18 @@ rotation/zoom-dependent look **also happen on `color-relief` alone**. This
 means the degeneracy is in the raster-dem *source data/texture mapping*
 itself this close to the poles (MapLibre's globe renderer drapes Web
 Mercator raster tiles onto the sphere, and a Mercator tile's row right at
-90°/-90° is an infinitely-thin sliver in real-world terms — there's no
-clean fix at the paint-property level). The pragmatic fix: `terrain-pole-
-mask`, a small always-on solid-fill layer (`js/terrainLayers.js`,
-`POLE_MASK_LATITUDE = 83`) that covers latitude beyond ±83° and hides
-whatever the raster layer is doing there, instead of trying to render real
-elevation color that close to the pole. It's a plain vector fill, so it
-has none of the raster-on-globe pole problems itself. It's tied to
-`setTerrainVisible` (always on together with `terrain-color-relief`, not
-part of the user-toggleable glacier layer). If the artifact still peeks
-out past the mask edge on the phone, raise `POLE_MASK_LATITUDE` (lower
-number = bigger cap).
+90°/-90° is an infinitely-thin sliver in real-world terms). A follow-up
+attempt added `terrain-pole-mask`, a solid-fill patch over the pole to
+hide it — the user found the patch itself looked worse than the artifact
+it was covering, so **it was removed**. Current state: the pole-area
+render artifact is a known, accepted limitation of Web-Mercator-tiled DEM
+data draped on a 3D globe (see the explanation given to the user for the
+plain-language version) and is left as-is. Don't re-add a masking patch
+without checking with the user first — they explicitly didn't want that
+trade-off. If this needs a real fix later, it likely means either a
+polar-specific projection/dataset for high latitudes, or waiting on
+MapLibre's own globe-rendering code to handle the pole singularity better
+— both bigger than this feature currently warrants.
 Glacier extent (`worlds/<world-id>/glaciers.json`) is a separate toggle-able
 fill layer on top — currently just placeholder polar-cap boxes, not real
 ice-extent data. Turning it off reveals the terrain layer underneath it
@@ -121,10 +122,10 @@ ice-extent data. Turning it off reveals the terrain layer underneath it
 Layer stacking (bottom→top) inside the base style, using `beforeId:
 "countries-boundary"` for every custom layer so they sit above the base
 style's `countries-fill` but below its boundary/label layers:
-`terrain-color-relief` → `terrain-pole-mask` → `glacier-fill` →
-`territories-fill` → `territories-outline`, then city circle/label layers
-added last (topmost, no `beforeId`). Only one of {terrain group, history
-group} is visible at a time — controlled by `state.mode` in `js/app.js`.
+`terrain-color-relief` → `glacier-fill` → `territories-fill` →
+`territories-outline`, then city circle/label layers added last (topmost,
+no `beforeId`). Only one of {terrain group, history group} is visible at a
+time — controlled by `state.mode` in `js/app.js`.
 
 ### Tap-and-hold to center + flatten — tried, then removed
 
