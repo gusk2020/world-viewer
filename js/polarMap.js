@@ -106,7 +106,10 @@ export function createPolarMap(containerId, pole, config, glaciersGeoJson) {
       minZoom: 0,
       maxZoom: GIBS_500M_RESOLUTIONS.length - 1,
     }),
-    controls: [],
+    // Note: the global bundle namespaces this as `ol.control.defaults.defaults`
+    // (the module ol/control/defaults exports a function also named
+    // `defaults`, so the UMD build nests it under a matching object).
+    controls: ol.control.defaults.defaults().extend([new ol.control.ScaleLine({ units: "metric" })]),
   });
 
   return {

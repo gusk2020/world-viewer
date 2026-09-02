@@ -126,6 +126,37 @@ html, body {
   font-weight: 600;
 }
 
+/* OpenLayers polar-map controls: reposition to match the MapLibre engine's
+   top-right zoom/compass convention (OL defaults to top-left zoom buttons),
+   stacked above where #view-cycle-btn sits so nothing overlaps. */
+.ol-zoom {
+  top: calc(env(safe-area-inset-top, 0) + 8px);
+  right: env(safe-area-inset-right, 0);
+  left: auto;
+  margin-right: 10px;
+}
+
+.ol-rotate {
+  top: calc(env(safe-area-inset-top, 0) + 88px);
+  right: env(safe-area-inset-right, 0);
+  left: auto;
+  margin-right: 10px;
+}
+
+.ol-zoom button,
+.ol-rotate button {
+  width: 40px;
+  height: 40px;
+}
+
+/* Scale line would otherwise sit bottom-left, under the bottom control
+   panel -- move it to the free top-left corner instead. */
+.ol-scale-line {
+  top: calc(env(safe-area-inset-top, 0) + 10px);
+  left: calc(env(safe-area-inset-left, 0) + 10px);
+  bottom: auto;
+}
+
 /* Single persistent view-mode cycle button: sits where MapLibre's
    GlobeControl used to (below the zoom/compass group), but as a plain
    page-level element so it stays visible across all 4 view modes, not

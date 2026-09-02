@@ -272,6 +272,24 @@ placeholder data, read via `ol.format.GeoJSON` with
 code>`, rendered as an `ol.layer.Vector`. The `#glacier-toggle` button
 routes to whichever engine(s) are relevant via `applyVisibility()`.
 
+**Polar map interaction controls**: the user asked for the polar maps to
+feel as capable as the MapLibre engine — finger-rotate, a compass button
+that resets to north-up, zoom +/- buttons, and a scale bar — not a
+static pan/zoom-only view. `js/polarMap.js` sets `controls:
+ol.control.defaults.defaults().extend([new ol.control.ScaleLine(...)])`.
+**Gotcha**: in the global `ol` bundle this is namespaced
+`ol.control.defaults.defaults`, not `ol.control.defaults()` — the module
+`ol/control/defaults` exports a function also named `defaults`, so the
+UMD build nests it under an object of the same name. Two-finger rotate
+was already available by default (OpenLayers enables `PinchRotate` in its
+default interactions unless you override `interactions:`, which this code
+doesn't) — it just had no compass button to discover it or reset it, which
+`ol.control.Rotate` (included in `defaults.defaults()`) now provides. CSS
+repositions `.ol-zoom`/`.ol-rotate` from OL's default top-left to top-right
+(stacked above `#view-cycle-btn`) to match the MapLibre engine's control
+placement, and `.ol-scale-line` from bottom-left (which would sit under
+the bottom `#controls` panel) to top-left.
+
 **View-mode switching UI**: v0.3 first shipped a row of 4 explicit buttons
 (`#view-mode-row`) plus kept MapLibre's built-in `GlobeControl` button for
 globe↔flat only — two different, redundant ways to change the view. The
