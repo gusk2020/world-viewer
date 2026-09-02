@@ -95,10 +95,24 @@ artifact around the Arctic/Antarctic — confirmed by the user on their
 phone. Hillshade's default `illumination-anchor` is also viewport-relative,
 so the same real terrain visibly re-shades as you rotate/tilt the globe,
 which read as "two different renderings of the same place" to the user.
-Removing hillshade fixes both at once (color-relief alone is a pure
-per-pixel elevation→color mapping with no light-direction/view dependency).
-Don't re-add hillshade without solving the pole-artifact + viewport-anchor
-problem first.
+
+Removing hillshade turned out not to be enough on its own — the user
+confirmed the radial streak (fainter but present) and the
+rotation/zoom-dependent look **also happen on `color-relief` alone**. This
+means the degeneracy is in the raster-dem *source data/texture mapping*
+itself this close to the poles (MapLibre's globe renderer drapes Web
+Mercator raster tiles onto the sphere, and a Mercator tile's row right at
+90°/-90° is an infinitely-thin sliver in real-world terms — there's no
+clean fix at the paint-property level). The pragmatic fix: `terrain-pole-
+mask`, a small always-on solid-fill layer (`js/terrainLayers.js`,
+`POLE_MASK_LATITUDE = 83`) that covers latitude beyond ±83° and hides
+whatever the raster layer is doing there, instead of trying to render real
+elevation color that close to the pole. It's a plain vector fill, so it
+has none of the raster-on-globe pole problems itself. It's tied to
+`setTerrainVisible` (always on together with `terrain-color-relief`, not
+part of the user-toggleable glacier layer). If the artifact still peeks
+out past the mask edge on the phone, raise `POLE_MASK_LATITUDE` (lower
+number = bigger cap).
 Glacier extent (`worlds/<world-id>/glaciers.json`) is a separate toggle-able
 fill layer on top — currently just placeholder polar-cap boxes, not real
 ice-extent data. Turning it off reveals the terrain layer underneath it
@@ -107,10 +121,10 @@ ice-extent data. Turning it off reveals the terrain layer underneath it
 Layer stacking (bottom→top) inside the base style, using `beforeId:
 "countries-boundary"` for every custom layer so they sit above the base
 style's `countries-fill` but below its boundary/label layers:
-`terrain-color-relief` → `glacier-fill` → `territories-fill` →
-`territories-outline`, then city circle/label layers added last (topmost,
-no `beforeId`). Only one of {terrain group, history group} is visible at a
-time — controlled by `state.mode` in `js/app.js`.
+`terrain-color-relief` → `terrain-pole-mask` → `glacier-fill` →
+`territories-fill` → `territories-outline`, then city circle/label layers
+added last (topmost, no `beforeId`). Only one of {terrain group, history
+group} is visible at a time — controlled by `state.mode` in `js/app.js`.
 
 ### Tap-and-hold to center + flatten — tried, then removed
 
