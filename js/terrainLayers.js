@@ -1,19 +1,4 @@
-const ELEVATION_COLOR_RAMP = [
-  "interpolate",
-  ["linear"],
-  ["elevation"],
-  -10000, "#050f2c",
-  -4000, "#0a2a55",
-  -1000, "#124a7a",
-  -50, "#2a76a8",
-  0, "#c9d9a0",
-  200, "#a9c97a",
-  800, "#e0c37a",
-  2000, "#b98b5e",
-  4000, "#8a6a52",
-  6000, "#f5f5f5",
-  8849, "#ffffff",
-];
+import { toColorReliefExpression } from "./elevationColor.js";
 
 export function addTerrainLayers(map, config) {
   map.addSource("terrain-dem", {
@@ -31,7 +16,7 @@ export function addTerrainLayers(map, config) {
       type: "color-relief",
       source: "terrain-dem",
       paint: {
-        "color-relief-color": ELEVATION_COLOR_RAMP,
+        "color-relief-color": toColorReliefExpression(),
       },
     },
     "countries-boundary"

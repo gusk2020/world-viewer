@@ -86,8 +86,11 @@ what "水中/海底図も含めて" asked for, and it's the same DEM source the
 future sea-level slider will need, so this groundwork carries forward.
 Rendered via a `color-relief` layer only (elevation→color ramp, MapLibre
 v6; note this layer type is expected to be renamed `dem` in a future
-MapLibre version — check `js/terrainLayers.js`'s `ELEVATION_COLOR_RAMP` if
-colors stop working after a library upgrade). **Deliberately no
+MapLibre version). The elevation→color stops live in `js/elevationColor.js`
+(`ELEVATION_STOPS`), shared between this GL expression
+(`toColorReliefExpression()`) and the polar maps' canvas-based recoloring
+(see below) — check that file if colors stop working after a library
+upgrade. **Deliberately no
 `hillshade` layer**: an earlier version added one, but hillshade computed
 from Web-Mercator-tiled raster-dem data breaks down at the poles (tiles
 become degenerate slivers there), producing a visible radial streak
@@ -145,6 +148,108 @@ tap-to-flatten gesture unless asked again, and if so, clarify up front
 whether "centered on the point" means simple re-centering or a
 reprojection around that point.
 
+### Dedicated polar maps (v0.3) — why a second map engine
+
+The user's actual goal for this whole app is a **sea-level-rise / ice-sheet
+simulator**, and the poles are the single most important place to get
+right — so the pole rendering artifact above wasn't an acceptable
+permanent limitation for this project, even though it's a real MapLibre
+limitation. Researched alternatives (see chat history for the fuller
+comparison): CesiumJS fixes the globe-drape problem in general (real
+ellipsoid terrain) but has *no native polar-stereographic support either*
+and would mean rebuilding everything (history layers, city labels, era
+slider) in a different API — worst effort/benefit ratio for this
+specific problem. **OpenLayers** was chosen instead: it natively supports
+arbitrary projections via proj4, and — critically — can reproject an
+ordinary Web Mercator XYZ tile source into a different view projection on
+the fly. A polar-stereographic projection has no singularity at its own
+pole (that's the whole point of the projection), so this sidesteps the
+MapLibre bug entirely rather than working around it. This is also the
+same technique real polar science tools use (NASA GIBS, NSIDC/PolarView),
+which use OpenLayers for exactly this reason.
+
+**Four view modes now**, chosen explicitly by the user (not to be
+collapsed back to fewer without asking): a row of 4 buttons in
+`#view-mode-row` (`js/app.js`, `state.viewMode`):
+1. `globe` — the original rotatable 3D MapLibre globe (world overview).
+2. `flat` — the original flat MapLibre mercator view.
+3. `arctic` — dedicated OpenLayers map, view projection `EPSG:3413`
+   (NSIDC Sea Ice Polar Stereographic North).
+4. `antarctic` — dedicated OpenLayers map, view projection `EPSG:3031`
+   (Antarctic Polar Stereographic).
+
+`globe`/`flat` share one `MapLibreMap` instance (`#map`, projection is
+just toggled) exactly as in v0.1/v0.2. `arctic`/`antarctic` are separate
+`ol.Map` instances (`#map-arctic` / `#map-antarctic`, one per pole,
+**lazily created** on first switch to that mode — see
+`ensurePolarMap()` in `js/app.js`) since they're a different rendering
+engine entirely. Only the container for the active mode is un-`hidden`;
+`renderViewMode()` in `js/app.js` is the single place that knows how to
+show/hide containers, flip the MapLibre projection, and show/hide the
+right control panels for whichever mode is active. `state.dataMode`
+(history vs. terrain) only applies within `globe`/`flat` — the polar maps
+have no historical-border content (our placeholder territories/cities
+are all fictional mid-latitude rectangles nowhere near the poles), so
+they're terrain+glacier only; the `#mode-toggle` button and
+`#history-panel` are hidden whenever `viewMode` is `arctic`/`antarctic`.
+
+**Libraries** (`index.html`, plain `<script>` tags, not ES modules —
+OpenLayers' `dist/ol.js` and proj4's `dist/proj4.js` are both classic
+global-namespace UMD/IIFE bundles, so no import-map gymnastics like
+MapLibre v6 needed): `ol@10.10.0` + `proj4@2.22.0` from jsdelivr. Loaded
+before `js/app.js` so `window.ol`/`window.proj4` exist by the time
+`js/polarMap.js` uses them (`ensureProjectionsRegistered()` calls
+`proj4.defs(...)` for both EPSG codes, then `ol.proj.proj4.register(proj4)`
+once).
+
+**How the polar terrain layer actually works**
+(`js/polarMap.js`): the same AWS Terrarium DEM tiles used by the MapLibre
+engine are loaded via `ol.source.XYZ` with `projection: 'EPSG:3857'`
+(their real, native projection) — OpenLayers then reprojects that layer
+into the view's EPSG:3413/3031 automatically, and because this is a
+standard 2D image reprojection (not a sphere-draping operation), it does
+not hit the pole-singularity bug. But we need *colored elevation*, not
+raw grayscale-ish Terrarium PNGs, and there's no `color-relief`-equivalent
+paint property in OpenLayers for this — so `tileLoadFunction` is
+overridden to: fetch the raw tile image, draw it to an offscreen canvas,
+decode each pixel's Terrarium-encoded elevation
+(`decodeTerrariumElevation()` in `js/elevationColor.js`), recolor it via
+the *same* `ELEVATION_STOPS` ramp the MapLibre engine uses
+(`elevationToRGB()`), and hand the recolored canvas back as the tile
+image (via `canvas.toDataURL()`). This requires `crossOrigin: 'anonymous'`
+on both the source and the loader `Image`, which requires the AWS bucket
+to actually send CORS headers — untested from this sandbox (the whole
+host is network-blocked here), but very likely fine since this bucket is
+specifically published as an open dataset for exactly this kind of
+client-side/browser DEM decoding. **If polar terrain tiles come back
+blank/gray/broken on the phone, check the browser console for a CORS
+error first** — that's the one part of this design that couldn't be
+verified before shipping.
+
+Glacier layer on the polar maps: same `worlds/<world-id>/glaciers.json`
+placeholder data, read via `ol.format.GeoJSON` with
+`dataProjection: 'EPSG:4326'` / `featureProjection: <the pole's EPSG
+code>`, rendered as an `ol.layer.Vector`. The `#glacier-toggle` button
+routes to whichever engine(s) are relevant via `applyVisibility()`.
+
+**Deliberately not built in v0.3** (kept in scope, ask before adding):
+political border/territory overlay on the polar maps (no placeholder data
+exists there anyway); 3D tilt/perspective on the polar maps (they're flat
+2D by design — that's what fixes the pole rendering); performance tuning
+of the per-tile canvas recolor (works, but a `DataTile`+`WebGLTile`-based
+version would be faster if this turns out too slow on the phone with many
+tiles in view).
+
+**Rollback point**: commit `d2b35aa` ("Remove polar cap mask; user prefers
+the artifact to the patch") is the last state before this OpenLayers/polar
+redesign began — a known-good, user-approved v0.2. If the v0.3 polar work
+needs to be undone, revert/reset to that commit rather than trying to
+manually un-build pieces of it. (A `v0.2-stable` git tag was attempted for
+this but this session's push token doesn't have permission to push tags —
+only the branch — so the commit hash is the actual rollback anchor;
+GitHub's own commit history keeps `d2b35aa` reachable indefinitely as long
+as the branch isn't force-pushed over it.)
+
 ## Version 0.1 scope (done)
 
 1. Globe/world map displays.
@@ -171,6 +276,26 @@ reprojection around that point.
 Still out of scope (per user instructions / not yet asked for): sea level
 slider/flooding simulation, any second world, real (non-placeholder)
 border/city/glacier data.
+
+## Version 0.3 scope (done, pending on-phone confirmation)
+
+The stated purpose of this whole app is a sea-level-rise / ice-sheet
+simulator, and the user flagged the pole rendering artifact from v0.2 as
+a priority-one blocker rather than a cosmetic nit — see "Dedicated polar
+maps (v0.3)" above for the full design rationale and rollback point.
+
+1. Two new dedicated flat polar-stereographic maps (Arctic `EPSG:3413`,
+   Antarctic `EPSG:3031`), built with OpenLayers, showing real colorized
+   elevation/bathymetry with no pole singularity artifact.
+2. A 4-way view-mode switch (3D globe / flat 2D / Arctic / Antarctic)
+   replacing the old implicit globe↔flat-only toggle.
+3. Glacier toggle now works across all four modes (routes to whichever
+   engine is active).
+
+Not yet verified on a real device: whether the AWS Terrarium bucket's CORS
+headers actually allow the client-side canvas pixel decode this needs (see
+the CORS note above) — this is the one part of v0.3 that could still fail
+in a way the sandbox couldn't catch.
 
 ## How this was tested (no browser on the dev side either)
 
@@ -204,6 +329,24 @@ after shipping were both real-world-data rendering issues that only show
 up with actual AWS terrain tiles loaded — the sandbox's local placeholder
 DEM tiles can't surface that class of bug, so changes to terrain
 rendering specifically still need the user's on-phone confirmation.
+
+For v0.3 (the OpenLayers polar maps), `ol` and `proj4` were installed from
+npm into the same scratch copy and vendored locally the same way as
+`maplibre-gl`, and the CDN `<script>` tags swapped to local paths for the
+test. Verified via Playwright: `window.__polarMaps.{arctic,antarctic}.map
+.getView().getProjection().getCode()` returns exactly `EPSG:3413` /
+`EPSG:3031` after switching to those modes (confirms the projections were
+registered and applied correctly); all 4 view-mode buttons show/hide the
+right container and control panels; the glacier toggle flips the correct
+OpenLayers layer's `getVisible()` when a polar mode is active; no
+`pageerror`s across the whole sequence. Also unit-tested
+`js/elevationColor.js`'s `decodeTerrariumElevation`/`elevationToRGB`
+directly in plain Node (no browser needed) against known encode/decode
+values. What this *couldn't* verify (network-blocked in this sandbox, same
+as always): whether real AWS Terrarium tiles actually load into the
+colorized polar layer without a CORS error, and what the recolored
+elevation/bathymetry actually looks like at the poles — needs the user's
+phone.
 
 ## Working conventions
 

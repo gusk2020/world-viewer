@@ -6,11 +6,18 @@ html, body {
   background: #0b1622;
 }
 
-#map {
+#map,
+.polar-map {
   position: fixed;
   inset: 0;
   width: 100vw;
   height: 100dvh;
+  background: #0b1622;
+}
+
+#map[hidden],
+.polar-map[hidden] {
+  display: none;
 }
 
 #loading {
@@ -117,4 +124,26 @@ html, body {
   color: #eaf2ff;
   font-size: 0.95rem;
   font-weight: 600;
+}
+
+#view-mode-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  padding: 6px;
+}
+
+.view-mode-btn {
+  min-height: 44px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: #9db4d1;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.view-mode-btn[aria-pressed="true"] {
+  background: #3d5a80;
+  color: #ffffff;
 }
