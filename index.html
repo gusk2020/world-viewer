@@ -10,6 +10,22 @@
 <body>
   <div id="map"></div>
   <div id="loading">読み込み中…</div>
+
+  <div id="controls">
+    <div id="history-panel" class="panel">
+      <div id="year-row">
+        <span id="year-label">2020年</span>
+        <span id="era-note"></span>
+      </div>
+      <input type="range" id="year-slider" min="1100" max="2020" step="20" value="2020" />
+      <button id="city-toggle" class="toggle-btn" aria-pressed="true">都市を表示</button>
+    </div>
+    <div id="terrain-panel" class="panel" hidden>
+      <button id="glacier-toggle" class="toggle-btn" aria-pressed="true">氷河を表示</button>
+    </div>
+    <button id="mode-toggle">地形図に切替</button>
+  </div>
+
   <script type="module" src="./js/app.js"></script>
 </body>
 </html>

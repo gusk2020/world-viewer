@@ -46,3 +46,75 @@ html, body {
   bottom: env(safe-area-inset-bottom, 0);
   right: env(safe-area-inset-right, 0);
 }
+
+#controls {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: env(safe-area-inset-bottom, 0);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0));
+  padding-bottom: 10px;
+  box-sizing: border-box;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  pointer-events: none;
+}
+
+#controls > * {
+  pointer-events: auto;
+}
+
+.panel {
+  background: rgba(15, 23, 35, 0.82);
+  border-radius: 14px;
+  padding: 10px 14px;
+  color: #eaf2ff;
+}
+
+#year-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 4px;
+  font-size: 0.95rem;
+}
+
+#era-note {
+  font-size: 0.78rem;
+  color: #9db4d1;
+}
+
+#year-slider {
+  width: 100%;
+  height: 32px;
+}
+
+.toggle-btn {
+  margin-top: 6px;
+  width: 100%;
+  min-height: 44px;
+  border: none;
+  border-radius: 10px;
+  background: #3d5a80;
+  color: #ffffff;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.toggle-btn[aria-pressed="false"] {
+  background: #4a5568;
+  opacity: 0.7;
+}
+
+#mode-toggle {
+  min-height: 44px;
+  border: none;
+  border-radius: 12px;
+  background: rgba(15, 23, 35, 0.82);
+  color: #eaf2ff;
+  font-size: 0.95rem;
+  font-weight: 600;
+}

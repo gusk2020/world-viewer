@@ -1,0 +1,37 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "name": "北極氷床(仮)" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-180, 70],
+            [180, 70],
+            [180, 90],
+            [-180, 90],
+            [-180, 70]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "南極氷床(仮)" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-180, -90],
+            [180, -90],
+            [180, -65],
+            [-180, -65],
+            [-180, -90]
+          ]
+        ]
+      }
+    }
+  ]
+}

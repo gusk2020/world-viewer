@@ -1,0 +1,259 @@
+{
+  "year": 1700,
+  "territories": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "勢力A",
+          "color": "#e07a5f"
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                -10,
+                30
+              ],
+              [
+                22,
+                30
+              ],
+              [
+                22,
+                55
+              ],
+              [
+                -10,
+                55
+              ],
+              [
+                -10,
+                30
+              ]
+            ]
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "勢力B",
+          "color": "#3d5a80"
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                22,
+                5
+              ],
+              [
+                35,
+                5
+              ],
+              [
+                35,
+                35
+              ],
+              [
+                22,
+                35
+              ],
+              [
+                22,
+                5
+              ]
+            ]
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "勢力C",
+          "color": "#588157"
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                35,
+                10
+              ],
+              [
+                80,
+                10
+              ],
+              [
+                80,
+                45
+              ],
+              [
+                35,
+                45
+              ],
+              [
+                35,
+                10
+              ]
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  "cities": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "都市A-1",
+          "rank": "capital",
+          "faction": "勢力A",
+          "color": "#e07a5f"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            2.0,
+            45.0
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "都市A-2",
+          "rank": "secondary",
+          "faction": "勢力A",
+          "color": "#e07a5f"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            -5.0,
+            40.0
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "都市A-3",
+          "rank": "third",
+          "faction": "勢力A",
+          "color": "#e07a5f"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            8.0,
+            50.0
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "都市B-1",
+          "rank": "capital",
+          "faction": "勢力B",
+          "color": "#3d5a80"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            30.0,
+            20.0
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "都市B-2",
+          "rank": "secondary",
+          "faction": "勢力B",
+          "color": "#3d5a80"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            20.0,
+            12.0
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "都市B-3",
+          "rank": "third",
+          "faction": "勢力B",
+          "color": "#3d5a80"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            35.0,
+            28.0
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "都市C-1",
+          "rank": "capital",
+          "faction": "勢力C",
+          "color": "#588157"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            60.0,
+            28.0
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "都市C-2",
+          "rank": "secondary",
+          "faction": "勢力C",
+          "color": "#588157"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            50.0,
+            18.0
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "name": "都市C-3",
+          "rank": "third",
+          "faction": "勢力C",
+          "color": "#588157"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            70.0,
+            35.0
+          ]
+        }
+      }
+    ]
+  }
+}

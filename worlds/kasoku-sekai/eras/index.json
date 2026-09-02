@@ -1,0 +1,13 @@
+{
+  "startYear": 1100,
+  "presentYear": 2020,
+  "stepYears": 20,
+  "keyframes": [
+    1100,
+    1300,
+    1500,
+    1700,
+    1900,
+    2020
+  ]
+}
