@@ -2,7 +2,6 @@ import {
   MapLibreMap,
   NavigationControl,
   GlobeControl,
-  Marker,
 } from "https://cdn.jsdelivr.net/npm/maplibre-gl@6/dist/maplibre-gl.mjs";
 
 import {
@@ -23,8 +22,6 @@ import {
 } from "./terrainLayers.js";
 
 const WORLD_CONFIG_URL = "./worlds/kasoku-sekai/config.json";
-const LONG_PRESS_MS = 500;
-const LONG_PRESS_MOVE_TOLERANCE_PX = 10;
 
 async function main() {
   const world = await (await fetch(WORLD_CONFIG_URL)).json();
@@ -69,7 +66,6 @@ async function main() {
     setupModeToggle(map, state, applyVisibility);
     setupCityToggle(state, applyVisibility);
     setupGlacierToggle(state, applyVisibility);
-    setupLongPressToFlatten(map);
   });
 
   map.on("error", (e) => {
@@ -140,57 +136,6 @@ function setupGlacierToggle(state, applyVisibility) {
     button.setAttribute("aria-pressed", String(state.glacierOn));
     button.textContent = state.glacierOn ? "氷河を表示" : "氷河を非表示";
     applyVisibility();
-  });
-}
-
-function setupLongPressToFlatten(map) {
-  const canvas = map.getCanvas();
-  let timer = null;
-  let startX = 0;
-  let startY = 0;
-  let activePointerId = null;
-
-  function cancel() {
-    if (timer) clearTimeout(timer);
-    timer = null;
-    activePointerId = null;
-  }
-
-  canvas.addEventListener("pointerdown", (e) => {
-    if (activePointerId !== null) {
-      // A second finger touched down (pinch/rotate starting); abort.
-      cancel();
-      return;
-    }
-    activePointerId = e.pointerId;
-    startX = e.clientX;
-    startY = e.clientY;
-
-    timer = setTimeout(() => {
-      const rect = canvas.getBoundingClientRect();
-      const lngLat = map.unproject([startX - rect.left, startY - rect.top]);
-
-      const marker = new Marker({ color: "#ffffff" }).setLngLat(lngLat).addTo(map);
-      setTimeout(() => marker.remove(), 900);
-
-      map.flyTo({ center: lngLat });
-      map.setProjection({ type: "mercator" });
-      cancel();
-    }, LONG_PRESS_MS);
-  });
-
-  canvas.addEventListener("pointermove", (e) => {
-    if (e.pointerId !== activePointerId || !timer) return;
-    const dx = e.clientX - startX;
-    const dy = e.clientY - startY;
-    if (Math.hypot(dx, dy) > LONG_PRESS_MOVE_TOLERANCE_PX) cancel();
-  });
-
-  canvas.addEventListener("pointerup", (e) => {
-    if (e.pointerId === activePointerId) cancel();
-  });
-  canvas.addEventListener("pointercancel", (e) => {
-    if (e.pointerId === activePointerId) cancel();
   });
 }
 

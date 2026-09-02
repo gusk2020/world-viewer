@@ -84,10 +84,21 @@ DEM tiles (`https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.
 elevation *and* ocean-floor bathymetry (negative values), which is exactly
 what "水中/海底図も含めて" asked for, and it's the same DEM source the
 future sea-level slider will need, so this groundwork carries forward.
-Rendered via a `color-relief` layer (elevation→color ramp, MapLibre v6;
-note this layer type is expected to be renamed `dem` in a future MapLibre
-version — check `js/terrainLayers.js`'s `ELEVATION_COLOR_RAMP` if colors
-stop working after a library upgrade) plus a `hillshade` layer for shading.
+Rendered via a `color-relief` layer only (elevation→color ramp, MapLibre
+v6; note this layer type is expected to be renamed `dem` in a future
+MapLibre version — check `js/terrainLayers.js`'s `ELEVATION_COLOR_RAMP` if
+colors stop working after a library upgrade). **Deliberately no
+`hillshade` layer**: an earlier version added one, but hillshade computed
+from Web-Mercator-tiled raster-dem data breaks down at the poles (tiles
+become degenerate slivers there), producing a visible radial streak
+artifact around the Arctic/Antarctic — confirmed by the user on their
+phone. Hillshade's default `illumination-anchor` is also viewport-relative,
+so the same real terrain visibly re-shades as you rotate/tilt the globe,
+which read as "two different renderings of the same place" to the user.
+Removing hillshade fixes both at once (color-relief alone is a pure
+per-pixel elevation→color mapping with no light-direction/view dependency).
+Don't re-add hillshade without solving the pole-artifact + viewport-anchor
+problem first.
 Glacier extent (`worlds/<world-id>/glaciers.json`) is a separate toggle-able
 fill layer on top — currently just placeholder polar-cap boxes, not real
 ice-extent data. Turning it off reveals the terrain layer underneath it
@@ -96,22 +107,28 @@ ice-extent data. Turning it off reveals the terrain layer underneath it
 Layer stacking (bottom→top) inside the base style, using `beforeId:
 "countries-boundary"` for every custom layer so they sit above the base
 style's `countries-fill` but below its boundary/label layers:
-`terrain-color-relief` → `terrain-hillshade` → `glacier-fill` →
-`territories-fill` → `territories-outline`, then city circle/label layers
-added last (topmost, no `beforeId`). Only one of {terrain group, history
-group} is visible at a time — controlled by `state.mode` in `js/app.js`.
+`terrain-color-relief` → `glacier-fill` → `territories-fill` →
+`territories-outline`, then city circle/label layers added last (topmost,
+no `beforeId`). Only one of {terrain group, history group} is visible at a
+time — controlled by `state.mode` in `js/app.js`.
 
-### Tap-and-hold to center + flatten
+### Tap-and-hold to center + flatten — tried, then removed
 
-"3Dの指定した点を中心に2Dマップにしたい": implemented as a manual
-long-press detector on the map canvas using Pointer Events (`js/app.js`,
-`setupLongPressToFlatten`) — NOT MapLibre's `contextmenu` map event, which
-does not reliably fire on a mobile long-press (regressed in mapbox-gl/
-maplibre-gl years ago, confirmed via their GitHub issues). The custom
-detector: 500ms hold, cancels itself if the pointer moves >10px (a pan) or
-a second pointer arrives (start of a pinch/rotate). On a successful long
-press it drops a brief white marker, `flyTo`s to that point, and calls
-`setProjection({type: 'mercator'})`.
+v0.2 first shipped a custom long-press detector (Pointer Events on the map
+canvas, since MapLibre's `contextmenu` event doesn't fire reliably on a
+mobile long-press — confirmed via their GitHub issues) that flattened to
+2D **centered on the tapped point**. The user tested it and clarified what
+they'd actually pictured: tapping a point (e.g. the North Pole) should
+redraw the 2D map with *that point placed at the pole/center of a
+differently-oriented projection*, not just re-center a standard Mercator
+view there — a bigger change to how the flat map is drawn, not just its
+center. They said this feature isn't a priority, so it was removed rather
+than rebuilt: 2D/3D switching is back to being solely the built-in
+`GlobeControl` button (next to the zoom buttons), which keeps the current
+view center when it toggles projection. Don't reintroduce a custom
+tap-to-flatten gesture unless asked again, and if so, clarify up front
+whether "centered on the point" means simple re-centering or a
+reprojection around that point.
 
 ## Version 0.1 scope (done)
 
@@ -121,17 +138,20 @@ press it drops a brief white marker, `flyTo`s to that point, and calls
 4. Mobile-usable layout: fullscreen map, `100dvh`, safe-area insets for
    controls, enlarged control tap targets, no page scroll/bounce.
 
-## Version 0.2 scope (done)
+## Version 0.2 scope (done, then adjusted per phone feedback)
 
-1. Tap-and-hold a point on the 3D globe → recenters and flattens to 2D
-   there.
+1. ~~Tap-and-hold a point on the 3D globe → recenters and flattens to 2D
+   there.~~ Built, tested by the user, then removed — see "Tap-and-hold to
+   center + flatten — tried, then removed" above. 2D/3D switching is just
+   the `GlobeControl` button again.
 2. Year slider (12th century → present, 20-year steps) redraws
    territory/border polygons per era, snapping to the nearest keyframe
    with real data.
 3. Top-3 city labels (capital/secondary/third) per era/faction, with a
    show/hide toggle.
 4. A second base-layer mode: real-world terrain + bathymetry (elevation
-   color ramp + hillshade), with an independent glacier-layer toggle.
+   color ramp only — see the hillshade note above for why hillshade was
+   removed), with an independent glacier-layer toggle.
 
 Still out of scope (per user instructions / not yet asked for): sea level
 slider/flooding simulation, any second world, real (non-placeholder)
@@ -162,10 +182,13 @@ phone). Verified: slider year label + "(データ: N年時点)" note logic at
 both a keyframe year and a non-keyframe year; mode toggle swaps panels and
 layer visibility; city/glacier toggle buttons flip `aria-pressed` and
 label text; every added layer/source id exists on the live `Map` instance
-(`getLayer`/`getSource`); simulated pointer-down-hold-up on the canvas
-triggers the long-press flatten (confirmed by the globe rendering flat
-afterward). Re-run this whole check before shipping further map-logic
-changes.
+(`getLayer`/`getSource`). Re-run this whole check before shipping further
+map-logic changes. Note the limits of this approach, though: the pole
+hillshade artifact and the viewport-relative shading that got reported
+after shipping were both real-world-data rendering issues that only show
+up with actual AWS terrain tiles loaded — the sandbox's local placeholder
+DEM tiles can't surface that class of bug, so changes to terrain
+rendering specifically still need the user's on-phone confirmation.
 
 ## Working conventions
 

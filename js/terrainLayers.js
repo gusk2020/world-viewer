@@ -36,18 +36,6 @@ export function addTerrainLayers(map, config) {
     },
     "countries-boundary"
   );
-
-  map.addLayer(
-    {
-      id: "terrain-hillshade",
-      type: "hillshade",
-      source: "terrain-dem",
-      paint: {
-        "hillshade-exaggeration": 0.6,
-      },
-    },
-    "countries-boundary"
-  );
 }
 
 export function addGlacierLayer(map, glaciersGeoJson) {
@@ -68,9 +56,7 @@ export function addGlacierLayer(map, glaciersGeoJson) {
 }
 
 export function setTerrainVisible(map, visible) {
-  const v = visible ? "visible" : "none";
-  map.setLayoutProperty("terrain-color-relief", "visibility", v);
-  map.setLayoutProperty("terrain-hillshade", "visibility", v);
+  map.setLayoutProperty("terrain-color-relief", "visibility", visible ? "visible" : "none");
 }
 
 export function setGlacierVisible(map, visible) {
