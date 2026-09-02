@@ -1,7 +1,6 @@
 import {
   MapLibreMap,
   NavigationControl,
-  GlobeControl,
 } from "https://cdn.jsdelivr.net/npm/maplibre-gl@6/dist/maplibre-gl.mjs";
 
 import {
@@ -25,12 +24,8 @@ import { createPolarMap } from "./polarMap.js";
 
 const WORLD_CONFIG_URL = "./worlds/kasoku-sekai/config.json";
 
-const VIEW_MODE_BUTTONS = {
-  "view-globe": "globe",
-  "view-flat": "flat",
-  "view-arctic": "arctic",
-  "view-antarctic": "antarctic",
-};
+const VIEW_MODE_ORDER = ["globe", "flat", "arctic", "antarctic"];
+const VIEW_MODE_LABEL = { globe: "3D", flat: "2D", arctic: "北極", antarctic: "南極" };
 
 function isMapLibreView(viewMode) {
   return viewMode === "globe" || viewMode === "flat";
@@ -51,7 +46,6 @@ async function main() {
   });
 
   map.addControl(new NavigationControl({ visualizePitch: true }), "top-right");
-  map.addControl(new GlobeControl(), "top-right");
 
   const state = { viewMode: "globe", dataMode: "history", citiesOn: true, glacierOn: true };
   const polarMaps = { arctic: null, antarctic: null };
@@ -106,19 +100,17 @@ async function main() {
       modeToggleBtn.hidden = true;
     }
 
-    for (const [id, mode] of Object.entries(VIEW_MODE_BUTTONS)) {
-      document.getElementById(id).setAttribute("aria-pressed", String(state.viewMode === mode));
-    }
+    document.getElementById("view-cycle-btn").textContent = VIEW_MODE_LABEL[state.viewMode];
   }
 
-  function setupViewModeButtons() {
-    for (const [id, mode] of Object.entries(VIEW_MODE_BUTTONS)) {
-      document.getElementById(id).addEventListener("click", () => {
-        state.viewMode = mode;
-        renderViewMode();
-        applyVisibility();
-      });
-    }
+  function setupViewCycleButton() {
+    const button = document.getElementById("view-cycle-btn");
+    button.addEventListener("click", () => {
+      const next = VIEW_MODE_ORDER[(VIEW_MODE_ORDER.indexOf(state.viewMode) + 1) % VIEW_MODE_ORDER.length];
+      state.viewMode = next;
+      renderViewMode();
+      applyVisibility();
+    });
   }
 
   map.on("load", async () => {
@@ -134,7 +126,7 @@ async function main() {
     setupModeToggle(state, renderViewMode, applyVisibility);
     setupCityToggle(state, applyVisibility);
     setupGlacierToggle(state, applyVisibility);
-    setupViewModeButtons();
+    setupViewCycleButton();
   });
 
   map.on("error", (e) => {

@@ -141,12 +141,14 @@ redraw the 2D map with *that point placed at the pole/center of a
 differently-oriented projection*, not just re-center a standard Mercator
 view there — a bigger change to how the flat map is drawn, not just its
 center. They said this feature isn't a priority, so it was removed rather
-than rebuilt: 2D/3D switching is back to being solely the built-in
+than rebuilt: 2D/3D switching went back to being solely the built-in
 `GlobeControl` button (next to the zoom buttons), which keeps the current
-view center when it toggles projection. Don't reintroduce a custom
-tap-to-flatten gesture unless asked again, and if so, clarify up front
-whether "centered on the point" means simple re-centering or a
-reprojection around that point.
+view center when it toggles projection. (v0.3 later replaced `GlobeControl`
+itself with a custom cycle button for unrelated reasons — see below — but
+the "don't reintroduce tap-to-flatten" lesson still stands.) Don't
+reintroduce a custom tap-to-flatten gesture unless asked again, and if so,
+clarify up front whether "centered on the point" means simple re-centering
+or a reprojection around that point.
 
 ### Dedicated polar maps (v0.3) — why a second map engine
 
@@ -202,35 +204,89 @@ before `js/app.js` so `window.ol`/`window.proj4` exist by the time
 `proj4.defs(...)` for both EPSG codes, then `ol.proj.proj4.register(proj4)`
 once).
 
-**How the polar terrain layer actually works**
-(`js/polarMap.js`): the same AWS Terrarium DEM tiles used by the MapLibre
-engine are loaded via `ol.source.XYZ` with `projection: 'EPSG:3857'`
-(their real, native projection) — OpenLayers then reprojects that layer
-into the view's EPSG:3413/3031 automatically, and because this is a
-standard 2D image reprojection (not a sphere-draping operation), it does
-not hit the pole-singularity bug. But we need *colored elevation*, not
-raw grayscale-ish Terrarium PNGs, and there's no `color-relief`-equivalent
-paint property in OpenLayers for this — so `tileLoadFunction` is
-overridden to: fetch the raw tile image, draw it to an offscreen canvas,
-decode each pixel's Terrarium-encoded elevation
-(`decodeTerrariumElevation()` in `js/elevationColor.js`), recolor it via
-the *same* `ELEVATION_STOPS` ramp the MapLibre engine uses
-(`elevationToRGB()`), and hand the recolored canvas back as the tile
-image (via `canvas.toDataURL()`). This requires `crossOrigin: 'anonymous'`
-on both the source and the loader `Image`, which requires the AWS bucket
-to actually send CORS headers — untested from this sandbox (the whole
-host is network-blocked here), but very likely fine since this bucket is
-specifically published as an open dataset for exactly this kind of
-client-side/browser DEM decoding. **If polar terrain tiles come back
-blank/gray/broken on the phone, check the browser console for a CORS
-error first** — that's the one part of this design that couldn't be
-verified before shipping.
+**How the polar terrain layer actually works — v1 (AWS Terrarium,
+replaced) vs. v2 (NASA GIBS, current):**
+
+v1 loaded the same AWS Terrarium DEM tiles the MapLibre engine uses via
+`ol.source.XYZ` with `projection: 'EPSG:3857'` (their real, native
+projection) and let OpenLayers reproject that into the view's
+EPSG:3413/3031 on the fly. This avoided the globe's sphere-draping
+singularity, but the user found a **black hole covering the pole itself**
+after shipping it. Root cause: Web Mercator (the *source* tiles' native
+projection, independent of MapLibre) cannot represent latitude beyond
+about ±85.05° in the first place — the same reason Google Maps and
+virtually every other Web-Mercator-tiled map stops around there. There
+was nothing to reproject in that gap; no amount of code fixed this, it's
+inherent to reprojecting *from* Web Mercator.
+
+v2 (current) drops the AWS/Terrarium/reprojection approach for the polar
+maps entirely and instead uses **NASA GIBS's `BlueMarble_ShadedRelief_
+Bathymetry` layer, served natively in EPSG:3413/3031** (not reprojected
+from anything — GIBS renders this layer directly in each polar
+projection, with real coverage all the way to the pole, so there is no
+gap). This is a plain `ol.source.XYZ` pointed at GIBS's REST tile
+endpoint:
+`https://gibs.earthdata.nasa.gov/wmts/{epsg3413|epsg3031}/best/
+BlueMarble_ShadedRelief_Bathymetry/default/500m/{z}/{y}/{x}.jpeg` (note
+the path order is `z/y/x`, not the more common `z/x/y`), with a custom
+`ol.tilegrid.TileGrid` (`GIBS_ORIGIN` / `GIBS_500M_RESOLUTIONS` in
+`js/polarMap.js`). No canvas pixel-decoding, no CORS requirement (we're
+just displaying the image, not reading its pixels) — much simpler than
+v1. **Important trade-off, told to the user**: this is a pre-rendered
+NASA image, not raw elevation numbers. It looks great and is accurate,
+but (a) it cannot power a future sea-level slider by itself — that needs
+numeric elevation, which would mean sourcing real polar-native DEM data
+(e.g. BedMachine Antarctica/Greenland, ArcticDEM/REMA) and is a
+substantially bigger undertaking than this session could do (those come
+as large NetCDF/GeoTIFF science products, not ready-made web tiles, and
+would need real GIS processing this sandbox can't do — no GDAL, most
+data-portal hosts blocked); and (b) its colors are NASA's own natural
+Blue Marble palette, not this app's `ELEVATION_STOPS` ramp, so the polar
+maps will look a little different from the MapLibre globe/flat terrain
+mode. `js/elevationColor.js`'s `elevationToRGB`/`decodeTerrariumElevation`
+are unused by the polar path now but kept — they're exactly what a future
+numeric-polar-DEM upgrade would reuse.
+
+`GIBS_500M_RESOLUTIONS` in `js/polarMap.js` is **not independently
+confirmed** against GIBS's own capabilities document (network-blocked
+from this sandbox); it was inferred from a working reference example
+(the confirmed `250m` matrix set's resolutions, minus one level for the
+coarser `500m` set). If polar tiles look blurry, misaligned, or missing
+at some zoom levels on the phone, this array is the first thing to
+re-derive properly.
+
+**Why this data still can't fix the MapLibre 3D globe**: the globe's
+problem was never *which* picture we used — it's that MapLibre's globe
+renderer only knows how to drape Web-Mercator-tiled sources onto a sphere,
+and that draping math itself is what breaks down near the poles. GIBS's
+polar layer is natively polar-*projected* (not Web Mercator), which is
+exactly why it works for the OpenLayers polar maps and exactly why
+MapLibre's globe has no way to consume it at all — MapLibre doesn't
+support swapping the globe's underlying tile scheme. This is the same
+reason the dedicated OpenLayers maps were necessary in the first place;
+switching data sources doesn't change it.
 
 Glacier layer on the polar maps: same `worlds/<world-id>/glaciers.json`
 placeholder data, read via `ol.format.GeoJSON` with
 `dataProjection: 'EPSG:4326'` / `featureProjection: <the pole's EPSG
 code>`, rendered as an `ol.layer.Vector`. The `#glacier-toggle` button
 routes to whichever engine(s) are relevant via `applyVisibility()`.
+
+**View-mode switching UI**: v0.3 first shipped a row of 4 explicit buttons
+(`#view-mode-row`) plus kept MapLibre's built-in `GlobeControl` button for
+globe↔flat only — two different, redundant ways to change the view. The
+user asked for a single control instead: tapping one button (in the same
+screen position `GlobeControl` used to occupy, just below the zoom/compass
+group) cycles through all 4 modes in order (`VIEW_MODE_ORDER` in
+`js/app.js`: globe → flat → arctic → antarctic → globe...). `GlobeControl`
+was removed entirely and replaced by `#view-cycle-btn`, a **plain page-level
+HTML button** (not a MapLibre `IControl`) — this matters because a
+MapLibre control lives inside `#map` and would disappear whenever `#map`
+is hidden (i.e. in arctic/antarctic mode), which would break the "always
+tap the same button" premise. `#view-cycle-btn` shows the *current* mode's
+short label (`VIEW_MODE_LABEL`: "3D"/"2D"/"北極"/"南極") so tapping it is
+predictable. Don't reintroduce the 4-button row or `GlobeControl` without
+checking with the user first — this was a deliberate simplification.
 
 **Deliberately not built in v0.3** (kept in scope, ask before adding):
 political border/territory overlay on the polar maps (no placeholder data
@@ -285,17 +341,22 @@ a priority-one blocker rather than a cosmetic nit — see "Dedicated polar
 maps (v0.3)" above for the full design rationale and rollback point.
 
 1. Two new dedicated flat polar-stereographic maps (Arctic `EPSG:3413`,
-   Antarctic `EPSG:3031`), built with OpenLayers, showing real colorized
-   elevation/bathymetry with no pole singularity artifact.
-2. A 4-way view-mode switch (3D globe / flat 2D / Arctic / Antarctic)
-   replacing the old implicit globe↔flat-only toggle.
-3. Glacier toggle now works across all four modes (routes to whichever
-   engine is active).
+   Antarctic `EPSG:3031`), built with OpenLayers, showing NASA GIBS's
+   `BlueMarble_ShadedRelief_Bathymetry` imagery natively in each polar
+   projection — no pole singularity artifact, no pole coverage gap either
+   (see the "v1 vs v2" note above for why an earlier AWS-Terrarium-based
+   attempt had a black hole at the pole and was replaced).
+2. View-mode switching consolidated into a single persistent cycle button
+   (3D globe → flat 2D → Arctic → Antarctic → ...), replacing both the
+   short-lived 4-button row and MapLibre's `GlobeControl`.
+3. Glacier toggle works across all four modes (routes to whichever engine
+   is active).
 
-Not yet verified on a real device: whether the AWS Terrarium bucket's CORS
-headers actually allow the client-side canvas pixel decode this needs (see
-the CORS note above) — this is the one part of v0.3 that could still fail
-in a way the sandbox couldn't catch.
+Not yet verified on a real device: whether the `GIBS_500M_RESOLUTIONS`
+tile grid guess is exactly right (tiles could be blurry/misaligned/missing
+at some zoom levels if not) — this is the one part of the current v0.3
+design that couldn't be confirmed before shipping (GIBS's own capabilities
+document is on a blocked host from this sandbox).
 
 ## How this was tested (no browser on the dev side either)
 
@@ -335,18 +396,25 @@ npm into the same scratch copy and vendored locally the same way as
 `maplibre-gl`, and the CDN `<script>` tags swapped to local paths for the
 test. Verified via Playwright: `window.__polarMaps.{arctic,antarctic}.map
 .getView().getProjection().getCode()` returns exactly `EPSG:3413` /
-`EPSG:3031` after switching to those modes (confirms the projections were
-registered and applied correctly); all 4 view-mode buttons show/hide the
-right container and control panels; the glacier toggle flips the correct
-OpenLayers layer's `getVisible()` when a polar mode is active; no
-`pageerror`s across the whole sequence. Also unit-tested
-`js/elevationColor.js`'s `decodeTerrariumElevation`/`elevationToRGB`
-directly in plain Node (no browser needed) against known encode/decode
-values. What this *couldn't* verify (network-blocked in this sandbox, same
-as always): whether real AWS Terrarium tiles actually load into the
-colorized polar layer without a CORS error, and what the recolored
-elevation/bathymetry actually looks like at the poles — needs the user's
-phone.
+`EPSG:3031` after switching to those modes; the single cycle button
+advances through all 4 modes in order and shows/hides the right container
+and control panels each time; the constructed GIBS tile URL template
+matches the intended pattern exactly (read back off the live
+`ol.source.XYZ` instance); the glacier toggle flips the correct OpenLayers
+layer's `getVisible()` when a polar mode is active; no `pageerror`s across
+the whole sequence, and the attempted tile requests to
+`gibs.earthdata.nasa.gov` show up as connection failures in the console
+(expected — that host is blocked from this sandbox, same as every other
+real data host used in this project) rather than any JS exception. Also
+unit-tested `js/elevationColor.js`'s
+`decodeTerrariumElevation`/`elevationToRGB` directly in plain Node (no
+browser needed) against known encode/decode values — these are currently
+unused by the polar path (see the v1-vs-v2 note above) but exercised in
+case a future numeric-polar-DEM upgrade calls them again. What this
+*couldn't* verify (network-blocked in this sandbox, same as always):
+whether the `GIBS_500M_RESOLUTIONS` tile grid guess is exactly right, and
+what the real Blue Marble bathymetry imagery actually looks like at the
+poles — needs the user's phone.
 
 ## Working conventions
 
