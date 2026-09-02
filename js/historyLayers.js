@@ -1,5 +1,3 @@
-const EMPTY_FC = { type: "FeatureCollection", features: [] };
-
 export async function loadEraIndex(config) {
   const res = await fetch(config.history.indexUrl);
   return res.json();
@@ -24,80 +22,60 @@ export function createEraLoader(config) {
   };
 }
 
-export function addHistoryLayers(map) {
-  map.addSource("territories", { type: "geojson", data: EMPTY_FC });
-  map.addSource("cities", { type: "geojson", data: EMPTY_FC });
+export function createHistoryDataSources() {
+  return {
+    territories: new Cesium.CustomDataSource("territories"),
+    cities: new Cesium.CustomDataSource("cities"),
+  };
+}
 
-  map.addLayer(
-    {
-      id: "territories-fill",
-      type: "fill",
-      source: "territories",
-      paint: {
-        "fill-color": ["get", "color"],
-        "fill-opacity": 0.45,
+export function applyEraData({ territories, cities }, eraDoc) {
+  territories.entities.removeAll();
+  for (const feature of eraDoc.territories.features) {
+    const color = Cesium.Color.fromCssColorString(feature.properties.color);
+    const ring = feature.geometry.coordinates[0].flat();
+    territories.entities.add({
+      // No `outline` here: Cesium doesn't support polygon outlines together
+      // with terrain-clamped draping (the default for a polygon with no
+      // `height` set) -- it just logs a warning and skips the outline.
+      polygon: {
+        hierarchy: Cesium.Cartesian3.fromDegreesArray(ring),
+        material: color.withAlpha(0.45),
       },
-    },
-    "countries-boundary"
-  );
+    });
+  }
 
-  map.addLayer(
-    {
-      id: "territories-outline",
-      type: "line",
-      source: "territories",
-      paint: {
-        "line-color": ["get", "color"],
-        "line-width": 2,
+  cities.entities.removeAll();
+  const citySize = { capital: 14, secondary: 11, third: 8 };
+  for (const feature of eraDoc.cities.features) {
+    const [lng, lat] = feature.geometry.coordinates;
+    const color = Cesium.Color.fromCssColorString(feature.properties.color);
+    cities.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(lng, lat),
+      point: {
+        pixelSize: citySize[feature.properties.rank] || 8,
+        color,
+        outlineColor: Cesium.Color.WHITE,
+        outlineWidth: 2,
+        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
       },
-    },
-    "countries-boundary"
-  );
-
-  map.addLayer({
-    id: "city-circle",
-    type: "circle",
-    source: "cities",
-    paint: {
-      "circle-color": ["get", "color"],
-      "circle-stroke-color": "#ffffff",
-      "circle-stroke-width": 1.5,
-      "circle-radius": ["match", ["get", "rank"], "capital", 8, "secondary", 6, 4],
-    },
-  });
-
-  map.addLayer({
-    id: "city-label",
-    type: "symbol",
-    source: "cities",
-    layout: {
-      "text-field": ["get", "name"],
-      "text-font": ["Open Sans Semibold"],
-      "text-size": 13,
-      "text-offset": [0, 1.1],
-      "text-anchor": "top",
-    },
-    paint: {
-      "text-color": "#1b2a41",
-      "text-halo-color": "#ffffff",
-      "text-halo-width": 1.4,
-    },
-  });
+      label: {
+        text: feature.properties.name,
+        font: "13px sans-serif",
+        pixelOffset: new Cesium.Cartesian2(0, -16),
+        fillColor: Cesium.Color.fromCssColorString("#1b2a41"),
+        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+        outlineColor: Cesium.Color.WHITE,
+        outlineWidth: 3,
+        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+    });
+  }
 }
 
-export function setTerritoriesVisible(map, visible) {
-  const v = visible ? "visible" : "none";
-  map.setLayoutProperty("territories-fill", "visibility", v);
-  map.setLayoutProperty("territories-outline", "visibility", v);
-}
-
-export function setCitiesVisible(map, visible) {
-  const v = visible ? "visible" : "none";
-  map.setLayoutProperty("city-circle", "visibility", v);
-  map.setLayoutProperty("city-label", "visibility", v);
-}
-
-export function applyEraData(map, eraDoc) {
-  map.getSource("territories").setData(eraDoc.territories);
-  map.getSource("cities").setData(eraDoc.cities);
+export function setHistoryVisible({ territories, cities }, visible, citiesOn) {
+  territories.show = visible;
+  cities.show = visible && citiesOn;
 }

@@ -1,155 +1,82 @@
 import {
-  MapLibreMap,
-  NavigationControl,
-  ScaleControl,
-} from "https://cdn.jsdelivr.net/npm/maplibre-gl@6/dist/maplibre-gl.mjs";
-
-import {
   loadEraIndex,
   nearestKeyframe,
   createEraLoader,
-  addHistoryLayers,
-  setTerritoriesVisible,
-  setCitiesVisible,
+  createHistoryDataSources,
   applyEraData,
+  setHistoryVisible,
 } from "./historyLayers.js";
-
-import {
-  addTerrainLayers,
-  addGlacierLayer,
-  setTerrainVisible,
-  setGlacierVisible,
-} from "./terrainLayers.js";
-
-import { createPolarMap } from "./polarMap.js";
+import { createGlacierDataSource } from "./glacierLayer.js";
 
 const WORLD_CONFIG_URL = "./worlds/kasoku-sekai/config.json";
 
-const VIEW_MODE_ORDER = ["globe", "flat", "arctic", "antarctic"];
-const VIEW_MODE_LABEL = { globe: "3D", flat: "2D", arctic: "北極", antarctic: "南極" };
-
-function isMapLibreView(viewMode) {
-  return viewMode === "globe" || viewMode === "flat";
+async function createTerrainProvider(config) {
+  try {
+    return await Cesium.ArcGISTiledElevationTerrainProvider.fromUrl(config.terrain.url);
+  } catch (err) {
+    console.error("Primary terrain source failed, trying fallback:", err);
+  }
+  try {
+    return await Cesium.ArcGISTiledElevationTerrainProvider.fromUrl(config.terrain.fallbackUrl);
+  } catch (err) {
+    console.error("Fallback terrain source also failed, using flat globe:", err);
+    return new Cesium.EllipsoidTerrainProvider();
+  }
 }
 
-// Neither MapLibre's ScaleControl nor OpenLayers' ScaleLine has a
-// show/hide toggle in their API. Setting their element's style.display
-// directly doesn't stick -- both controls re-render on their own (e.g. on
-// every view change) and reset style.display themselves, racing with and
-// overwriting a plain inline-style toggle. A CSS class + !important
-// (see style.css) is the only thing that reliably wins against that.
-function setScaleVisible(visible) {
-  document.body.classList.toggle("scale-hidden", !visible);
+function createImageryProvider(config) {
+  return new Cesium.UrlTemplateImageryProvider({
+    url: config.imagery.url,
+    tilingScheme: new Cesium.GeographicTilingScheme(),
+    maximumLevel: config.imagery.maximumLevel,
+    credit: config.imagery.credit,
+  });
 }
 
 async function main() {
   const world = await (await fetch(WORLD_CONFIG_URL)).json();
   const glaciersGeoJson = await (await fetch(world.glaciersUrl)).json();
 
-  const map = new MapLibreMap({
-    container: "map",
-    style: world.styleUrl,
-    center: world.center,
-    zoom: world.zoom,
-    minZoom: world.minZoom,
-    maxZoom: world.maxZoom,
-    attributionControl: { compact: true },
+  const terrainProvider = await createTerrainProvider(world);
+
+  const viewer = new Cesium.Viewer("cesiumContainer", {
+    terrainProvider,
+    baseLayer: false,
+    timeline: false,
+    animation: false,
+    baseLayerPicker: false,
+    geocoder: false,
+    homeButton: false,
+    sceneModePicker: true,
+    navigationHelpButton: false,
+    fullscreenButton: false,
   });
+  viewer.imageryLayers.addImageryProvider(createImageryProvider(world));
 
-  map.addControl(new NavigationControl({ visualizePitch: true }), "top-right");
-  map.addControl(new ScaleControl({ maxWidth: 100, unit: "metric" }), "top-left");
+  const historySources = createHistoryDataSources();
+  viewer.dataSources.add(historySources.territories);
+  viewer.dataSources.add(historySources.cities);
 
-  const state = { viewMode: "globe", dataMode: "history", citiesOn: true, glacierOn: true, scaleOn: true };
-  const polarMaps = { arctic: null, antarctic: null };
+  const glacierSource = createGlacierDataSource(glaciersGeoJson);
+  viewer.dataSources.add(glacierSource);
 
-  function ensurePolarMap(pole) {
-    if (polarMaps[pole]) return polarMaps[pole];
-    const containerId = pole === "arctic" ? "map-arctic" : "map-antarctic";
-    const hemisphere = pole === "arctic" ? "north" : "south";
-    const instance = createPolarMap(containerId, hemisphere, world, glaciersGeoJson);
-    instance.setGlacierVisible(state.glacierOn);
-    polarMaps[pole] = instance;
-    return instance;
-  }
+  const state = { dataMode: "history", citiesOn: true, glacierOn: true };
 
   function applyVisibility() {
-    const isHistory = state.dataMode === "history";
-    setTerritoriesVisible(map, isHistory);
-    setCitiesVisible(map, isHistory && state.citiesOn);
-    setTerrainVisible(map, !isHistory);
-    setGlacierVisible(map, !isHistory && state.glacierOn);
-
-    if (polarMaps.arctic) polarMaps.arctic.setGlacierVisible(state.glacierOn);
-    if (polarMaps.antarctic) polarMaps.antarctic.setGlacierVisible(state.glacierOn);
-
-    setScaleVisible(state.scaleOn);
+    setHistoryVisible(historySources, state.dataMode === "history", state.citiesOn);
+    glacierSource.show = state.glacierOn;
   }
 
-  function renderViewMode() {
-    document.getElementById("map").hidden = !isMapLibreView(state.viewMode);
-    document.getElementById("map-arctic").hidden = state.viewMode !== "arctic";
-    document.getElementById("map-antarctic").hidden = state.viewMode !== "antarctic";
+  applyVisibility();
+  document.getElementById("loading").classList.add("hidden");
 
-    if (isMapLibreView(state.viewMode)) {
-      map.setProjection({ type: state.viewMode === "globe" ? "globe" : "mercator" });
-    } else if (state.viewMode === "arctic") {
-      ensurePolarMap("arctic").updateSize();
-    } else if (state.viewMode === "antarctic") {
-      ensurePolarMap("antarctic").updateSize();
-    }
-
-    const historyPanel = document.getElementById("history-panel");
-    const terrainPanel = document.getElementById("terrain-panel");
-    const modeToggleBtn = document.getElementById("mode-toggle");
-
-    if (isMapLibreView(state.viewMode)) {
-      const isHistory = state.dataMode === "history";
-      historyPanel.hidden = !isHistory;
-      terrainPanel.hidden = isHistory;
-      modeToggleBtn.hidden = false;
-      modeToggleBtn.textContent = isHistory ? "地形図に切替" : "歴史地図に切替";
-    } else {
-      historyPanel.hidden = true;
-      terrainPanel.hidden = false;
-      modeToggleBtn.hidden = true;
-    }
-
-    document.getElementById("view-cycle-btn").textContent = VIEW_MODE_LABEL[state.viewMode];
-  }
-
-  function setupViewCycleButton() {
-    const button = document.getElementById("view-cycle-btn");
-    button.addEventListener("click", () => {
-      const next = VIEW_MODE_ORDER[(VIEW_MODE_ORDER.indexOf(state.viewMode) + 1) % VIEW_MODE_ORDER.length];
-      state.viewMode = next;
-      renderViewMode();
-      applyVisibility();
-    });
-  }
-
-  map.on("load", async () => {
-    addHistoryLayers(map);
-    addTerrainLayers(map, world);
-    addGlacierLayer(map, glaciersGeoJson);
-
-    applyVisibility();
-    renderViewMode();
-    document.getElementById("loading").classList.add("hidden");
-
-    setupHistoryPanel(map, world);
-    setupModeToggle(state, renderViewMode, applyVisibility);
-    setupCityToggle(state, applyVisibility);
-    setupGlacierToggle(state, applyVisibility);
-    setupScaleToggle(state, applyVisibility);
-    setupViewCycleButton();
-  });
-
-  map.on("error", (e) => {
-    console.error("Map error:", e && e.error ? e.error : e);
-  });
+  setupHistoryPanel(historySources, world);
+  setupModeToggle(state, applyVisibility);
+  setupCityToggle(state, applyVisibility);
+  setupGlacierToggle(state, applyVisibility);
 }
 
-async function setupHistoryPanel(map, world) {
+async function setupHistoryPanel(historySources, world) {
   const eraIndex = await loadEraIndex(world);
   const loadEra = createEraLoader(world);
 
@@ -167,20 +94,32 @@ async function setupHistoryPanel(map, world) {
     yearLabel.textContent = `${year}年`;
     eraNote.textContent = keyframe === year ? "" : `(データ: ${keyframe}年時点)`;
     const eraDoc = await loadEra(keyframe);
-    applyEraData(map, eraDoc);
+    applyEraData(historySources, eraDoc);
   }
 
   slider.addEventListener("input", () => showYear(Number(slider.value)));
   await showYear(Number(slider.value));
 }
 
-function setupModeToggle(state, renderViewMode, applyVisibility) {
+function setupModeToggle(state, applyVisibility) {
   const button = document.getElementById("mode-toggle");
+  const historyPanel = document.getElementById("history-panel");
+  const terrainPanel = document.getElementById("terrain-panel");
+
+  function render() {
+    const isHistory = state.dataMode === "history";
+    historyPanel.hidden = !isHistory;
+    terrainPanel.hidden = isHistory;
+    button.textContent = isHistory ? "地形図に切替" : "歴史地図に切替";
+  }
+
   button.addEventListener("click", () => {
     state.dataMode = state.dataMode === "history" ? "terrain" : "history";
-    renderViewMode();
+    render();
     applyVisibility();
   });
+
+  render();
 }
 
 function setupCityToggle(state, applyVisibility) {
@@ -199,15 +138,6 @@ function setupGlacierToggle(state, applyVisibility) {
     state.glacierOn = !state.glacierOn;
     button.setAttribute("aria-pressed", String(state.glacierOn));
     button.textContent = state.glacierOn ? "氷河を表示" : "氷河を非表示";
-    applyVisibility();
-  });
-}
-
-function setupScaleToggle(state, applyVisibility) {
-  const button = document.getElementById("scale-toggle-btn");
-  button.addEventListener("click", () => {
-    state.scaleOn = !state.scaleOn;
-    button.setAttribute("aria-pressed", String(state.scaleOn));
     applyVisibility();
   });
 }

@@ -6,18 +6,11 @@ html, body {
   background: #0b1622;
 }
 
-#map,
-.polar-map {
+#cesiumContainer {
   position: fixed;
   inset: 0;
   width: 100vw;
   height: 100dvh;
-  background: #0b1622;
-}
-
-#map[hidden],
-.polar-map[hidden] {
-  display: none;
 }
 
 #loading {
@@ -36,27 +29,6 @@ html, body {
 
 #loading.hidden {
   display: none;
-}
-
-/* MapLibre control buttons: enlarge tap targets for touch use on a phone */
-.maplibregl-ctrl-group button {
-  width: 40px;
-  height: 40px;
-}
-
-.maplibregl-ctrl-top-right {
-  top: env(safe-area-inset-top, 0);
-  right: env(safe-area-inset-right, 0);
-}
-
-.maplibregl-ctrl-top-left {
-  top: env(safe-area-inset-top, 0);
-  left: env(safe-area-inset-left, 0);
-}
-
-.maplibregl-ctrl-bottom-right {
-  bottom: env(safe-area-inset-bottom, 0);
-  right: env(safe-area-inset-right, 0);
 }
 
 #controls {
@@ -131,84 +103,9 @@ html, body {
   font-weight: 600;
 }
 
-/* OpenLayers polar-map controls: reposition to match the MapLibre engine's
-   top-right zoom/compass convention (OL defaults to top-left zoom buttons),
-   stacked above where #view-cycle-btn sits so nothing overlaps. */
-.ol-zoom {
-  top: calc(env(safe-area-inset-top, 0) + 8px);
+/* Cesium's own toolbar (scene mode picker etc.) sits top-right by default,
+   which is fine as-is; just keep it clear of the phone's safe-area inset. */
+.cesium-viewer-toolbar {
+  top: env(safe-area-inset-top, 0);
   right: env(safe-area-inset-right, 0);
-  left: auto;
-  margin-right: 10px;
-}
-
-.ol-rotate {
-  top: calc(env(safe-area-inset-top, 0) + 88px);
-  right: env(safe-area-inset-right, 0);
-  left: auto;
-  margin-right: 10px;
-}
-
-.ol-zoom button,
-.ol-rotate button {
-  width: 40px;
-  height: 40px;
-}
-
-/* Scale line would otherwise sit bottom-left, under the bottom control
-   panel -- move it to the free top-left corner instead. */
-.ol-scale-line {
-  top: calc(env(safe-area-inset-top, 0) + 10px);
-  left: calc(env(safe-area-inset-left, 0) + 10px);
-  bottom: auto;
-}
-
-/* !important: both controls re-render themselves and reset their own
-   inline style.display, which would otherwise fight a plain JS toggle. */
-body.scale-hidden .maplibregl-ctrl-scale,
-body.scale-hidden .ol-scale-line {
-  display: none !important;
-}
-
-/* Single persistent view-mode cycle button: sits where MapLibre's
-   GlobeControl used to (below the zoom/compass group), but as a plain
-   page-level element so it stays visible across all 4 view modes, not
-   just while the MapLibre container is shown. */
-#view-cycle-btn {
-  position: fixed;
-  top: calc(env(safe-area-inset-top, 0) + 138px);
-  right: env(safe-area-inset-right, 0);
-  width: 40px;
-  height: 40px;
-  margin-right: 10px;
-  border: none;
-  border-radius: 6px;
-  background: #ffffff;
-  color: #333333;
-  font-size: 0.78rem;
-  font-weight: 700;
-  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
-  z-index: 5;
-}
-
-/* Scale show/hide toggle: sits just below the scale bar (both engines'
-   scale elements are pinned to the top-left corner, see above), and like
-   #view-cycle-btn is a plain page-level element so it works in every mode. */
-#scale-toggle-btn {
-  position: fixed;
-  top: calc(env(safe-area-inset-top, 0) + 46px);
-  left: calc(env(safe-area-inset-left, 0) + 10px);
-  min-width: 52px;
-  height: 32px;
-  border: none;
-  border-radius: 6px;
-  background: #3d5a80;
-  color: #ffffff;
-  font-size: 0.75rem;
-  font-weight: 600;
-  z-index: 5;
-}
-
-#scale-toggle-btn[aria-pressed="false"] {
-  background: rgba(255, 255, 255, 0.85);
-  color: #333333;
 }

@@ -10,46 +10,103 @@ preference questions when input is needed.
 
 Ultimate goal: one shared map app, swappable per-world data (start: 過速世界
 only; later: 碧き海狼, 罅間). Do not build support for worlds beyond
-過速世界 until asked — avoid speculative generalization.
+過速世界 until asked — avoid speculative generalization. The real purpose
+of the whole app is a **sea-level-rise / ice-sheet simulator** (coastline
+change and glacier/ice-sheet extent under warming), not just a static map —
+keep that in mind when a feature choice affects data quality vs. visual
+polish; the user has repeatedly prioritized "real, correct data" over
+"looks fine, isn't quite right," including accepting large engine/tooling
+changes to get there (see the CesiumJS migration below).
 
-## Stack decisions
+## Stack decisions (current: CesiumJS)
 
-- **MapLibre GL JS v6** (ESM only as of v6 — no UMD/global build). Loaded
-  directly via `<script type="module">` + CDN import, no bundler/build step,
-  so the user never needs to run anything locally.
-  - CDN: `https://cdn.jsdelivr.net/npm/maplibre-gl@6/dist/maplibre-gl.mjs`
-    (and matching `.css`). `@6` (major-only) lets jsdelivr resolve the latest
-    v6.x automatically.
-  - **Important gotcha**: v6's `.mjs` has **no default export**. Import
-    named exports, e.g. `import { MapLibreMap, NavigationControl,
-    GlobeControl } from ...`. (`MapLibreMap` is the library's own alias for
-    `Map`, used here to avoid shadowing the JS built-in `Map`.)
-  - Globe/2D switch uses the library's built-in `GlobeControl` (a single
-    button, official MapLibre UI) rather than a custom toggle — less code,
-    already touch-friendly.
-  - Touch rotate/pan/zoom is MapLibre's default handler behavior; nothing
-    custom was needed for that.
-- **Base map data**: `https://demotiles.maplibre.org/style.json`, MapLibre's
-  own public demo vector style (real-world country borders/coastlines, no
-  API key, no usage limits). This is a **placeholder basemap**, standing in
-  for 過速世界's real terrain/border data until that's built. Swapping it
-  is a one-line change (see below).
-- **Hosting**: GitHub Pages serving straight from this repo's branch (no
-  build/CI step — it's plain static HTML/CSS/JS). See README.md for the
-  exact Settings→Pages steps already given to the user.
+**CesiumJS**, not MapLibre GL JS. This is a deliberate engine switch made
+after the MapLibre-based version (v0.1–v0.3, see "History" below) could not
+render the poles correctly and a same-engine OpenLayers workaround, while
+functional, still meant maintaining two separate rendering engines and no
+path to real 3D terrain. Cesium is a proper WGS84-ellipsoid 3D globe engine
+(not a flat map projection draped onto a sphere), which is exactly the
+class of bug that broke MapLibre at the poles — Cesium doesn't have that
+failure mode by construction. Requirements this satisfies: Pixel 7a/Chrome
+priority, touch rotate/zoom, a 3D/2D switch, shared use across future
+worlds, free/open, and no programming work required from the user (one
+free service account is *not* currently needed — see below).
+
+- **Library**: `cesium@1.145.0` (Apache 2.0, free). Loaded via plain
+  `<script>` tags from jsdelivr (`Build/Cesium/Cesium.js` is a classic
+  global-namespace IIFE bundle exposing `window.Cesium` — no ESM import-map
+  juggling, unlike MapLibre v6). **Gotcha**: set `window.CESIUM_BASE_URL`
+  to the same CDN base path *before* loading `Cesium.js` — Cesium fetches
+  additional runtime assets (Workers/, Assets/, Widgets/, ThirdParty/) from
+  that base URL, and while it can sometimes auto-detect its own script
+  origin, explicitly setting it is the documented, reliable approach and
+  is what `index.html` does.
+- **Terrain (real 3D elevation)**: Cesium's own best terrain
+  (`createWorldTerrainAsync`) requires a **Cesium ion** account/token. To
+  stay keyless, this app uses Esri's free public elevation service instead,
+  via Cesium's first-party `ArcGISTiledElevationTerrainProvider` (jointly
+  built by Cesium and Esri specifically for this — not a hack):
+  `https://elevation3d.arcgis.com/arcgis/rest/services/WorldElevation3D/TopoBathy3D/ImageServer`
+  (`config.terrain.url` in `worlds/<world-id>/config.json`). This is
+  Esri's "topography + bathymetry" variant (as opposed to the more commonly
+  documented land-only `Terrain3D`), chosen because this app needs ocean
+  depth too. **The exact `TopoBathy3D` name is inferred by naming-pattern
+  analogy with the well-documented `Terrain3D` service, not independently
+  confirmed** (couldn't reach the host from this sandbox to check) — if it
+  turns out wrong, `config.terrain.fallbackUrl` in the same config points
+  at the confirmed-real `Terrain3D` (land elevation only, no bathymetry) as
+  a safety net, and `js/app.js`'s `createTerrainProvider()` tries both in
+  order before finally falling back to a flat `EllipsoidTerrainProvider` if
+  both fail (e.g. genuinely no network) so the app never hangs or crashes
+  on terrain load failure.
+- **Imagery (the visible picture draped on the terrain mesh)**: NASA
+  GIBS's `BlueMarble_ShadedRelief_Bathymetry` layer again — same source
+  already proven to work for the polar maps in the MapLibre/OpenLayers era
+  — but now via its **geographic (EPSG:4326)** endpoint instead of the
+  polar-specific ones, since that's Cesium's native global tiling scheme
+  (`Cesium.GeographicTilingScheme`, a 2-column×1-row root tile, unlike Web
+  Mercator's 1:1 root tile). URL:
+  `https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/BlueMarble_ShadedRelief_Bathymetry/default/500m/{z}/{y}/{x}.jpeg`
+  (`config.imagery.url`), loaded via a plain `Cesium.UrlTemplateImageryProvider`
+  with `tilingScheme: new Cesium.GeographicTilingScheme()` — no reprojection
+  needed, since GIBS renders this layer natively in EPSG:4326 too (same
+  "ask for data already in the right projection instead of coercing it"
+  principle as the old polar-maps design).
+- **Why NOAA ETOPO 2022 (the user's first suggestion) isn't used directly**:
+  real, freely-licensed, and does include full-globe topography+bathymetry
+  with an ice-free "Bedrock" variant — but it's distributed only as bulk
+  15°×15° GeoTIFF/NetCDF tiles for offline GIS use, not as a ready web tile
+  or terrain service. Turning it into one needs GDAL-class processing this
+  sandbox doesn't have. The Esri/GIBS combination above achieves the same
+  *practical* goal (keyless, global, includes bathymetry, proper polar
+  coverage) without that processing step. Revisit ETOPO 2022 directly if a
+  future session has real GIS tooling and wants the extra rigor.
+- **3D/2D switch**: Cesium's own built-in `sceneModePicker` (a single
+  toolbar button, top-right) — enabled via the `sceneModePicker: true`
+  Viewer option, no custom code. This also means the whole "4 view modes /
+  cycle button / separate polar OpenLayers engine" apparatus from v0.3 is
+  **gone** — now that the *one* 3D globe renders poles correctly, there's
+  no more need for dedicated flat polar maps as a workaround. Don't
+  reintroduce them without checking with the user first; if Cesium's poles
+  turn out to have some other issue, that's a reason to fix *this* engine's
+  setup, not to resurrect the old workaround.
+- **Touch rotate/pan/zoom**: Cesium's default `ScreenSpaceCameraController`
+  handles this out of the box on both desktop and touch, nothing custom
+  needed (same "library already does this" pattern as MapLibre's default
+  handlers before it).
+- **Hosting**: unchanged — GitHub Pages serving straight from this repo's
+  branch, no build/CI step, plain static HTML/CSS/JS.
 
 ## World-data structure (the "common app, swappable data" seam)
 
-`worlds/<world-id>/config.json` holds:
-`styleUrl`, `center`, `zoom`, `minZoom`, `maxZoom`, `defaultProjection`,
-`history` (`indexUrl` + `eraUrlTemplate`, see below), `glaciersUrl`,
-`terrain` (raster-dem tile source: `tiles`, `encoding`, `tileSize`,
-`maxzoom`, `attribution`).
-`js/app.js` fetches one hardcoded world config
-(`worlds/kasoku-sekai/config.json`) and initializes the map from it — it
-does not know anything world-specific beyond that path. When a second world
-is added later, the natural next step is a small world-picker that changes
-which config path is fetched; do not build that picker now.
+`worlds/<world-id>/config.json` holds: `history` (`indexUrl` +
+`eraUrlTemplate`), `glaciersUrl`, `terrain` (`url` + `fallbackUrl`,
+ArcGIS elevation ImageServer endpoints), `imagery` (`url`, `maximumLevel`,
+`credit`). `js/app.js` fetches one hardcoded world config
+(`worlds/kasoku-sekai/config.json`) and initializes the viewer from it — it
+does not know anything world-specific beyond that path. When a second
+world is added later, the natural next step is a small world-picker that
+changes which config path is fetched; do not build that picker now.
 
 Do not add fields to config.json speculatively until the feature that uses
 them is actually being implemented.
@@ -65,10 +122,24 @@ work — they don't change every 20 years — so the slider can offer fine
 granularity without needing a data file per step. `nearestKeyframe()` in
 `js/historyLayers.js` picks the latest keyframe ≤ the slider's year; the UI
 shows a "(データ: N年時点)" note whenever the slider year isn't itself a
-keyframe, so it's honest with the user about what's actually being shown.
-Cities carry a `rank` of `capital` / `secondary` / `third` (their name,
-faction, color, and lng/lat) — this is the "首都・副首都・第3都市 top 3"
-requirement.
+keyframe. Cities carry a `rank` of `capital` / `secondary` / `third` (name,
+faction, color, lng/lat) — the "首都・副首都・第3都市 top 3" requirement.
+
+This GeoJSON data is engine-agnostic and survived the Cesium migration
+unchanged — only the *rendering* code (`js/historyLayers.js`) was rewritten,
+from MapLibre GL-style layers/expressions to Cesium `Entity` objects (one
+`Cesium.CustomDataSource` for territory polygons, one for city points +
+labels). Territory polygons are added **without** `outline`/`height`:
+Cesium auto-drapes an Entity polygon onto the real terrain surface when no
+height is given (the desired behavior — mountains/coastlines show through),
+but it does **not** support combining that terrain-clamped draping with a
+polygon outline (it logs a warning and silently drops the outline) — don't
+add outline properties back without first giving territories a different
+way to stay visually distinct (e.g. thicker fill contrast) if borders need
+to be more visible. City points/labels use
+`heightReference: Cesium.HeightReference.CLAMP_TO_GROUND` for the same
+terrain-following reason, plus `disableDepthTestDistance: Infinity` so
+labels aren't hidden behind terrain from a low camera angle.
 
 The 6 keyframes currently in the repo (1100/1300/1500/1700/1900/2020,
 three fictional 勢力A/B/C rectangles) are **placeholder dummy data only**
@@ -76,415 +147,184 @@ three fictional 勢力A/B/C rectangles) are **placeholder dummy data only**
 GeoJSON per keyframe later; the loading/slider/rendering code does not
 need to change.
 
-### Terrain / bathymetry + glacier layer
+### Glacier layer
 
-Base elevation data: AWS Open Data's public, keyless Terrarium-encoded
-DEM tiles (`https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png`,
-`encoding: "terrarium"` on a `raster-dem` source) — this is real-world
-elevation *and* ocean-floor bathymetry (negative values), which is exactly
-what "水中/海底図も含めて" asked for, and it's the same DEM source the
-future sea-level slider will need, so this groundwork carries forward.
-Rendered via a `color-relief` layer only (elevation→color ramp, MapLibre
-v6; note this layer type is expected to be renamed `dem` in a future
-MapLibre version). The elevation→color stops live in `js/elevationColor.js`
-(`ELEVATION_STOPS`), shared between this GL expression
-(`toColorReliefExpression()`) and the polar maps' canvas-based recoloring
-(see below) — check that file if colors stop working after a library
-upgrade. **Deliberately no
-`hillshade` layer**: an earlier version added one, but hillshade computed
-from Web-Mercator-tiled raster-dem data breaks down at the poles (tiles
-become degenerate slivers there), producing a visible radial streak
-artifact around the Arctic/Antarctic — confirmed by the user on their
-phone. Hillshade's default `illumination-anchor` is also viewport-relative,
-so the same real terrain visibly re-shades as you rotate/tilt the globe,
-which read as "two different renderings of the same place" to the user.
+`worlds/<world-id>/glaciers.json` — placeholder polar-cap boxes, not real
+ice-extent data — rendered the same way as territories (a
+`Cesium.CustomDataSource` of terrain-draped polygon entities, see
+`js/glacierLayer.js`), toggled on/off via `dataSource.show`.
 
-Removing hillshade turned out not to be enough on its own — the user
-confirmed the radial streak (fainter but present) and the
-rotation/zoom-dependent look **also happen on `color-relief` alone**. This
-means the degeneracy is in the raster-dem *source data/texture mapping*
-itself this close to the poles (MapLibre's globe renderer drapes Web
-Mercator raster tiles onto the sphere, and a Mercator tile's row right at
-90°/-90° is an infinitely-thin sliver in real-world terms). A follow-up
-attempt added `terrain-pole-mask`, a solid-fill patch over the pole to
-hide it — the user found the patch itself looked worse than the artifact
-it was covering, so **it was removed**. Current state: the pole-area
-render artifact is a known, accepted limitation of Web-Mercator-tiled DEM
-data draped on a 3D globe (see the explanation given to the user for the
-plain-language version) and is left as-is. Don't re-add a masking patch
-without checking with the user first — they explicitly didn't want that
-trade-off. If this needs a real fix later, it likely means either a
-polar-specific projection/dataset for high latitudes, or waiting on
-MapLibre's own globe-rendering code to handle the pole singularity better
-— both bigger than this feature currently warrants.
-Glacier extent (`worlds/<world-id>/glaciers.json`) is a separate toggle-able
-fill layer on top — currently just placeholder polar-cap boxes, not real
-ice-extent data. Turning it off reveals the terrain layer underneath it
-(it doesn't remove terrain, just hides the glacier fill layer).
+**Important limitation, told to the user**: turning the glacier overlay off
+does *not* reveal real ice-free ground. It only hides our own placeholder
+polygon — the GIBS Blue Marble imagery underneath already has real-world
+ice baked into the photo (it's satellite imagery of the actual, currently
+-icy Earth), so what's "underneath" is still icy. Genuinely showing
+Antarctica without its ice sheet needs real bed-topography data (ice
+mathematically subtracted) layered in separately — see the Bedmap3 research
+note below. This is the same "not usable as-is, but for tooling reasons
+not effort reasons" situation as ETOPO 2022 above.
 
-Layer stacking (bottom→top) inside the base style, using `beforeId:
-"countries-boundary"` for every custom layer so they sit above the base
-style's `countries-fill` but below its boundary/label layers:
-`terrain-color-relief` → `glacier-fill` → `territories-fill` →
-`territories-outline`, then city circle/label layers added last (topmost,
-no `beforeId`). Only one of {terrain group, history group} is visible at a
-time — controlled by `state.mode` in `js/app.js`.
-
-### Tap-and-hold to center + flatten — tried, then removed
-
-v0.2 first shipped a custom long-press detector (Pointer Events on the map
-canvas, since MapLibre's `contextmenu` event doesn't fire reliably on a
-mobile long-press — confirmed via their GitHub issues) that flattened to
-2D **centered on the tapped point**. The user tested it and clarified what
-they'd actually pictured: tapping a point (e.g. the North Pole) should
-redraw the 2D map with *that point placed at the pole/center of a
-differently-oriented projection*, not just re-center a standard Mercator
-view there — a bigger change to how the flat map is drawn, not just its
-center. They said this feature isn't a priority, so it was removed rather
-than rebuilt: 2D/3D switching went back to being solely the built-in
-`GlobeControl` button (next to the zoom buttons), which keeps the current
-view center when it toggles projection. (v0.3 later replaced `GlobeControl`
-itself with a custom cycle button for unrelated reasons — see below — but
-the "don't reintroduce tap-to-flatten" lesson still stands.) Don't
-reintroduce a custom tap-to-flatten gesture unless asked again, and if so,
-clarify up front whether "centered on the point" means simple re-centering
-or a reprojection around that point.
-
-### Dedicated polar maps (v0.3) — why a second map engine
-
-The user's actual goal for this whole app is a **sea-level-rise / ice-sheet
-simulator**, and the poles are the single most important place to get
-right — so the pole rendering artifact above wasn't an acceptable
-permanent limitation for this project, even though it's a real MapLibre
-limitation. Researched alternatives (see chat history for the fuller
-comparison): CesiumJS fixes the globe-drape problem in general (real
-ellipsoid terrain) but has *no native polar-stereographic support either*
-and would mean rebuilding everything (history layers, city labels, era
-slider) in a different API — worst effort/benefit ratio for this
-specific problem. **OpenLayers** was chosen instead: it natively supports
-arbitrary projections via proj4, and — critically — can reproject an
-ordinary Web Mercator XYZ tile source into a different view projection on
-the fly. A polar-stereographic projection has no singularity at its own
-pole (that's the whole point of the projection), so this sidesteps the
-MapLibre bug entirely rather than working around it. This is also the
-same technique real polar science tools use (NASA GIBS, NSIDC/PolarView),
-which use OpenLayers for exactly this reason.
-
-**Four view modes now**, chosen explicitly by the user (not to be
-collapsed back to fewer without asking): a row of 4 buttons in
-`#view-mode-row` (`js/app.js`, `state.viewMode`):
-1. `globe` — the original rotatable 3D MapLibre globe (world overview).
-2. `flat` — the original flat MapLibre mercator view.
-3. `arctic` — dedicated OpenLayers map, view projection `EPSG:3413`
-   (NSIDC Sea Ice Polar Stereographic North).
-4. `antarctic` — dedicated OpenLayers map, view projection `EPSG:3031`
-   (Antarctic Polar Stereographic).
-
-`globe`/`flat` share one `MapLibreMap` instance (`#map`, projection is
-just toggled) exactly as in v0.1/v0.2. `arctic`/`antarctic` are separate
-`ol.Map` instances (`#map-arctic` / `#map-antarctic`, one per pole,
-**lazily created** on first switch to that mode — see
-`ensurePolarMap()` in `js/app.js`) since they're a different rendering
-engine entirely. Only the container for the active mode is un-`hidden`;
-`renderViewMode()` in `js/app.js` is the single place that knows how to
-show/hide containers, flip the MapLibre projection, and show/hide the
-right control panels for whichever mode is active. `state.dataMode`
-(history vs. terrain) only applies within `globe`/`flat` — the polar maps
-have no historical-border content (our placeholder territories/cities
-are all fictional mid-latitude rectangles nowhere near the poles), so
-they're terrain+glacier only; the `#mode-toggle` button and
-`#history-panel` are hidden whenever `viewMode` is `arctic`/`antarctic`.
-
-**Libraries** (`index.html`, plain `<script>` tags, not ES modules —
-OpenLayers' `dist/ol.js` and proj4's `dist/proj4.js` are both classic
-global-namespace UMD/IIFE bundles, so no import-map gymnastics like
-MapLibre v6 needed): `ol@10.10.0` + `proj4@2.22.0` from jsdelivr. Loaded
-before `js/app.js` so `window.ol`/`window.proj4` exist by the time
-`js/polarMap.js` uses them (`ensureProjectionsRegistered()` calls
-`proj4.defs(...)` for both EPSG codes, then `ol.proj.proj4.register(proj4)`
-once).
-
-**How the polar terrain layer actually works — v1 (AWS Terrarium,
-replaced) vs. v2 (NASA GIBS, current):**
-
-v1 loaded the same AWS Terrarium DEM tiles the MapLibre engine uses via
-`ol.source.XYZ` with `projection: 'EPSG:3857'` (their real, native
-projection) and let OpenLayers reproject that into the view's
-EPSG:3413/3031 on the fly. This avoided the globe's sphere-draping
-singularity, but the user found a **black hole covering the pole itself**
-after shipping it. Root cause: Web Mercator (the *source* tiles' native
-projection, independent of MapLibre) cannot represent latitude beyond
-about ±85.05° in the first place — the same reason Google Maps and
-virtually every other Web-Mercator-tiled map stops around there. There
-was nothing to reproject in that gap; no amount of code fixed this, it's
-inherent to reprojecting *from* Web Mercator.
-
-v2 (current) drops the AWS/Terrarium/reprojection approach for the polar
-maps entirely and instead uses **NASA GIBS's `BlueMarble_ShadedRelief_
-Bathymetry` layer, served natively in EPSG:3413/3031** (not reprojected
-from anything — GIBS renders this layer directly in each polar
-projection, with real coverage all the way to the pole, so there is no
-gap). This is a plain `ol.source.XYZ` pointed at GIBS's REST tile
-endpoint:
-`https://gibs.earthdata.nasa.gov/wmts/{epsg3413|epsg3031}/best/
-BlueMarble_ShadedRelief_Bathymetry/default/500m/{z}/{y}/{x}.jpeg` (note
-the path order is `z/y/x`, not the more common `z/x/y`), with a custom
-`ol.tilegrid.TileGrid` (`GIBS_ORIGIN` / `GIBS_500M_RESOLUTIONS` in
-`js/polarMap.js`). No canvas pixel-decoding, no CORS requirement (we're
-just displaying the image, not reading its pixels) — much simpler than
-v1. **Important trade-off, told to the user**: this is a pre-rendered
-NASA image, not raw elevation numbers. It looks great and is accurate,
-but (a) it cannot power a future sea-level slider by itself — that needs
-numeric elevation, which would mean sourcing real polar-native DEM data
-(e.g. BedMachine Antarctica/Greenland, ArcticDEM/REMA) and is a
-substantially bigger undertaking than this session could do (those come
-as large NetCDF/GeoTIFF science products, not ready-made web tiles, and
-would need real GIS processing this sandbox can't do — no GDAL, most
-data-portal hosts blocked); and (b) its colors are NASA's own natural
-Blue Marble palette, not this app's `ELEVATION_STOPS` ramp, so the polar
-maps will look a little different from the MapLibre globe/flat terrain
-mode. `js/elevationColor.js`'s `elevationToRGB`/`decodeTerrariumElevation`
-are unused by the polar path now but kept — they're exactly what a future
-numeric-polar-DEM upgrade would reuse.
-
-**Research note for that future upgrade (ice-free Antarctic bed
-topography)**: the user asked for this directly (toggling glacier off
-today just hides our placeholder overlay — the NASA photo underneath
-already has real ice baked into it, so it doesn't actually reveal bare
-ground). Traced down a real, no-login-required source: BAS's Bedmap3
-gridded product (bed/surface/ice-thickness, 500m, Antarctic Polar
-Stereographic — i.e. already in our `EPSG:3031`), fetched by the
-actively-maintained `polartoolkit` Python package from:
+**Research note for a future ice-free-bed-topography feature**: traced
+down a real, no-login-required source — BAS's Bedmap3 gridded product
+(bed/surface/ice-thickness, 500m, Antarctic Polar Stereographic),
+fetched by the actively-maintained `polartoolkit` Python package from:
 `https://ramadda.data.bas.ac.uk/repository/entry/get/bedmap3.nc?entryid=synth%3A2d0e4791-8e20-46a3-80e4-f5f6716025d2%3AL2JlZG1hcDMubmM%3D`
-(`bed_topography` is the variable we'd want). This is **not usable as-is**
-for a static, backend-less site like this one, for reasons that are
-about tooling/access, not effort:
-- It's a single NetCDF file, not a tile pyramid — size unknown (couldn't
-  even HEAD-request it; `ramadda.data.bas.ac.uk` is blocked from this
-  sandbox, confirmed via curl → 403 from the egress proxy), but a
-  multi-variable full-Antarctica 500m grid is very likely too large to
-  fetch whole in a phone browser.
-- Turning it into something usable means either (a) reading it via HTTP
-  range requests with an HDF5-in-the-browser reader (NetCDF4 is
-  HDF5-based; a library like `h5wasm` could in principle do this, but
-  it's a nontrivial, unproven-in-this-project technique, and whether it's
-  actually *fast* depends on how the file happens to be chunked
-  internally — unknowable without downloading it), or (b) preprocessing
-  it once into a proper web tile pyramid with real GIS tooling (GDAL /
-  Python xarray) — which this sandbox doesn't have, and can't reach the
-  source file to do the conversion anyway.
+(`bed_topography` is the variable wanted). Not usable as-is: it's a single
+NetCDF file, not a tile pyramid (size unknown — `ramadda.data.bas.ac.uk` is
+blocked from this sandbox, confirmed via curl → 403), and turning it into
+something a phone browser can load means either reading it via HTTP range
+requests with an HDF5-in-the-browser reader (`h5wasm`; unproven here, and
+whether it's fast enough depends on the file's internal chunking, which is
+unknowable without downloading it) or preprocessing it into a proper web
+tile pyramid with real GIS tooling (GDAL / Python xarray) this sandbox
+doesn't have and can't reach the source file to do anyway. This is also
+exactly the numeric elevation data a future sea-level/flooding slider would
+need (for ice thickness specifically), so it's likely worth tackling both
+together. Don't re-research the URL from scratch next time.
 
-Don't re-research the URL from scratch next time — start from the one
-above. This is also exactly the numeric elevation data a future
-sea-level/flooding slider would need (for ice thickness specifically),
-so it's likely worth tackling both together rather than solving "remove
-the ice visually" as a one-off. If a future session has broader network
-access than this sandboxed one, that's the point where this becomes
-tractable.
+## History: the MapLibre GL JS + OpenLayers era (v0.1–v0.3), superseded
 
-`GIBS_500M_RESOLUTIONS` in `js/polarMap.js` was inferred (not read from
-GIBS's own capabilities document, which is on a blocked host from this
-sandbox) from a working reference example — the confirmed `250m` matrix
-set's resolutions, minus one level for the coarser `500m` set. **User-
-confirmed correct on-device**, including zoomed in — the guess was right.
+The app was originally built on **MapLibre GL JS v6** with a rotatable 3D
+"globe" projection. This worked well in general but had an unfixable
+rendering bug right at the poles: MapLibre's globe mode works by draping
+ordinary Web-Mercator-tiled raster imagery onto a sphere, and that draping
+math is geometrically degenerate at 90°/-90° latitude (a Mercator tile's
+row right at the pole is an infinitely-thin sliver in real-world terms).
+This showed up as a radial streak/pinwheel artifact around the Arctic and
+Antarctic that got *worse*, not better, the closer you looked, and also
+changed appearance depending on camera rotation (because the related
+`hillshade` layer's default lighting is viewport-relative). Multiple fixes
+were attempted and rejected by the user on visual grounds: removing
+`hillshade` alone didn't fix it (the plain `color-relief` layer had the
+same artifact); a solid-fill mask patched over the pole to hide it looked
+worse than the artifact itself and was removed. This is a real, structural
+MapLibre limitation, not a mistake in this app's code — the user's own
+priority (accurate poles, since the app's whole point is an ice-sheet
+simulator) made it unacceptable to just live with, though.
 
-**Why this data still can't fix the MapLibre 3D globe**: the globe's
-problem was never *which* picture we used — it's that MapLibre's globe
-renderer only knows how to drape Web-Mercator-tiled sources onto a sphere,
-and that draping math itself is what breaks down near the poles. GIBS's
-polar layer is natively polar-*projected* (not Web Mercator), which is
-exactly why it works for the OpenLayers polar maps and exactly why
-MapLibre's globe has no way to consume it at all — MapLibre doesn't
-support swapping the globe's underlying tile scheme. This is the same
-reason the dedicated OpenLayers maps were necessary in the first place;
-switching data sources doesn't change it.
+**v0.3** worked around this by adding a *second* rendering engine —
+OpenLayers — for two dedicated flat polar-stereographic maps (Arctic
+`EPSG:3413`, Antarctic `EPSG:3031`), since a polar-stereographic projection
+has no singularity at its own pole. This needed NASA GIBS's
+`BlueMarble_ShadedRelief_Bathymetry` layer served *natively* in those
+projections (an earlier attempt that reprojected Web-Mercator-sourced AWS
+Terrarium DEM tiles into the polar view left a literal black hole at the
+pole, because Web Mercator itself can't represent latitude beyond ~85.05°
+in the first place — nothing to reproject there). This shipped as a 4-way
+view-mode switch (3D globe / flat 2D / Arctic / Antarctic) with a single
+cycle button, and the polar maps were confirmed by the user to render
+cleanly with no artifacts, even zoomed in.
 
-Glacier layer on the polar maps: same `worlds/<world-id>/glaciers.json`
-placeholder data, read via `ol.format.GeoJSON` with
-`dataProjection: 'EPSG:4326'` / `featureProjection: <the pole's EPSG
-code>`, rendered as an `ol.layer.Vector`. The `#glacier-toggle` button
-routes to whichever engine(s) are relevant via `applyVisibility()`.
-
-**Polar map interaction controls**: the user asked for the polar maps to
-feel as capable as the MapLibre engine — finger-rotate, a compass button
-that resets to north-up, zoom +/- buttons, and a scale bar — not a
-static pan/zoom-only view. `js/polarMap.js` sets `controls:
-ol.control.defaults.defaults().extend([new ol.control.ScaleLine(...)])`.
-**Gotcha**: in the global `ol` bundle this is namespaced
-`ol.control.defaults.defaults`, not `ol.control.defaults()` — the module
-`ol/control/defaults` exports a function also named `defaults`, so the
-UMD build nests it under an object of the same name. Two-finger rotate
-was already available by default (OpenLayers enables `PinchRotate` in its
-default interactions unless you override `interactions:`, which this code
-doesn't) — it just had no compass button to discover it or reset it, which
-`ol.control.Rotate` (included in `defaults.defaults()`) now provides. CSS
-repositions `.ol-zoom`/`.ol-rotate` from OL's default top-left to top-right
-(stacked above `#view-cycle-btn`) to match the MapLibre engine's control
-placement, and `.ol-scale-line` from bottom-left (which would sit under
-the bottom `#controls` panel) to top-left.
-
-**Scale bar everywhere + show/hide toggle**: the user wanted a scale bar
-in `globe`/`flat` too (not just the polar maps), plus a way to turn it
-off in any mode. `js/app.js` adds MapLibre's `ScaleControl` at `top-left`
-(matching the polar maps' `.ol-scale-line` position) and a persistent
-`#scale-toggle-btn` under the scale bar. **Gotcha**: toggling visibility
-by setting `element.style.display` directly does *not* stick for either
-control — both `ScaleControl` and `ol.control.ScaleLine` re-render
-themselves (on basically every view change) and reset their own
-`style.display` as part of that, racing with and silently overwriting a
-plain inline-style toggle a few hundred ms later. The fix is a `body`
-class (`scale-hidden`) plus a CSS rule with `!important`
-(`setScaleVisible()` in `js/app.js`, rule in `style.css`) — `!important`
-on a stylesheet rule beats an element's own inline style regardless of
-which one was set more recently, so it doesn't matter that the controls
-re-assert their inline style after our code runs. Don't go back to a
-plain `.style.display =` toggle for either scale control.
-
-**View-mode switching UI**: v0.3 first shipped a row of 4 explicit buttons
-(`#view-mode-row`) plus kept MapLibre's built-in `GlobeControl` button for
-globe↔flat only — two different, redundant ways to change the view. The
-user asked for a single control instead: tapping one button (in the same
-screen position `GlobeControl` used to occupy, just below the zoom/compass
-group) cycles through all 4 modes in order (`VIEW_MODE_ORDER` in
-`js/app.js`: globe → flat → arctic → antarctic → globe...). `GlobeControl`
-was removed entirely and replaced by `#view-cycle-btn`, a **plain page-level
-HTML button** (not a MapLibre `IControl`) — this matters because a
-MapLibre control lives inside `#map` and would disappear whenever `#map`
-is hidden (i.e. in arctic/antarctic mode), which would break the "always
-tap the same button" premise. `#view-cycle-btn` shows the *current* mode's
-short label (`VIEW_MODE_LABEL`: "3D"/"2D"/"北極"/"南極") so tapping it is
-predictable. Don't reintroduce the 4-button row or `GlobeControl` without
-checking with the user first — this was a deliberate simplification.
-
-**Deliberately not built in v0.3** (kept in scope, ask before adding):
-political border/territory overlay on the polar maps (no placeholder data
-exists there anyway); 3D tilt/perspective on the polar maps (they're flat
-2D by design — that's what fixes the pole rendering); performance tuning
-of the per-tile canvas recolor (works, but a `DataTile`+`WebGLTile`-based
-version would be faster if this turns out too slow on the phone with many
-tiles in view).
+That confirmed the *data and technique* were sound, but running two
+separate map engines (MapLibre for the general globe, OpenLayers for
+poles) had real costs: no shared 3D terrain (MapLibre's globe still had
+its color-relief-only, non-3D-relief style; the OpenLayers maps were flat
+2D by design), duplicated interaction-control code (zoom/rotate/scale
+across two different control APIs), and no obvious path to a unified
+sea-level slider across the whole globe. When the user asked directly for
+the poles to be fixed "properly" rather than worked around, and named
+CesiumJS as the candidate, that combination of factors (Cesium fixes the
+pole problem *structurally*, once, everywhere, and gives the real 3D
+terrain the sea-level feature will eventually need) made the full engine
+switch worth it. **See "Stack decisions" above for the current
+architecture.** The MapLibre/OpenLayers-specific files
+(`js/polarMap.js`, `js/terrainLayers.js`, `js/elevationColor.js`) were
+deleted rather than kept around unused; git history has them if ever
+needed for reference (see rollback point below).
 
 **Rollback point**: commit `d2b35aa` ("Remove polar cap mask; user prefers
-the artifact to the patch") is the last state before this OpenLayers/polar
-redesign began — a known-good, user-approved v0.2. If the v0.3 polar work
-needs to be undone, revert/reset to that commit rather than trying to
-manually un-build pieces of it. (A `v0.2-stable` git tag was attempted for
-this but this session's push token doesn't have permission to push tags —
-only the branch — so the commit hash is the actual rollback anchor;
-GitHub's own commit history keeps `d2b35aa` reachable indefinitely as long
-as the branch isn't force-pushed over it.)
+the artifact to the patch") is the last MapLibre-only state (before the
+OpenLayers polar-maps detour began), and the commit immediately before
+this Cesium migration commit is the last MapLibre+OpenLayers v0.3 state
+(fully working, user-confirmed) if the Cesium approach needs to be
+abandoned. A `v0.2-stable` git tag was attempted early on but this
+session's push token doesn't have tag-push permission — only the branch —
+so commit hashes are the real rollback anchors; GitHub's own commit
+history keeps them reachable indefinitely as long as the branch isn't
+force-pushed over them.
 
-## Version 0.1 scope (done)
+## Version history
 
-1. Globe/world map displays.
-2. Touch rotate/pan/pinch-zoom works (MapLibre default handlers).
-3. 2D/3D switch via GlobeControl button.
-4. Mobile-usable layout: fullscreen map, `100dvh`, safe-area insets for
-   controls, enlarged control tap targets, no page scroll/bounce.
+**v0.1 (MapLibre, superseded)**: globe/world map displays; touch
+rotate/pan/pinch-zoom; 2D/3D switch via `GlobeControl`; mobile-usable
+layout.
 
-## Version 0.2 scope (done, then adjusted per phone feedback)
+**v0.2 (MapLibre, superseded)**: year slider with per-era territory/city
+data; top-3 city labels with show/hide toggle; a terrain+bathymetry base
+layer mode with glacier toggle. (A tap-and-hold-to-flatten gesture was
+also built and then removed per user feedback — see git history if this
+comes up again; the lesson was to clarify up front whether "centered on a
+tapped point" means simple re-centering or a full reprojection around that
+point before building it.)
 
-1. ~~Tap-and-hold a point on the 3D globe → recenters and flattens to 2D
-   there.~~ Built, tested by the user, then removed — see "Tap-and-hold to
-   center + flatten — tried, then removed" above. 2D/3D switching is just
-   the `GlobeControl` button again.
-2. Year slider (12th century → present, 20-year steps) redraws
-   territory/border polygons per era, snapping to the nearest keyframe
-   with real data.
-3. Top-3 city labels (capital/secondary/third) per era/faction, with a
-   show/hide toggle.
-4. A second base-layer mode: real-world terrain + bathymetry (elevation
-   color ramp only — see the hillshade note above for why hillshade was
-   removed), with an independent glacier-layer toggle.
+**v0.3 (MapLibre + OpenLayers, superseded)**: dedicated Arctic/Antarctic
+polar-stereographic maps (OpenLayers + NASA GIBS) to route around the
+MapLibre pole bug; a 4-way view-mode cycle button; rotate/compass/zoom/
+scale-bar controls on the polar maps and a scale bar (with show/hide
+toggle) everywhere. All superseded by the Cesium migration — see
+"History" above.
 
-Still out of scope (per user instructions / not yet asked for): sea level
-slider/flooding simulation, any second world, real (non-placeholder)
-border/city/glacier data.
+**Cesium v0.1 (current)**: full engine switch to CesiumJS. Real 3D
+terrain (Esri WorldElevation3D/TopoBathy3D) + imagery (NASA GIBS Blue
+Marble) across the *whole* globe including poles, via Cesium's native
+`sceneModePicker` for 3D/2D switching (no more separate polar maps or
+custom view-mode UI). Historical era/territory/city data and the glacier
+overlay were ported to Cesium's Entity API and work the same as before
+(year slider, city top-3 labels, history/terrain mode toggle, glacier
+toggle). **Deliberately not carried forward from v0.3, kept in scope, ask
+before re-adding**: a page-level scale bar with a show/hide toggle (Cesium
+doesn't have an equivalent built-in widget the way MapLibre/OpenLayers
+did; would need a custom one). **Deliberately out of scope for this
+round, per explicit user instruction**: sea-level-rise calculation itself
+— this version's job was specifically to get clean whole-globe 3D terrain
+(poles included) working first.
 
-## Version 0.3 scope (done, user-confirmed on-phone)
-
-The stated purpose of this whole app is a sea-level-rise / ice-sheet
-simulator, and the user flagged the pole rendering artifact from v0.2 as
-a priority-one blocker rather than a cosmetic nit — see "Dedicated polar
-maps (v0.3)" above for the full design rationale and rollback point.
-
-1. Two new dedicated flat polar-stereographic maps (Arctic `EPSG:3413`,
-   Antarctic `EPSG:3031`), built with OpenLayers, showing NASA GIBS's
-   `BlueMarble_ShadedRelief_Bathymetry` imagery natively in each polar
-   projection — no pole singularity artifact, no pole coverage gap either
-   (see the "v1 vs v2" note above for why an earlier AWS-Terrarium-based
-   attempt had a black hole at the pole and was replaced).
-2. View-mode switching consolidated into a single persistent cycle button
-   (3D globe → flat 2D → Arctic → Antarctic → ...), replacing both the
-   short-lived 4-button row and MapLibre's `GlobeControl`.
-3. Glacier toggle works across all four modes (routes to whichever engine
-   is active).
-4. Rotate/compass/zoom/scale-bar controls on the polar maps, and a scale
-   bar (with a show/hide toggle, all four modes) on the MapLibre engine
-   too — see "Polar map interaction controls" and "Scale bar everywhere"
-   above.
-
-User-confirmed on-phone: the GIBS imagery renders correctly at the poles
-(no artifact, clean when zoomed in), and the `GIBS_500M_RESOLUTIONS`
-guess was right.
+Still out of scope generally (per user instructions / not yet asked for):
+sea level slider/flooding simulation, any second world, real
+(non-placeholder) border/city/glacier data.
 
 ## How this was tested (no browser on the dev side either)
 
-Real basemap/library CDN hosts (jsdelivr, demotiles.maplibre.org) are
-blocked by this environment's own egress policy — that's a sandbox
-restriction, not a real-world problem; the user's phone has normal
-internet. To verify the code anyway: installed `maplibre-gl` from npm
-(registry.npmjs.org is allowed) into a scratch copy, substituted a local
-stand-in style.json, served it over a local static server, and drove it
-with Playwright/Chromium (software WebGL via swiftshader) — confirmed the
-canvas renders, both MapLibre controls attach, the loading overlay hides on
-`load`, and clicking the GlobeControl button visibly switches globe↔flat
-projection (screenshots compared). That's how the ESM-no-default-export
-gotcha above was actually caught before it could reach the user's phone.
-If you change the map init code again, re-verify the same way before
-telling the user it's ready — don't rely on reading the code alone.
+Real basemap/library/data CDN hosts (jsdelivr, demotiles.maplibre.org,
+gibs.earthdata.nasa.gov, elevation3d.arcgis.com, etc.) are blocked by this
+environment's own egress policy — a sandbox restriction, not a real-world
+problem; the user's phone has normal internet. The consistent workaround
+throughout this project: install the library from npm (registry.npmjs.org
+is allowed) into a scratch copy, vendor it locally alongside a local
+static file server, and drive it with Playwright/Chromium (software WebGL
+via swiftshader) to verify the *code* is structurally correct — control
+wiring, API usage, layer/entity/source creation, event handlers — while
+accepting that real remote data loading and final visual appearance can
+only be confirmed on the user's actual phone. Re-run this whole approach
+before telling the user a map-logic change is ready; don't rely on reading
+the code alone. (Full blow-by-blow history of what was checked at each
+MapLibre/OpenLayers version is in git history/old CLAUDE.md revisions if
+ever needed — condensed here since that engine is no longer in the repo.)
 
-For v0.2, the same scratch-copy-plus-Playwright approach was extended: a
-local `style.json` stand-in was given every layer id the code references
-via `beforeId` (`countries-boundary` etc.), so `addLayer` doesn't throw;
-AWS terrain tiles and demotiles glyphs still 404 in-sandbox (harmless —
-MapLibre falls back gracefully, and both work fine from the user's real
-phone). Verified: slider year label + "(データ: N年時点)" note logic at
-both a keyframe year and a non-keyframe year; mode toggle swaps panels and
-layer visibility; city/glacier toggle buttons flip `aria-pressed` and
-label text; every added layer/source id exists on the live `Map` instance
-(`getLayer`/`getSource`). Re-run this whole check before shipping further
-map-logic changes. Note the limits of this approach, though: the pole
-hillshade artifact and the viewport-relative shading that got reported
-after shipping were both real-world-data rendering issues that only show
-up with actual AWS terrain tiles loaded — the sandbox's local placeholder
-DEM tiles can't surface that class of bug, so changes to terrain
-rendering specifically still need the user's on-phone confirmation.
-
-For v0.3 (the OpenLayers polar maps), `ol` and `proj4` were installed from
-npm into the same scratch copy and vendored locally the same way as
-`maplibre-gl`, and the CDN `<script>` tags swapped to local paths for the
-test. Verified via Playwright: `window.__polarMaps.{arctic,antarctic}.map
-.getView().getProjection().getCode()` returns exactly `EPSG:3413` /
-`EPSG:3031` after switching to those modes; the single cycle button
-advances through all 4 modes in order and shows/hides the right container
-and control panels each time; the constructed GIBS tile URL template
-matches the intended pattern exactly (read back off the live
-`ol.source.XYZ` instance); the glacier toggle flips the correct OpenLayers
-layer's `getVisible()` when a polar mode is active; no `pageerror`s across
-the whole sequence, and the attempted tile requests to
-`gibs.earthdata.nasa.gov` show up as connection failures in the console
-(expected — that host is blocked from this sandbox, same as every other
-real data host used in this project) rather than any JS exception. Also
-unit-tested `js/elevationColor.js`'s
-`decodeTerrariumElevation`/`elevationToRGB` directly in plain Node (no
-browser needed) against known encode/decode values — these are currently
-unused by the polar path (see the v1-vs-v2 note above) but exercised in
-case a future numeric-polar-DEM upgrade calls them again. What this
-*couldn't* verify (network-blocked in this sandbox, same as always):
-whether the `GIBS_500M_RESOLUTIONS` tile grid guess is exactly right, and
-what the real Blue Marble bathymetry imagery actually looks like at the
-poles — needs the user's phone.
+For the Cesium migration specifically: `cesium@1.145.0` installed from npm
+and vendored the same way, `CESIUM_BASE_URL` pointed at the local vendor
+path. Verified via Playwright: a bare `new Cesium.Viewer()` with
+`EllipsoidTerrainProvider` renders a WebGL canvas + the default UI widgets
+correctly under swiftshader (confirms the rendering pipeline itself works
+in this constrained environment); `ArcGISTiledElevationTerrainProvider
+.fromUrl()` and a `UrlTemplateImageryProvider` with
+`GeographicTilingScheme` both construct without synchronous API errors and
+correctly attempt real network requests to the intended hosts/URLs (which
+then fail with connection errors from the sandbox's own network block,
+not from any coding mistake — confirmed by the request URLs matching
+exactly what was intended, including GIBS's `{z}/{y}/{x}` level-0 root
+tiles at X:0/1,Y:0 matching the expected 2-column geographic root tile).
+The full app was verified end-to-end: it doesn't hang or crash when both
+the primary and fallback terrain URLs fail (falls through to
+`EllipsoidTerrainProvider` and still hides the loading overlay); moving
+the year slider produces the expected entity counts on the Cesium
+`CustomDataSource`s (3 territories, 9 cities, 2 glacier polygons for the
+placeholder data); the history/terrain mode toggle and glacier toggle
+correctly flip `dataSource.show`. What this *couldn't* verify (network
+blocked in this sandbox, same as always): whether `TopoBathy3D` is really
+the correct Esri service name (vs. needing the `fallbackUrl`), and what
+the real terrain+imagery actually looks like at the poles on-device —
+needs the user's phone.
 
 ## Working conventions
 

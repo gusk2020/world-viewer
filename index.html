@@ -4,17 +4,14 @@
   <meta charset="UTF-8" />
   <title>世界地図ビューア - 過速世界</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6/dist/maplibre-gl.css" />
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@10.10.0/ol.css" />
+  <script>window.CESIUM_BASE_URL = "https://cdn.jsdelivr.net/npm/cesium@1.145.0/Build/Cesium/";</script>
+  <script src="https://cdn.jsdelivr.net/npm/cesium@1.145.0/Build/Cesium/Cesium.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cesium@1.145.0/Build/Cesium/Widgets/widgets.css" />
   <link rel="stylesheet" href="./css/style.css" />
 </head>
 <body>
-  <div id="map"></div>
-  <div id="map-arctic" class="polar-map" hidden></div>
-  <div id="map-antarctic" class="polar-map" hidden></div>
+  <div id="cesiumContainer"></div>
   <div id="loading">読み込み中…</div>
-  <button id="view-cycle-btn" aria-label="表示モード切替(3D地球儀→平面地図→北極→南極)" title="表示モード切替">3D</button>
-  <button id="scale-toggle-btn" class="corner-toggle-btn" aria-pressed="true" aria-label="縮尺の表示/非表示">縮尺</button>
 
   <div id="controls">
     <div id="history-panel" class="panel">
@@ -31,8 +28,6 @@
     <button id="mode-toggle">地形図に切替</button>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/proj4@2.22.0/dist/proj4.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/ol@10.10.0/dist/ol.js"></script>
   <script type="module" src="./js/app.js"></script>
 </body>
 </html>

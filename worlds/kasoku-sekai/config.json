@@ -1,22 +1,18 @@
 {
   "id": "kasoku-sekai",
   "name": "過速世界",
-  "styleUrl": "https://demotiles.maplibre.org/style.json",
-  "center": [15, 25],
-  "zoom": 1.3,
-  "minZoom": 0,
-  "maxZoom": 18,
-  "defaultProjection": "globe",
   "history": {
     "indexUrl": "./worlds/kasoku-sekai/eras/index.json",
     "eraUrlTemplate": "./worlds/kasoku-sekai/eras/{year}.json"
   },
   "glaciersUrl": "./worlds/kasoku-sekai/glaciers.json",
   "terrain": {
-    "tiles": ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
-    "encoding": "terrarium",
-    "tileSize": 256,
-    "maxzoom": 15,
-    "attribution": "Terrain tiles: AWS Open Data / Mapzen Joerd"
+    "url": "https://elevation3d.arcgis.com/arcgis/rest/services/WorldElevation3D/TopoBathy3D/ImageServer",
+    "fallbackUrl": "https://elevation3d.arcgis.com/arcgis/rest/services/WorldElevation3D/Terrain3D/ImageServer"
+  },
+  "imagery": {
+    "url": "https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/BlueMarble_ShadedRelief_Bathymetry/default/500m/{z}/{y}/{x}.jpeg",
+    "maximumLevel": 8,
+    "credit": "Imagery: NASA Blue Marble (GIBS). Terrain: Esri World Elevation 3D (TopoBathy)."
   }
 }
