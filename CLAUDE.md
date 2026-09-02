@@ -247,13 +247,11 @@ mode. `js/elevationColor.js`'s `elevationToRGB`/`decodeTerrariumElevation`
 are unused by the polar path now but kept — they're exactly what a future
 numeric-polar-DEM upgrade would reuse.
 
-`GIBS_500M_RESOLUTIONS` in `js/polarMap.js` is **not independently
-confirmed** against GIBS's own capabilities document (network-blocked
-from this sandbox); it was inferred from a working reference example
-(the confirmed `250m` matrix set's resolutions, minus one level for the
-coarser `500m` set). If polar tiles look blurry, misaligned, or missing
-at some zoom levels on the phone, this array is the first thing to
-re-derive properly.
+`GIBS_500M_RESOLUTIONS` in `js/polarMap.js` was inferred (not read from
+GIBS's own capabilities document, which is on a blocked host from this
+sandbox) from a working reference example — the confirmed `250m` matrix
+set's resolutions, minus one level for the coarser `500m` set. **User-
+confirmed correct on-device**, including zoomed in — the guess was right.
 
 **Why this data still can't fix the MapLibre 3D globe**: the globe's
 problem was never *which* picture we used — it's that MapLibre's globe
@@ -289,6 +287,23 @@ repositions `.ol-zoom`/`.ol-rotate` from OL's default top-left to top-right
 (stacked above `#view-cycle-btn`) to match the MapLibre engine's control
 placement, and `.ol-scale-line` from bottom-left (which would sit under
 the bottom `#controls` panel) to top-left.
+
+**Scale bar everywhere + show/hide toggle**: the user wanted a scale bar
+in `globe`/`flat` too (not just the polar maps), plus a way to turn it
+off in any mode. `js/app.js` adds MapLibre's `ScaleControl` at `top-left`
+(matching the polar maps' `.ol-scale-line` position) and a persistent
+`#scale-toggle-btn` under the scale bar. **Gotcha**: toggling visibility
+by setting `element.style.display` directly does *not* stick for either
+control — both `ScaleControl` and `ol.control.ScaleLine` re-render
+themselves (on basically every view change) and reset their own
+`style.display` as part of that, racing with and silently overwriting a
+plain inline-style toggle a few hundred ms later. The fix is a `body`
+class (`scale-hidden`) plus a CSS rule with `!important`
+(`setScaleVisible()` in `js/app.js`, rule in `style.css`) — `!important`
+on a stylesheet rule beats an element's own inline style regardless of
+which one was set more recently, so it doesn't matter that the controls
+re-assert their inline style after our code runs. Don't go back to a
+plain `.style.display =` toggle for either scale control.
 
 **View-mode switching UI**: v0.3 first shipped a row of 4 explicit buttons
 (`#view-mode-row`) plus kept MapLibre's built-in `GlobeControl` button for
@@ -351,7 +366,7 @@ Still out of scope (per user instructions / not yet asked for): sea level
 slider/flooding simulation, any second world, real (non-placeholder)
 border/city/glacier data.
 
-## Version 0.3 scope (done, pending on-phone confirmation)
+## Version 0.3 scope (done, user-confirmed on-phone)
 
 The stated purpose of this whole app is a sea-level-rise / ice-sheet
 simulator, and the user flagged the pole rendering artifact from v0.2 as
@@ -369,12 +384,14 @@ maps (v0.3)" above for the full design rationale and rollback point.
    short-lived 4-button row and MapLibre's `GlobeControl`.
 3. Glacier toggle works across all four modes (routes to whichever engine
    is active).
+4. Rotate/compass/zoom/scale-bar controls on the polar maps, and a scale
+   bar (with a show/hide toggle, all four modes) on the MapLibre engine
+   too — see "Polar map interaction controls" and "Scale bar everywhere"
+   above.
 
-Not yet verified on a real device: whether the `GIBS_500M_RESOLUTIONS`
-tile grid guess is exactly right (tiles could be blurry/misaligned/missing
-at some zoom levels if not) — this is the one part of the current v0.3
-design that couldn't be confirmed before shipping (GIBS's own capabilities
-document is on a blocked host from this sandbox).
+User-confirmed on-phone: the GIBS imagery renders correctly at the poles
+(no artifact, clean when zoomed in), and the `GIBS_500M_RESOLUTIONS`
+guess was right.
 
 ## How this was tested (no browser on the dev side either)
 

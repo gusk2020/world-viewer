@@ -49,6 +49,11 @@ html, body {
   right: env(safe-area-inset-right, 0);
 }
 
+.maplibregl-ctrl-top-left {
+  top: env(safe-area-inset-top, 0);
+  left: env(safe-area-inset-left, 0);
+}
+
 .maplibregl-ctrl-bottom-right {
   bottom: env(safe-area-inset-bottom, 0);
   right: env(safe-area-inset-right, 0);
@@ -157,6 +162,13 @@ html, body {
   bottom: auto;
 }
 
+/* !important: both controls re-render themselves and reset their own
+   inline style.display, which would otherwise fight a plain JS toggle. */
+body.scale-hidden .maplibregl-ctrl-scale,
+body.scale-hidden .ol-scale-line {
+  display: none !important;
+}
+
 /* Single persistent view-mode cycle button: sits where MapLibre's
    GlobeControl used to (below the zoom/compass group), but as a plain
    page-level element so it stays visible across all 4 view modes, not
@@ -176,4 +188,27 @@ html, body {
   font-weight: 700;
   box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
   z-index: 5;
+}
+
+/* Scale show/hide toggle: sits just below the scale bar (both engines'
+   scale elements are pinned to the top-left corner, see above), and like
+   #view-cycle-btn is a plain page-level element so it works in every mode. */
+#scale-toggle-btn {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0) + 46px);
+  left: calc(env(safe-area-inset-left, 0) + 10px);
+  min-width: 52px;
+  height: 32px;
+  border: none;
+  border-radius: 6px;
+  background: #3d5a80;
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 600;
+  z-index: 5;
+}
+
+#scale-toggle-btn[aria-pressed="false"] {
+  background: rgba(255, 255, 255, 0.85);
+  color: #333333;
 }

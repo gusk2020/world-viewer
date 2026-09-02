@@ -1,6 +1,7 @@
 import {
   MapLibreMap,
   NavigationControl,
+  ScaleControl,
 } from "https://cdn.jsdelivr.net/npm/maplibre-gl@6/dist/maplibre-gl.mjs";
 
 import {
@@ -31,6 +32,16 @@ function isMapLibreView(viewMode) {
   return viewMode === "globe" || viewMode === "flat";
 }
 
+// Neither MapLibre's ScaleControl nor OpenLayers' ScaleLine has a
+// show/hide toggle in their API. Setting their element's style.display
+// directly doesn't stick -- both controls re-render on their own (e.g. on
+// every view change) and reset style.display themselves, racing with and
+// overwriting a plain inline-style toggle. A CSS class + !important
+// (see style.css) is the only thing that reliably wins against that.
+function setScaleVisible(visible) {
+  document.body.classList.toggle("scale-hidden", !visible);
+}
+
 async function main() {
   const world = await (await fetch(WORLD_CONFIG_URL)).json();
   const glaciersGeoJson = await (await fetch(world.glaciersUrl)).json();
@@ -46,8 +57,9 @@ async function main() {
   });
 
   map.addControl(new NavigationControl({ visualizePitch: true }), "top-right");
+  map.addControl(new ScaleControl({ maxWidth: 100, unit: "metric" }), "top-left");
 
-  const state = { viewMode: "globe", dataMode: "history", citiesOn: true, glacierOn: true };
+  const state = { viewMode: "globe", dataMode: "history", citiesOn: true, glacierOn: true, scaleOn: true };
   const polarMaps = { arctic: null, antarctic: null };
 
   function ensurePolarMap(pole) {
@@ -69,6 +81,8 @@ async function main() {
 
     if (polarMaps.arctic) polarMaps.arctic.setGlacierVisible(state.glacierOn);
     if (polarMaps.antarctic) polarMaps.antarctic.setGlacierVisible(state.glacierOn);
+
+    setScaleVisible(state.scaleOn);
   }
 
   function renderViewMode() {
@@ -126,6 +140,7 @@ async function main() {
     setupModeToggle(state, renderViewMode, applyVisibility);
     setupCityToggle(state, applyVisibility);
     setupGlacierToggle(state, applyVisibility);
+    setupScaleToggle(state, applyVisibility);
     setupViewCycleButton();
   });
 
@@ -184,6 +199,15 @@ function setupGlacierToggle(state, applyVisibility) {
     state.glacierOn = !state.glacierOn;
     button.setAttribute("aria-pressed", String(state.glacierOn));
     button.textContent = state.glacierOn ? "氷河を表示" : "氷河を非表示";
+    applyVisibility();
+  });
+}
+
+function setupScaleToggle(state, applyVisibility) {
+  const button = document.getElementById("scale-toggle-btn");
+  button.addEventListener("click", () => {
+    state.scaleOn = !state.scaleOn;
+    button.setAttribute("aria-pressed", String(state.scaleOn));
     applyVisibility();
   });
 }
