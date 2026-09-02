@@ -247,6 +247,41 @@ mode. `js/elevationColor.js`'s `elevationToRGB`/`decodeTerrariumElevation`
 are unused by the polar path now but kept — they're exactly what a future
 numeric-polar-DEM upgrade would reuse.
 
+**Research note for that future upgrade (ice-free Antarctic bed
+topography)**: the user asked for this directly (toggling glacier off
+today just hides our placeholder overlay — the NASA photo underneath
+already has real ice baked into it, so it doesn't actually reveal bare
+ground). Traced down a real, no-login-required source: BAS's Bedmap3
+gridded product (bed/surface/ice-thickness, 500m, Antarctic Polar
+Stereographic — i.e. already in our `EPSG:3031`), fetched by the
+actively-maintained `polartoolkit` Python package from:
+`https://ramadda.data.bas.ac.uk/repository/entry/get/bedmap3.nc?entryid=synth%3A2d0e4791-8e20-46a3-80e4-f5f6716025d2%3AL2JlZG1hcDMubmM%3D`
+(`bed_topography` is the variable we'd want). This is **not usable as-is**
+for a static, backend-less site like this one, for reasons that are
+about tooling/access, not effort:
+- It's a single NetCDF file, not a tile pyramid — size unknown (couldn't
+  even HEAD-request it; `ramadda.data.bas.ac.uk` is blocked from this
+  sandbox, confirmed via curl → 403 from the egress proxy), but a
+  multi-variable full-Antarctica 500m grid is very likely too large to
+  fetch whole in a phone browser.
+- Turning it into something usable means either (a) reading it via HTTP
+  range requests with an HDF5-in-the-browser reader (NetCDF4 is
+  HDF5-based; a library like `h5wasm` could in principle do this, but
+  it's a nontrivial, unproven-in-this-project technique, and whether it's
+  actually *fast* depends on how the file happens to be chunked
+  internally — unknowable without downloading it), or (b) preprocessing
+  it once into a proper web tile pyramid with real GIS tooling (GDAL /
+  Python xarray) — which this sandbox doesn't have, and can't reach the
+  source file to do the conversion anyway.
+
+Don't re-research the URL from scratch next time — start from the one
+above. This is also exactly the numeric elevation data a future
+sea-level/flooding slider would need (for ice thickness specifically),
+so it's likely worth tackling both together rather than solving "remove
+the ice visually" as a one-off. If a future session has broader network
+access than this sandboxed one, that's the point where this becomes
+tractable.
+
 `GIBS_500M_RESOLUTIONS` in `js/polarMap.js` was inferred (not read from
 GIBS's own capabilities document, which is on a blocked host from this
 sandbox) from a working reference example — the confirmed `250m` matrix
