@@ -55,7 +55,14 @@ export function createGibsGeographicTilingScheme() {
     if (x >= xTiles) x = xTiles - 1;
 
     let y = Math.floor((rectangle.north - position.latitude) / tileWidth);
-    if (y > yTiles) y = yTiles - 1;
+    // Off-by-one fixed vs. NASA's original (`y > yTiles`, inconsistent with
+    // the `x >= xTiles` guard just above): a position at exactly latitude
+    // -90 (the true south pole) computes y === yTiles exactly for any level
+    // where this scheme's math is exact (see GIBS_GEOGRAPHIC_MIN_LEVEL
+    // below) -- `>` never catches that case, leaving an out-of-range row
+    // index that requests a tile GIBS doesn't have, which is exactly what a
+    // gap sitting right at the pole looks like.
+    if (y >= yTiles) y = yTiles - 1;
 
     if (!result) result = new Cesium.Cartesian2(0, 0);
     result.x = x;
@@ -67,3 +74,18 @@ export function createGibsGeographicTilingScheme() {
 }
 
 export const GIBS_GEOGRAPHIC_MAX_LEVEL = LEVELS.length - 1;
+
+// Levels 0-2's own width/height * per-tile angular size (using this same
+// resolution table, same as NASA's reference gibs.js) don't actually sum to
+// a full 360deg x 180deg -- level0 overshoots by 60% in both directions,
+// level1 by ~20-50%, level2 by an exact 20% in latitude only. (From level 3
+// on, width/height double exactly in step with resolution halving, so the
+// total is exactly 360x180, confirmed by direct calculation: level 3's tile
+// count (10x5) times its angular tile size reproduces Cesium.Rectangle.MAX_VALUE
+// exactly.) Requesting levels 0-2 therefore asks the globe to fit an
+// image rectangle that extends past the real poles/date line, which Cesium
+// clips at the true ellipsoid edge -- this is what showed up as a
+// black-hole gap right at each pole even after the per-level tile-count fix
+// above. Skipping straight to level 3 (50 tiles total, still cheap) avoids
+// the bad levels entirely rather than trying to special-case them.
+export const GIBS_GEOGRAPHIC_MIN_LEVEL = 3;

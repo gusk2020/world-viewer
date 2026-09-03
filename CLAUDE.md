@@ -93,6 +93,38 @@ free service account is *not* currently needed — see below).
   Cesium default; `config.imagery.maximumLevel` was removed from
   `config.json` since it's now derived from this constant, avoiding two
   copies of the same number drifting apart.
+  **Second gotcha, found after the fix above still left a black pole gap**:
+  the per-level tile-count fix (above) wasn't the whole story. Using the
+  exact same resolution table NASA's example uses, the total angular size
+  each level's tiles add up to (`tile count × per-tile angular width`,
+  computed straight from that table) only equals the real 360°×180° extent
+  from level 3 onward — level 0 overshoots by 60% in both directions,
+  level 1 by ~50%/20%, level 2 by an exact 20% in latitude. (Confirmed by
+  direct calculation, not guesswork: level 3's 10×5 tiles at its resolution
+  reproduce `Cesium.Rectangle.MAX_VALUE` exactly; levels 0-2 don't.)
+  Cesium's own tile-selection code (`ImageryLayer._createTileImagerySkeletons`,
+  read directly from the vendored `cesium` npm package to confirm this
+  rather than guessed) *does* respect an imagery provider's `minimumLevel`
+  by flooring the selected level to it — so `createImageryProvider()` now
+  also sets `minimumLevel: GIBS_GEOGRAPHIC_MIN_LEVEL` (3, exported next to
+  `GIBS_GEOGRAPHIC_MAX_LEVEL` in the same file) to skip the three levels
+  whose own geometry doesn't add up. **Separately**, `positionToTileXY` in
+  that same ported file had a genuine off-by-one bug carried over from
+  NASA's own code: its Y-index bounds check used `y > yTiles` while the
+  X-index check just above it correctly used `x >= xTiles` — at exactly
+  the true south pole (latitude -90°) this computes `y === yTiles` (an
+  out-of-range row index one past the last real row), which `>` never
+  catches, so Cesium ends up asking GIBS for a tile row that doesn't
+  exist right at the pole. Fixed to `y >= yTiles`, matching the X check.
+  Both fixes were verified directly (not just inferred): after fixing,
+  `positionToTileXY` for the exact south pole at level 3 returns `y: 4`
+  (the real last row) instead of `y: 5`; the level-3 rectangle math
+  reproduces the exact global extent with no overshoot. **Still not fully
+  certain**: whether this fully eliminates the black pole circle the user
+  saw, since this sandbox's network block means every GIBS request fails
+  regardless of level, so the *real* server's tile availability at the
+  poles (vs. our computed indices) can't be confirmed here — needs the
+  user's phone again to know if the circle is gone, smaller, or unchanged.
 - **Why NOAA ETOPO 2022 (the user's first suggestion) isn't used directly**:
   real, freely-licensed, and does include full-globe topography+bathymetry
   with an ice-free "Bedrock" variant — but it's distributed only as bulk
@@ -107,7 +139,14 @@ free service account is *not* currently needed — see below).
   Viewer option, no custom code. The user reported it sat too close to the
   literal screen corner to tap reliably on-phone; fixed purely in CSS
   (`.cesium-viewer-toolbar` in `css/style.css` now insets `top`/`right` by
-  10px instead of 0). This also means the whole "4 view modes /
+  10px instead of 0). **Second gotcha**: once the compass button (below)
+  existed, tapping this picker open a dropdown of 3D/2D/Columbus-view
+  options that expands *downward* from the button — which landed right on
+  top of the compass button positioned just below it, making neither
+  tappable. Fixed by swapping their vertical order in CSS (compass now on
+  top at the 10px inset, toolbar below it at a 62px inset) so the
+  dropdown opens into empty space instead of over another control. This
+  also means the whole "4 view modes /
   cycle button / separate polar OpenLayers engine" apparatus from v0.3 is
   **gone** — now that the *one* 3D globe renders poles correctly, there's
   no more need for dedicated flat polar maps as a workaround. Don't
@@ -186,6 +225,24 @@ to be more visible. City points/labels use
 `heightReference: Cesium.HeightReference.CLAMP_TO_GROUND` for the same
 terrain-following reason, plus `disableDepthTestDistance: Infinity` so
 labels aren't hidden behind terrain from a low camera angle.
+
+**Second gotcha, found on-phone**: city points/labels originally also used
+`heightReference: Cesium.HeightReference.CLAMP_TO_GROUND`, matching the
+territory polygons above — but this is a *different* Cesium code path for
+Entity points/labels than for terrain-draped polygons, and it re-samples
+the real terrain height asynchronously in batches rather than continuously
+per-frame. The user reported every city label jumping to a slightly
+different position all at once whenever they rotated the globe — the
+classic symptom of that batched re-clamp landing on a new height for
+every entity in the same frame. Since `disableDepthTestDistance: Infinity`
+already forces these to render on top regardless of the terrain beneath
+them, the true clamped height barely mattered visually anyway, so
+`heightReference` was simply removed from both the point and the label in
+`historyLayers.js` — `Cesium.Cartesian3.fromDegrees(lng, lat)` now places
+them at plain sea-level height, which needs no runtime re-clamping and so
+can't drift. Territory polygons keep their terrain-draped `heightReference`-
+free behavior unchanged (that's the different, unaffected code path — the
+user confirmed territories look fine on the 3D globe).
 
 **Gotcha found in v0.1 phone testing, fixed**: Cesium Entity polygons draw
 a straight geodesic line between each pair of consecutive ring vertices,
@@ -369,6 +426,40 @@ All four code fixes were verified via the same Playwright/vendored-Cesium
 method described below before being reported back to the user as ready to
 re-test on-phone.
 
+**Cesium v0.1, second-round bug-fix pass**: the first-round pass above
+didn't fully fix everything, and introduced one new regression; the user
+reported (again with screenshots) after re-testing: (1) the sceneModePicker
+button's own dropdown now opened on top of the new compass button, making
+both untappable — fixed by swapping their vertical CSS order (see "3D/2D
+switch" above); (2) the black pole circles were still there, same size —
+root-caused to two *further* issues in `js/gibsGeographicTilingScheme.js`
+beyond the per-level tile-count fix: (a) the tiling scheme's own geometry
+only sums to the true 360°×180° extent from level 3 onward (levels 0-2
+overshoot by 20-60%, confirmed by direct calculation), so
+`createImageryProvider()` now also sets `minimumLevel:
+GIBS_GEOGRAPHIC_MIN_LEVEL` (3) to skip them — verified Cesium's own
+`ImageryLayer._createTileImagerySkeletons` (read from the vendored
+`cesium` npm package, not guessed) actually honors an imagery provider's
+`minimumLevel`; (b) a genuine off-by-one in `positionToTileXY` (carried
+over faithfully from NASA's own reference code) that left the exact south
+pole computing an out-of-range tile row, now fixed — see "Imagery" above
+for both. Not fully confirmed this round either (this sandbox's network
+block means no GIBS tile — at any level — ever actually loads here, so
+the *real* server's behavior at the poles still can't be observed
+directly), so this needs the user's phone again to know if the circle is
+gone, smaller, or unchanged; (3) territories fine on the 3D globe, but all
+city labels jumped together to a new position whenever the globe was
+rotated — root-caused to `HeightReference.CLAMP_TO_GROUND` on city
+points/labels using a different, asynchronously-batched Cesium code path
+than the terrain-draped polygons (which were and remain unaffected); fixed
+by dropping `heightReference` from cities entirely, relying on
+`disableDepthTestDistance: Infinity` (already present) to keep them
+visible regardless of true elevation — see "Historical eras" above. All
+three fixes were verified the same Playwright/vendored-Cesium way (exact
+tile-index checks at the poles, confirmed `minimumLevel` is honored,
+confirmed cities carry no `heightReference` post-fix, confirmed the
+toolbar/compass CSS `top` ordering) before reporting back to the user.
+
 Still out of scope generally (per user instructions / not yet asked for):
 sea level slider/flooding simulation, any second world, real
 (non-placeholder) border/city/glacier data.
@@ -435,6 +526,34 @@ tap (heading returned to `2π`, i.e. equivalent to north/0°). Same caveat
 as always: this only proves the code is structurally correct, not that
 the real imagery/terrain renders correctly on-screen — that still needs
 the user's phone.
+
+For the second-round bug-fix pass (imagery `minimumLevel`, the
+`positionToTileXY` off-by-one, city `heightReference` removal, toolbar/
+compass CSS swap): this round went one step further than reading the
+tiling-scheme code — the vendored `cesium` npm package's own unminified
+source (`node_modules/cesium/Build/CesiumUnminified/Cesium.js`) was
+grepped and read directly to confirm `ImageryLayer._createTileImagerySkeletons`
+actually floors its selected level to `imageryProvider.minimumLevel`
+before requesting tiles, rather than assuming the option does what its
+name suggests. Confirmed via Playwright: `positionToTileXY` at the exact
+south pole (lat -90) now returns tile row `y: 4` (the real last row)
+instead of the pre-fix `y: 5` (one past the end); the level-3 tile grid's
+`tileXYToRectangle` reproduces `Cesium.Rectangle.MAX_VALUE` exactly
+(west -180, north 90, east 180, south -90 — no overshoot); the imagery
+provider's `.minimumLevel`/`.maximumLevel` read back as 3/7 as configured;
+city entities post-fix carry no `heightReference` on either their point or
+label; the toolbar's and compass's computed CSS `top` offsets are in the
+new swapped order (compass above the toolbar). One thing this *couldn't*
+verify even indirectly: whether GIBS's real server actually serves every
+tile our now-corrected index math asks for at the poles — in this sandbox
+every GIBS request fails outright (network blocked) regardless of which
+tile is requested, at any level, so a wrong-but-plausible-looking index
+and a correct one both "fail" identically here. The per-level geometry
+overshoot (level 0-2, fixed by `minimumLevel: 3`) and the off-by-one (fixed
+in `positionToTileXY`) are both real, provable-by-calculation bugs
+independent of that — but whether they were the *entire* explanation for
+what the user saw, or whether something else remains, still needs a fresh
+on-phone screenshot to know for sure.
 
 ## Working conventions
 

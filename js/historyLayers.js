@@ -53,13 +53,21 @@ export function applyEraData({ territories, cities }, eraDoc) {
     const [lng, lat] = feature.geometry.coordinates;
     const color = Cesium.Color.fromCssColorString(feature.properties.color);
     cities.entities.add({
+      // No `heightReference` here: CLAMP_TO_GROUND on point/label entities
+      // (unlike terrain-draped polygons above, a different Cesium code
+      // path) re-samples the real terrain height asynchronously in
+      // batches, which showed up on-phone as every city jumping to a
+      // slightly different position all at once whenever the camera
+      // rotated. `disableDepthTestDistance` below already makes these
+      // always render on top regardless of the terrain underneath, so the
+      // exact height barely matters visually -- plain sea-level position
+      // avoids the async re-clamp entirely.
       position: Cesium.Cartesian3.fromDegrees(lng, lat),
       point: {
         pixelSize: citySize[feature.properties.rank] || 8,
         color,
         outlineColor: Cesium.Color.WHITE,
         outlineWidth: 2,
-        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
       },
       label: {
@@ -70,7 +78,6 @@ export function applyEraData({ territories, cities }, eraDoc) {
         style: Cesium.LabelStyle.FILL_AND_OUTLINE,
         outlineColor: Cesium.Color.WHITE,
         outlineWidth: 3,
-        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
       },
     });

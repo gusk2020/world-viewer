@@ -7,7 +7,11 @@ import {
   setHistoryVisible,
 } from "./historyLayers.js";
 import { createGlacierDataSource } from "./glacierLayer.js";
-import { createGibsGeographicTilingScheme, GIBS_GEOGRAPHIC_MAX_LEVEL } from "./gibsGeographicTilingScheme.js";
+import {
+  createGibsGeographicTilingScheme,
+  GIBS_GEOGRAPHIC_MAX_LEVEL,
+  GIBS_GEOGRAPHIC_MIN_LEVEL,
+} from "./gibsGeographicTilingScheme.js";
 
 const WORLD_CONFIG_URL = "./worlds/kasoku-sekai/config.json";
 
@@ -29,6 +33,7 @@ function createImageryProvider(config) {
   return new Cesium.UrlTemplateImageryProvider({
     url: config.imagery.url,
     tilingScheme: createGibsGeographicTilingScheme(),
+    minimumLevel: GIBS_GEOGRAPHIC_MIN_LEVEL,
     maximumLevel: GIBS_GEOGRAPHIC_MAX_LEVEL,
     credit: config.imagery.credit,
   });
