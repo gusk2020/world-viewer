@@ -68,10 +68,31 @@ free service account is *not* currently needed — see below).
   Mercator's 1:1 root tile). URL:
   `https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/BlueMarble_ShadedRelief_Bathymetry/default/500m/{z}/{y}/{x}.jpeg`
   (`config.imagery.url`), loaded via a plain `Cesium.UrlTemplateImageryProvider`
-  with `tilingScheme: new Cesium.GeographicTilingScheme()` — no reprojection
-  needed, since GIBS renders this layer natively in EPSG:4326 too (same
-  "ask for data already in the right projection instead of coercing it"
-  principle as the old polar-maps design).
+  — no reprojection needed, since GIBS renders this layer natively in
+  EPSG:4326 too (same "ask for data already in the right projection instead
+  of coercing it" principle as the old polar-maps design).
+  **Gotcha found in v0.1 phone testing, fixed**: Cesium's default
+  `Cesium.GeographicTilingScheme` assumes a simple doubling tile pyramid
+  (2×1, 4×2, 8×4, 16×8, ...), but GIBS's actual EPSG:4326 "500m" matrix set
+  uses an **irregular, non-doubling** progression: 2×1, 3×2, 5×3, 10×5,
+  20×10, 40×20, 80×40, 160×80. Using the default scheme meant requesting
+  tiles at X/Y coordinates GIBS doesn't have at several zoom levels, which
+  is what caused the user's reported symptom — a black circle at the north
+  pole, the wrong latitude for the south pole, and black gaps covering
+  roughly a third of every longitude band. Fixed with a custom
+  `js/gibsGeographicTilingScheme.js` (`createGibsGeographicTilingScheme()`
+  + `GIBS_GEOGRAPHIC_MAX_LEVEL = 7`), ported from NASA's own official
+  reference implementation (`nasa-gibs/gibs-web-examples`,
+  `examples/cesium/gibs.js`) rather than derived independently — trust
+  that file's tile-width/level table over re-deriving it. Level count is
+  8 (0–7) for this "500m" matrix set; NASA's example uses 9 levels for the
+  finer "250m" set, so don't copy the level count verbatim if the imagery
+  URL is ever changed to a different resolution — re-check against GIBS's
+  own capabilities XML for that layer. `createImageryProvider()` in
+  `js/app.js` passes this scheme + max level explicitly instead of the
+  Cesium default; `config.imagery.maximumLevel` was removed from
+  `config.json` since it's now derived from this constant, avoiding two
+  copies of the same number drifting apart.
 - **Why NOAA ETOPO 2022 (the user's first suggestion) isn't used directly**:
   real, freely-licensed, and does include full-globe topography+bathymetry
   with an ice-free "Bedrock" variant — but it's distributed only as bulk
@@ -83,7 +104,10 @@ free service account is *not* currently needed — see below).
   future session has real GIS tooling and wants the extra rigor.
 - **3D/2D switch**: Cesium's own built-in `sceneModePicker` (a single
   toolbar button, top-right) — enabled via the `sceneModePicker: true`
-  Viewer option, no custom code. This also means the whole "4 view modes /
+  Viewer option, no custom code. The user reported it sat too close to the
+  literal screen corner to tap reliably on-phone; fixed purely in CSS
+  (`.cesium-viewer-toolbar` in `css/style.css` now insets `top`/`right` by
+  10px instead of 0). This also means the whole "4 view modes /
   cycle button / separate polar OpenLayers engine" apparatus from v0.3 is
   **gone** — now that the *one* 3D globe renders poles correctly, there's
   no more need for dedicated flat polar maps as a workaround. Don't
@@ -96,6 +120,28 @@ free service account is *not* currently needed — see below).
   handlers before it).
 - **Hosting**: unchanged — GitHub Pages serving straight from this repo's
   branch, no build/CI step, plain static HTML/CSS/JS.
+- **Scale bar and compass**: Cesium's `Viewer` widget, unlike
+  MapLibre/OpenLayers, has no built-in scale bar or north-reset/compass
+  control, so both are hand-built (no third-party plugin) in `js/app.js`:
+  - `setupScaleBar()` measures the real-world ground distance between two
+    points 100 screen-pixels apart at the center of the viewport via
+    `viewer.camera.pickEllipsoid()`, then picks the largest "nice" round
+    number (from a fixed step table) that fits an ~80px-wide bar, updating
+    on every `viewer.scene.postRender`. Hides itself (`visibility: hidden`)
+    when the center of the screen isn't looking at the globe at all (e.g.
+    zoomed out past the horizon) since `pickEllipsoid` returns `undefined`
+    there.
+  - `setupCompass()` rotates a CSS arrow (`#compass-btn .compass-arrow`) to
+    `viewer.camera.heading` on every `postRender`, and tapping the button
+    calls `viewer.camera.setView({ orientation: { heading: 0, ... } })` to
+    reset to north-up without changing position/pitch. Note: Cesium
+    sometimes reports the reset heading back as `2π` rather than `0`
+    (they're the same angle) — this is expected, not a bug; don't
+    "fix" it by comparing heading to exactly `0`.
+  - Both are plain fixed-position DOM elements in `index.html`/`style.css`
+    (`#scale-bar` top-left, `#compass-btn` top-right below the scene mode
+    picker), not Cesium widgets — kept deliberately simple since neither
+    needs to interact with Cesium's own widget/tooltip system.
 
 ## World-data structure (the "common app, swappable data" seam)
 
@@ -141,6 +187,22 @@ to be more visible. City points/labels use
 terrain-following reason, plus `disableDepthTestDistance: Infinity` so
 labels aren't hidden behind terrain from a low camera angle.
 
+**Gotcha found in v0.1 phone testing, fixed**: Cesium Entity polygons draw
+a straight geodesic line between each pair of consecutive ring vertices,
+with no automatic subdivision. The placeholder territory boxes (tens of
+degrees wide) showed visibly bowed/curved edges instead of straight ones —
+most noticeable in 2D mode, where the user reported territories "looked
+like they were drawn on a curved surface" — and this also made positions
+look like they didn't line up with the map underneath, since a
+5-point-per-box polygon's true shape diverges further from the intended
+rectangle the larger it is. Fixed with `densifyRing()` in the new
+`js/geoUtils.js`: inserts intermediate points along every ring edge at a
+max 5° step before handing the ring to `Cesium.Cartesian3.fromDegreesArray()`.
+Applied in `historyLayers.js`'s `applyEraData()` for territories. If a
+future territory shape is very large or crosses a pole, re-check that 5°
+is still fine enough — this was tuned against the current small
+placeholder boxes, not derived from a hard requirement.
+
 The 6 keyframes currently in the repo (1100/1300/1500/1700/1900/2020,
 three fictional 勢力A/B/C rectangles) are **placeholder dummy data only**
 — the user has no real 過速世界 border/city history yet. Swap in real
@@ -152,7 +214,14 @@ need to change.
 `worlds/<world-id>/glaciers.json` — placeholder polar-cap boxes, not real
 ice-extent data — rendered the same way as territories (a
 `Cesium.CustomDataSource` of terrain-draped polygon entities, see
-`js/glacierLayer.js`), toggled on/off via `dataSource.show`.
+`js/glacierLayer.js`), toggled on/off via `dataSource.show`. Same
+`densifyRing()` treatment as territories (see above) is applied here too —
+the placeholder glacier boxes span the *full* 360° of longitude at each
+pole, which made the un-densified polygons render as near-invisible
+degenerate slivers rather than caps (this, not the toggle logic, was the
+actual cause of the user's "glacier button doesn't work" report — the
+toggle itself was already correct; there was just nothing visible to
+toggle).
 
 **Important limitation, told to the user**: turning the glacier overlay off
 does *not* reveal real ice-free ground. It only hides our own placeholder
@@ -271,13 +340,34 @@ Marble) across the *whole* globe including poles, via Cesium's native
 custom view-mode UI). Historical era/territory/city data and the glacier
 overlay were ported to Cesium's Entity API and work the same as before
 (year slider, city top-3 labels, history/terrain mode toggle, glacier
-toggle). **Deliberately not carried forward from v0.3, kept in scope, ask
-before re-adding**: a page-level scale bar with a show/hide toggle (Cesium
-doesn't have an equivalent built-in widget the way MapLibre/OpenLayers
-did; would need a custom one). **Deliberately out of scope for this
-round, per explicit user instruction**: sea-level-rise calculation itself
-— this version's job was specifically to get clean whole-globe 3D terrain
-(poles included) working first.
+toggle). **Deliberately out of scope for this round, per explicit user
+instruction**: sea-level-rise calculation itself — this version's job was
+specifically to get clean whole-globe 3D terrain (poles included) working
+first.
+
+**Cesium v0.1, first-round bug-fix pass**: after the user tested Cesium
+v0.1 on-phone, they reported 5 issues; all fixed in this pass (see the
+relevant sections above for each): (1) globe rotate/zoom confirmed working
+as-is, no change needed; (2) `sceneModePicker` button moved inward from
+the literal screen corner; (3) whole-globe imagery coverage gap (black
+circle at the north pole, wrong south-pole position, ~1/3 of every
+longitude band missing) — root cause was Cesium's default
+`GeographicTilingScheme` not matching GIBS's actual irregular tile
+pyramid, fixed with `js/gibsGeographicTilingScheme.js`; (4) territory/
+glacier polygons showing visible curvature and the glacier toggle
+appearing not to work — root cause was un-subdivided geodesic polygon
+edges (glaciers being full-360°-longitude made this worst), fixed with
+`densifyRing()` in `js/geoUtils.js`; the "territory position doesn't
+match the map" report was very likely a consequence of the same imagery
+gap + curvature (the affected areas made correct positioning hard to
+judge), not a separate coordinate bug — `Cartesian3.fromDegreesArray()`
+usage with GeoJSON `[lng, lat]` pairs was structurally correct on
+inspection and no separate fix was needed; (5) a custom scale bar and
+compass/north-reset button were added (Cesium has no built-in widgets for
+either, unlike MapLibre/OpenLayers — see "Scale bar and compass" above).
+All four code fixes were verified via the same Playwright/vendored-Cesium
+method described below before being reported back to the user as ready to
+re-test on-phone.
 
 Still out of scope generally (per user instructions / not yet asked for):
 sea level slider/flooding simulation, any second world, real
@@ -325,6 +415,26 @@ blocked in this sandbox, same as always): whether `TopoBathy3D` is really
 the correct Esri service name (vs. needing the `fallbackUrl`), and what
 the real terrain+imagery actually looks like at the poles on-device —
 needs the user's phone.
+
+For the first-round bug-fix pass (GIBS tiling scheme, polygon
+densification, sceneModePicker position, scale bar, compass): verified via
+the same vendored-Cesium-plus-Playwright method. Confirmed the custom
+`GeographicTilingScheme` returns NASA's documented tile counts at every
+level (level 0: 2×1, level 1: 3×2, level 7: 160×80, `maximumLevel`: 7) and
+that outgoing GIBS request URLs only ever ask for X/Y coordinates that
+exist at each level (checked levels 0–2 by hand against the counts above).
+Confirmed `densifyRing()` measurably increases entity point counts inside
+the live Cesium pipeline (not just in isolation) — a territory polygon
+went from ~5 source points to 27 after densification, a full-longitude
+glacier polygon from ~5 to 153. Confirmed the glacier toggle flips
+`dataSource.show` correctly both ways (this was never actually broken —
+see "Glacier layer" above). Confirmed the scale bar renders a plausible
+width/label and the compass arrow rotates to match `camera.heading`
+(tested a 45° camera rotation → arrow read `rotate(-45deg)`) and resets on
+tap (heading returned to `2π`, i.e. equivalent to north/0°). Same caveat
+as always: this only proves the code is structurally correct, not that
+the real imagery/terrain renders correctly on-screen — that still needs
+the user's phone.
 
 ## Working conventions
 

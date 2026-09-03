@@ -12,7 +12,6 @@
   },
   "imagery": {
     "url": "https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/BlueMarble_ShadedRelief_Bathymetry/default/500m/{z}/{y}/{x}.jpeg",
-    "maximumLevel": 8,
     "credit": "Imagery: NASA Blue Marble (GIBS). Terrain: Esri World Elevation 3D (TopoBathy)."
   }
 }

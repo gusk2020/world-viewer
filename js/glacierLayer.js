@@ -1,7 +1,9 @@
+import { densifyRing } from "./geoUtils.js";
+
 export function createGlacierDataSource(glaciersGeoJson) {
   const dataSource = new Cesium.CustomDataSource("glaciers");
   for (const feature of glaciersGeoJson.features) {
-    const ring = feature.geometry.coordinates[0].flat();
+    const ring = densifyRing(feature.geometry.coordinates[0].flat());
     dataSource.entities.add({
       polygon: {
         hierarchy: Cesium.Cartesian3.fromDegreesArray(ring),

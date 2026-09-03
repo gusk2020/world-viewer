@@ -103,9 +103,46 @@ html, body {
   font-weight: 600;
 }
 
-/* Cesium's own toolbar (scene mode picker etc.) sits top-right by default,
-   which is fine as-is; just keep it clear of the phone's safe-area inset. */
+/* Cesium's own toolbar (scene mode picker) sits top-right by default;
+   pull it in from the literal screen corner so it's easier to tap. */
 .cesium-viewer-toolbar {
-  top: env(safe-area-inset-top, 0);
-  right: env(safe-area-inset-right, 0);
+  top: calc(env(safe-area-inset-top, 0) + 10px);
+  right: calc(env(safe-area-inset-right, 0) + 10px);
+}
+
+/* Custom compass (reset-to-north) button, top-right, below the scene mode
+   picker (Cesium has no built-in compass widget). */
+#compass-btn {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0) + 62px);
+  right: calc(env(safe-area-inset-right, 0) + 10px);
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+  font-size: 1.2rem;
+  line-height: 40px;
+  padding: 0;
+  z-index: 5;
+}
+
+#compass-btn .compass-arrow {
+  display: inline-block;
+  transform-origin: 50% 50%;
+}
+
+/* Custom scale bar, top-left (Cesium has no built-in scale bar widget). */
+#scale-bar {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0) + 10px);
+  left: calc(env(safe-area-inset-left, 0) + 10px);
+  padding: 2px 8px;
+  background: rgba(15, 23, 35, 0.72);
+  color: #eaf2ff;
+  font-size: 0.78rem;
+  border-bottom: 2px solid #eaf2ff;
+  border-left: 2px solid #eaf2ff;
+  border-right: 2px solid #eaf2ff;
+  z-index: 5;
 }

@@ -7,6 +7,7 @@ import {
   setHistoryVisible,
 } from "./historyLayers.js";
 import { createGlacierDataSource } from "./glacierLayer.js";
+import { createGibsGeographicTilingScheme, GIBS_GEOGRAPHIC_MAX_LEVEL } from "./gibsGeographicTilingScheme.js";
 
 const WORLD_CONFIG_URL = "./worlds/kasoku-sekai/config.json";
 
@@ -27,8 +28,8 @@ async function createTerrainProvider(config) {
 function createImageryProvider(config) {
   return new Cesium.UrlTemplateImageryProvider({
     url: config.imagery.url,
-    tilingScheme: new Cesium.GeographicTilingScheme(),
-    maximumLevel: config.imagery.maximumLevel,
+    tilingScheme: createGibsGeographicTilingScheme(),
+    maximumLevel: GIBS_GEOGRAPHIC_MAX_LEVEL,
     credit: config.imagery.credit,
   });
 }
@@ -74,6 +75,71 @@ async function main() {
   setupModeToggle(state, applyVisibility);
   setupCityToggle(state, applyVisibility);
   setupGlacierToggle(state, applyVisibility);
+  setupCompass(viewer);
+  setupScaleBar(viewer);
+}
+
+// Cesium's Viewer widget has no built-in compass; this is a minimal one:
+// the arrow rotates to always point at true north, and tapping it resets
+// the camera heading to 0 (north-up) without changing position/pitch.
+function setupCompass(viewer) {
+  const arrow = document.querySelector("#compass-btn .compass-arrow");
+
+  function update() {
+    const headingDegrees = Cesium.Math.toDegrees(viewer.camera.heading);
+    arrow.style.transform = `rotate(${-headingDegrees}deg)`;
+  }
+  viewer.scene.postRender.addEventListener(update);
+  update();
+
+  document.getElementById("compass-btn").addEventListener("click", () => {
+    viewer.camera.setView({
+      destination: viewer.camera.position,
+      orientation: { heading: 0, pitch: viewer.camera.pitch, roll: 0 },
+    });
+  });
+}
+
+// Cesium's Viewer widget has no built-in scale bar either. Measures the
+// real-world ground distance between two points 100 screen-pixels apart
+// at the center of the view, then picks the largest "nice" round number
+// of meters/km that fits within an ~80px-wide bar.
+const SCALE_NICE_STEPS = [
+  1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 2500, 5000, 10000,
+  20000, 25000, 50000, 100000, 200000, 250000, 500000, 1000000, 2000000,
+  5000000, 10000000, 20000000, 50000000,
+];
+const SCALE_TARGET_PIXEL_WIDTH = 80;
+
+function setupScaleBar(viewer) {
+  const el = document.getElementById("scale-bar");
+
+  function update() {
+    const canvas = viewer.scene.canvas;
+    const centerY = canvas.clientHeight / 2;
+    const centerX = canvas.clientWidth / 2;
+    const ellipsoid = viewer.scene.globe.ellipsoid;
+    const left = viewer.camera.pickEllipsoid(new Cesium.Cartesian2(centerX - 50, centerY), ellipsoid);
+    const right = viewer.camera.pickEllipsoid(new Cesium.Cartesian2(centerX + 50, centerY), ellipsoid);
+    if (!left || !right) {
+      el.style.visibility = "hidden";
+      return;
+    }
+    el.style.visibility = "visible";
+
+    const metersPerPixel = Cesium.Cartesian3.distance(left, right) / 100;
+    const targetMeters = metersPerPixel * SCALE_TARGET_PIXEL_WIDTH;
+    let niceMeters = SCALE_NICE_STEPS[0];
+    for (const step of SCALE_NICE_STEPS) {
+      if (step > targetMeters) break;
+      niceMeters = step;
+    }
+    el.style.width = `${Math.round(niceMeters / metersPerPixel)}px`;
+    el.textContent = niceMeters >= 1000 ? `${niceMeters / 1000}km` : `${niceMeters}m`;
+  }
+
+  viewer.scene.postRender.addEventListener(update);
+  update();
 }
 
 async function setupHistoryPanel(historySources, world) {

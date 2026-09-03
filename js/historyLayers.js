@@ -1,3 +1,5 @@
+import { densifyRing } from "./geoUtils.js";
+
 export async function loadEraIndex(config) {
   const res = await fetch(config.history.indexUrl);
   return res.json();
@@ -33,7 +35,7 @@ export function applyEraData({ territories, cities }, eraDoc) {
   territories.entities.removeAll();
   for (const feature of eraDoc.territories.features) {
     const color = Cesium.Color.fromCssColorString(feature.properties.color);
-    const ring = feature.geometry.coordinates[0].flat();
+    const ring = densifyRing(feature.geometry.coordinates[0].flat());
     territories.entities.add({
       // No `outline` here: Cesium doesn't support polygon outlines together
       // with terrain-clamped draping (the default for a polygon with no
