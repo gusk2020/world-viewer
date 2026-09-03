@@ -29,6 +29,40 @@ async function createTerrainProvider(config) {
   }
 }
 
+// Full-coverage base layer, drawn UNDERNEATH createImageryProvider()'s
+// detailed layer below. Requested over WMS (not WMTS/tile-template) so
+// Cesium asks GIBS for an arbitrary bounding box using Cesium's own plain
+// GeographicTilingScheme, instead of matching indices against GIBS's
+// GIBS-specific irregular WMTS tile pyramid the detailed layer needs.
+// There is no fixed tile grid here to misalign with, so this layer can't
+// have the kind of coverage gap that pyramid math could -- whatever bbox
+// Cesium asks for (poles included), GIBS renders it directly. Same source
+// layer (BlueMarble_ShadedRelief_Bathymetry) as the detailed layer, so
+// wherever it shows through it's the same photograph, not a visibly
+// different fallback image.
+function createBaseImageryProvider(config) {
+  return new Cesium.WebMapServiceImageryProvider({
+    url: config.imagery.wmsBaseUrl,
+    layers: config.imagery.wmsLayer,
+    parameters: {
+      service: "WMS",
+      version: "1.1.1",
+      request: "GetMap",
+      styles: "",
+      format: "image/jpeg",
+      transparent: false,
+    },
+    maximumLevel: GIBS_GEOGRAPHIC_MAX_LEVEL,
+    credit: config.imagery.credit,
+  });
+}
+
+// Detailed layer, drawn on top of the base layer above. Uses GIBS's WMTS
+// tile pyramid directly (see gibsGeographicTilingScheme.js) for cheaper,
+// more cacheable requests than WMS; wherever a tile here is unavailable
+// (e.g. a level/index GIBS doesn't actually have), Cesium simply doesn't
+// draw this layer there and the base layer underneath shows through
+// instead of black.
 function createImageryProvider(config) {
   return new Cesium.UrlTemplateImageryProvider({
     url: config.imagery.url,
@@ -57,6 +91,9 @@ async function main() {
     navigationHelpButton: false,
     fullscreenButton: false,
   });
+  // Base layer added first (bottom), detailed layer added second (drawn
+  // on top) -- Cesium's ImageryLayerCollection stacks in add order.
+  viewer.imageryLayers.addImageryProvider(createBaseImageryProvider(world));
   viewer.imageryLayers.addImageryProvider(createImageryProvider(world));
 
   const historySources = createHistoryDataSources();
