@@ -32,13 +32,13 @@ continue.
 
 ## Version plan (do not reorder or skip)
 
-- **V0.1 (current)**: one rotatable 3D textured sphere, Three.js only. No
-  terrain relief, no elevation data, no cities, no borders, no OpenLayers,
-  no 2D map yet. The one and only goal: a technically clean whole-globe
-  sphere with **no black hole, gap, or seam at either pole**, smooth touch
-  rotate + pinch zoom on a Pixel 7a.
-- **V0.2**: add an OpenLayers 2D world map (separate from the 3D view,
-  not yet switchable).
+- **V0.1 (done, user-confirmed on Pixel 7a)**: one rotatable 3D textured
+  sphere, Three.js only. No terrain relief, no elevation data, no cities,
+  no borders, no OpenLayers, no 2D map yet. The one and only goal: a
+  technically clean whole-globe sphere with **no black hole, gap, or seam
+  at either pole**, smooth touch rotate + pinch zoom on a Pixel 7a.
+- **V0.2 (current)**: add an OpenLayers 2D world map (separate from the 3D
+  view, not yet switchable).
 - **V0.3**: add a 3D/2D toggle button, preserving view position/zoom
   across the switch as closely as practical.
 - **V0.4**: add real global elevation data, giving the 3D globe actual
@@ -48,13 +48,14 @@ continue.
 - **V0.6+**: cities, borders/territories, historical eras, and other
   過速世界-specific data.
 
-Nothing from V0.2 onward is implemented yet. Do not add pieces of them
+Nothing from V0.3 onward is implemented yet. Do not add pieces of them
 now "while already in the file."
 
-## Architecture (current: Three.js, plan: + OpenLayers from V0.2)
+## Architecture (Three.js for 3D, OpenLayers for 2D, not yet linked)
 
-**Three.js** for the 3D globe, **OpenLayers** for the future 2D map (from
-V0.2). Explicitly **not** MapLibre GL JS and **not** CesiumJS — both were
+**Three.js** for the 3D globe, **OpenLayers** for the 2D map (added in
+V0.2, a separate page for now — see below). Explicitly **not** MapLibre
+GL JS and **not** CesiumJS — both were
 used in an earlier version of this app and both are retired; see
 "Architecture history" below for why, and don't reintroduce either without
 the user asking first.
@@ -130,6 +131,75 @@ showed a clean, seamless Antarctica with no gap or artifact.
 - **Hosting**: unchanged — GitHub Pages serving straight from this repo's
   branch, no build/CI step, plain static HTML/CSS/JS (+ one committed
   JPG).
+
+### V0.2: the OpenLayers 2D map
+
+Lives entirely at `map2d.html` / `js/map2d.js`, a **separate page** from
+the 3D globe (`index.html`/`js/main.js`) — nothing links them yet, that's
+V0.3's job. To view it: the same GitHub Pages URL with `map2d.html`
+instead of `index.html` at the end.
+
+- **Library**: `ol` (OpenLayers, BSD-2-Clause, free), version pinned
+  exactly (currently `10.10.0`). **Loaded differently from Three.js, for a
+  concrete reason**: OpenLayers's raw npm package ships genuine ESM
+  source files (`ol/Map.js`, `ol/View.js`, etc., same idea as Three.js),
+  but unlike Three.js those files have real bare-specifier npm
+  dependencies of their own (`rbush`, `pbf`, `earcut`, and rbush's own
+  dependency `quickselect`, at minimum for a plain tile map — confirmed by
+  actually trying the import-map approach first and hitting
+  `Failed to resolve module specifier "rbush"`). Mapping every one of
+  those transitively by hand is fragile and easy to silently miss one.
+  OpenLayers's npm package also ships a pre-bundled, dependency-free
+  global build at `dist/ol.js` (confirmed by inspection — zero bare
+  imports, all five-ish dependencies already inlined), so `map2d.html`
+  loads that instead via a plain `<script src=".../ol@10.10.0/dist/ol.js">`
+  tag (exposing a global `ol` namespace: `ol.Map`, `ol.View`,
+  `ol.layer.Tile`, `ol.source.OSM`, ...) plus the matching `ol.css` for
+  its default UI controls — same "global script tag, no bundler" shape as
+  the old Cesium build, chosen for the same practical reason (it's the
+  version of the library that's actually self-contained), not because of
+  any special preference for that pattern. `js/map2d.js` is consequently
+  a plain classic script (no `type="module"`, no `import` statements) —
+  don't add ESM `import`s to it without switching the loading approach
+  back, or they'll fail with no `ol` module scope to import from.
+- **The basemap**: real OpenStreetMap raster tiles
+  (`ol.source.OSM()`, OpenLayers's own built-in source class — standard
+  Web Mercator XYZ tiles, `tile.openstreetmap.org/{z}/{x}/{y}.png`, no
+  custom tiling-scheme code at all). Chosen deliberately to avoid
+  reopening the exact class of problem the Cesium/GIBS era spent three
+  rounds fighting (matching a tile server's own irregular indexing) —
+  `ol.source.OSM` is one of OpenLayers's most standard, heavily-used
+  built-in sources, with nothing custom for this app to get wrong. Same
+  "real placeholder, not fake, until 過速世界's own map exists" convention
+  as the 3D globe's Earth-photo texture — this is a real map of the real
+  Earth, not 過速世界's geography.
+  **Known, expected, non-bug limitation**: Web Mercator (which essentially
+  every standard 2D web tile service including this one uses) cannot
+  represent latitudes beyond about ±85.05° by construction of the
+  projection itself — the poles simply aren't part of a Mercator
+  rectangle. This is completely normal for a flat 2D map (every major web
+  map — Google, Bing, OSM's own site — has exactly the same limit) and is
+  a *different, well-understood, universally-accepted* situation from the
+  black-hole bug that drove the whole engine rewrite: that bug was about
+  literally missing/misaligned imagery *within* a projection that should
+  have covered the pole; this is a projection that was never designed to
+  reach the pole at all. Don't try to "fix" this for V0.2 — if accurate
+  polar coverage in the 2D view ever matters (e.g. for the sea-level
+  simulator), that's a deliberate future design question (a polar-
+  stereographic inset, most likely), not a bug to patch now.
+- **Per-world data**: none yet, deliberately. The OSM basemap is hardcoded
+  in `js/map2d.js` rather than read from `worlds/kasoku-sekai/config.json`
+  — unlike the 3D texture, there's no concrete second use case yet for
+  *which* 2D basemap a given world uses (a real-Earth world vs. a fully
+  invented one like 碧き海狼/罅間 would need fundamentally different kinds
+  of 2D map sources, not just a different URL), so designing that seam now
+  would be guessing. Revisit when a second world's 2D map is actually
+  being built.
+- **Interactions**: OpenLayers's own default interaction set (created
+  automatically when `Map` isn't given an explicit `interactions` option)
+  — drag-to-pan and pinch-to-zoom (plus mouse-wheel zoom, double-click
+  zoom, etc.) all work out of the box, no custom gesture code, same
+  principle as `OrbitControls` on the 3D side.
 
 ## World-data structure (the "common app, swappable data" seam)
 
@@ -244,7 +314,20 @@ all-zero/transparent pixel that looks like a rendering bug but isn't.
 What this couldn't verify from this sandbox: real on-device frame rate
 and touch feel on an actual Pixel 7a (swiftshader software rendering in a
 headless browser doesn't reflect real mobile GPU performance) — needs the
-user's phone, same as always.
+user's phone, same as always. **V0.1 was subsequently confirmed working
+on the user's actual Pixel 7a** (all 4 points: rotate, pinch-zoom, no gap
+at either pole, smooth) before V0.2 began.
+
+For V0.2 (OpenLayers 2D map): same vendor-locally-and-drive-with-
+Playwright method, using `ol`'s own bundled `dist/ol.js` (see
+"Architecture" above for why the raw ESM source doesn't work standalone).
+Confirmed: the map constructs and its loading overlay hides itself even
+with every tile request failing (blocked network, same as always in this
+sandbox); outgoing tile request URLs match the standard OSM XYZ pattern
+exactly; a simulated pointer drag changes the view's center coordinate
+(confirms pan); a simulated wheel event changes the view's zoom level
+(confirms zoom); no console errors. Real visual appearance and on-device
+touch feel again need the user's phone.
 
 ## Working conventions
 

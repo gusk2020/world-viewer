@@ -18,6 +18,13 @@ html, body {
   touch-action: none;
 }
 
+#map2d {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100dvh;
+}
+
 #loading {
   position: fixed;
   inset: 0;
