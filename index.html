@@ -12,11 +12,15 @@
     }
   }
   </script>
+  <script src="https://cdn.jsdelivr.net/npm/ol@10.10.0/dist/ol.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@10.10.0/ol.css" />
   <link rel="stylesheet" href="./css/style.css" />
 </head>
 <body>
   <div id="app"></div>
+  <div id="map2d" hidden></div>
   <div id="loading">読み込み中…</div>
+  <button id="view-toggle">2Dに切替</button>
 
   <script type="module" src="./js/main.js"></script>
 </body>

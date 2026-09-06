@@ -42,3 +42,20 @@ html, body {
 #loading.hidden {
   display: none;
 }
+
+#view-toggle {
+  position: fixed;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0) + 16px);
+  transform: translateX(-50%);
+  min-height: 44px;
+  padding: 0 20px;
+  border: none;
+  border-radius: 22px;
+  background: rgba(15, 23, 35, 0.82);
+  color: #eaf2ff;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 0.95rem;
+  font-weight: 600;
+  z-index: 5;
+}

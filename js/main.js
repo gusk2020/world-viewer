@@ -1,66 +1,63 @@
-import * as THREE from "three";
-import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { initGlobe3D } from "./globe3d.js";
+import { initMap2D } from "./map2d.js";
 
-// V0.1: one textured sphere, nothing else. No terrain, no cities, no 2D
-// map yet -- see CLAUDE.md for the planned version sequence. The only
-// per-world data point right now is which texture to load, so a second
-// world (later) just needs its own config.json pointing at its own image.
+// V0.3: a 3D/2D toggle button, mounting both views on this one page (the
+// standalone map2d.html from V0.2 is retired -- everything lives here
+// now). The only per-world data point right now is which texture the 3D
+// globe uses, so a second world (later) just needs its own config.json
+// pointing at its own image.
 const WORLD_CONFIG_URL = "./worlds/kasoku-sekai/config.json";
 
 async function main() {
   const world = await (await fetch(WORLD_CONFIG_URL)).json();
 
-  const scene = new THREE.Scene();
+  const globe3d = await initGlobe3D("app", world.globeTexture);
+  // The 2D map is created lazily, the first time the user actually
+  // switches to it -- OpenLayers measures its container's size at
+  // construction time, and #map2d starts out hidden (display:none) since
+  // the app opens in 3D mode; constructing it only once it's visible
+  // avoids that entirely, rather than working around a 0x0-sized map.
+  let map2d = null;
 
-  const camera = new THREE.PerspectiveCamera(
-    50,
-    window.innerWidth / window.innerHeight,
-    0.1,
-    100
-  );
-  camera.position.set(0, 0, 3);
+  const appEl = document.getElementById("app");
+  const map2dEl = document.getElementById("map2d");
+  const toggleButton = document.getElementById("view-toggle");
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  document.getElementById("app").appendChild(renderer.domElement);
+  let mode = "3d";
 
-  // MeshBasicMaterial (unlit): no lighting setup needed for a first
-  // version, and it keeps the whole globe evenly lit instead of half of
-  // it going dark for lack of a light source.
-  const texture = await new THREE.TextureLoader().loadAsync(world.globeTexture);
-  texture.colorSpace = THREE.SRGBColorSpace;
+  function applyMode() {
+    appEl.hidden = mode !== "3d";
+    map2dEl.hidden = mode !== "2d";
+    toggleButton.textContent = mode === "3d" ? "2Dに切替" : "3Dに切替";
+  }
 
-  const globe = new THREE.Mesh(
-    new THREE.SphereGeometry(1, 64, 32),
-    new THREE.MeshBasicMaterial({ map: texture })
-  );
-  scene.add(globe);
-
-  const controls = new OrbitControls(camera, renderer.domElement);
-  controls.enablePan = false;
-  controls.minDistance = 1.3;
-  controls.maxDistance = 8;
-  controls.rotateSpeed = 0.5;
-
-  window.addEventListener("resize", () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
+  toggleButton.addEventListener("click", () => {
+    if (mode === "3d") {
+      const view = globe3d.getView();
+      mode = "2d";
+      applyMode();
+      if (!map2d) {
+        map2d = initMap2D("map2d");
+      } else {
+        map2d.map.updateSize();
+      }
+      map2d.setView(view);
+    } else {
+      const view = map2d.getView();
+      mode = "3d";
+      applyMode();
+      globe3d.setView(view);
+    }
   });
 
+  applyMode();
   document.getElementById("loading").classList.add("hidden");
-
-  renderer.setAnimationLoop(() => {
-    controls.update();
-    renderer.render(scene, camera);
-  });
 }
 
 main().catch((err) => {
-  console.error("Failed to start globe:", err);
+  console.error("Failed to start map:", err);
   const loading = document.getElementById("loading");
   if (loading) {
-    loading.textContent = "地球儀の読み込みに失敗しました。通信状況を確認してください。";
+    loading.textContent = "地図の読み込みに失敗しました。通信状況を確認してください。";
   }
 });

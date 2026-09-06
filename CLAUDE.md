@@ -37,10 +37,10 @@ continue.
   no borders, no OpenLayers, no 2D map yet. The one and only goal: a
   technically clean whole-globe sphere with **no black hole, gap, or seam
   at either pole**, smooth touch rotate + pinch zoom on a Pixel 7a.
-- **V0.2 (current)**: add an OpenLayers 2D world map (separate from the 3D
-  view, not yet switchable).
-- **V0.3**: add a 3D/2D toggle button, preserving view position/zoom
-  across the switch as closely as practical.
+- **V0.2 (done, user confirmed to continue)**: add an OpenLayers 2D world
+  map (separate from the 3D view, not yet switchable).
+- **V0.3 (current)**: add a 3D/2D toggle button, preserving view
+  position/zoom across the switch as closely as practical.
 - **V0.4**: add real global elevation data, giving the 3D globe actual
   terrain relief (not just a flat textured sphere).
 - **V0.5**: add a sea-level-height control — see "Future sea-level
@@ -48,13 +48,15 @@ continue.
 - **V0.6+**: cities, borders/territories, historical eras, and other
   過速世界-specific data.
 
-Nothing from V0.3 onward is implemented yet. Do not add pieces of them
+Nothing from V0.4 onward is implemented yet. Do not add pieces of them
 now "while already in the file."
 
-## Architecture (Three.js for 3D, OpenLayers for 2D, not yet linked)
+## Architecture (Three.js for 3D, OpenLayers for 2D, one page, toggle button)
 
-**Three.js** for the 3D globe, **OpenLayers** for the 2D map (added in
-V0.2, a separate page for now — see below). Explicitly **not** MapLibre
+**Three.js** for the 3D globe, **OpenLayers** for the 2D map, both mounted
+on `index.html` and switched with a button (`js/main.js`, added in V0.3 —
+see below; `map2d.html` from V0.2's standalone-page stepping stone is
+retired now that both views live on one page). Explicitly **not** MapLibre
 GL JS and **not** CesiumJS — both were
 used in an earlier version of this app and both are retired; see
 "Architecture history" below for why, and don't reintroduce either without
@@ -76,6 +78,10 @@ projection means. This was verified directly (not just argued): a
 Playwright-rendered screenshot with the camera pointed straight down at
 each pole (`/tmp/.../three-north-pole.png` during dev, not committed)
 showed a clean, seamless Antarctica with no gap or artifact.
+
+All of this lives in `js/globe3d.js` (`initGlobe3D(containerId, textureUrl)`,
+exporting `getView()`/`setView()` for V0.3's toggle to use — see below),
+called from `js/main.js`.
 
 - **Library**: `three` (MIT license, free), version pinned exactly in
   `index.html`'s import map (currently `0.185.1` — check
@@ -132,12 +138,14 @@ showed a clean, seamless Antarctica with no gap or artifact.
   branch, no build/CI step, plain static HTML/CSS/JS (+ one committed
   JPG).
 
-### V0.2: the OpenLayers 2D map
+### The OpenLayers 2D map
 
-Lives entirely at `map2d.html` / `js/map2d.js`, a **separate page** from
-the 3D globe (`index.html`/`js/main.js`) — nothing links them yet, that's
-V0.3's job. To view it: the same GitHub Pages URL with `map2d.html`
-instead of `index.html` at the end.
+Lives in `js/map2d.js` (`initMap2D(targetId)`, exporting `getView()`/
+`setView()` — same shape as `globe3d.js`), mounted into `#map2d` on
+`index.html` alongside the 3D globe. (In V0.2 this was briefly a
+standalone `map2d.html` page instead — retired in V0.3 once there was a
+toggle button to switch between the two on one page; don't recreate that
+file.)
 
 - **Library**: `ol` (OpenLayers, BSD-2-Clause, free), version pinned
   exactly (currently `10.10.0`). **Loaded differently from Three.js, for a
@@ -151,17 +159,21 @@ instead of `index.html` at the end.
   those transitively by hand is fragile and easy to silently miss one.
   OpenLayers's npm package also ships a pre-bundled, dependency-free
   global build at `dist/ol.js` (confirmed by inspection — zero bare
-  imports, all five-ish dependencies already inlined), so `map2d.html`
+  imports, all five-ish dependencies already inlined), so `index.html`
   loads that instead via a plain `<script src=".../ol@10.10.0/dist/ol.js">`
   tag (exposing a global `ol` namespace: `ol.Map`, `ol.View`,
-  `ol.layer.Tile`, `ol.source.OSM`, ...) plus the matching `ol.css` for
-  its default UI controls — same "global script tag, no bundler" shape as
-  the old Cesium build, chosen for the same practical reason (it's the
-  version of the library that's actually self-contained), not because of
-  any special preference for that pattern. `js/map2d.js` is consequently
-  a plain classic script (no `type="module"`, no `import` statements) —
-  don't add ESM `import`s to it without switching the loading approach
-  back, or they'll fail with no `ol` module scope to import from.
+  `ol.layer.Tile`, `ol.source.OSM`, `ol.proj`, ...) plus the matching
+  `ol.css` for its default UI controls — same "global script tag, no
+  bundler" shape as the old Cesium build, chosen for the same practical
+  reason (it's the version of the library that's actually self-contained),
+  not because of any special preference for that pattern. `js/map2d.js`
+  is consequently an ES module (`export function initMap2D(...)`, so
+  `js/main.js` can `import` it) that internally references the plain
+  global `ol` rather than importing it — this works fine since the classic
+  `<script src=".../ol.js">` tag in `<head>` always finishes running
+  before any `type="module"` script executes, regardless of the tags'
+  order in the page. Don't add `import ... from "ol"`-style statements to
+  this file — there's no such module to import from, only the global.
 - **The basemap**: real OpenStreetMap raster tiles
   (`ol.source.OSM()`, OpenLayers's own built-in source class — standard
   Web Mercator XYZ tiles, `tile.openstreetmap.org/{z}/{x}/{y}.png`, no
@@ -200,6 +212,60 @@ instead of `index.html` at the end.
   — drag-to-pan and pinch-to-zoom (plus mouse-wheel zoom, double-click
   zoom, etc.) all work out of the box, no custom gesture code, same
   principle as `OrbitControls` on the 3D side.
+
+### V0.3: the 3D/2D toggle
+
+`index.html` mounts both `#app` (3D) and `#map2d` (2D) plus one
+`#view-toggle` button; `js/main.js` shows/hides them with the `hidden`
+attribute and calls each view's own `getView()`/`setView()` to carry the
+current position/zoom across the switch, per the user's explicit "as
+closely as practical" requirement.
+
+- **Lazy 2D construction**: `initMap2D()` isn't called until the user
+  first switches to 2D, not at page load. Reason: OpenLayers measures its
+  target container's size when the `Map` is constructed, and `#map2d`
+  starts out `hidden` (`display:none`, since the app opens in 3D mode) —
+  constructing it only once `#map2d` is actually visible sidesteps the
+  "map thinks its container is 0×0" class of bug entirely, rather than
+  working around it with an explicit `updateSize()` at the *first*
+  reveal. (A `updateSize()` call is still made on every *subsequent*
+  switch back to 2D, in case the window was resized while it was hidden —
+  cheap, and avoids relying on OpenLayers's own `ResizeObserver` noticing
+  a container that was hidden the whole time it changed size.)
+- **The lng/lat/zoom conversion** lives in `js/geoConvert.js`
+  (`directionToLngLat`/`lngLatToDirection` for the 3D camera's direction
+  vector ↔ plain lng/lat, and `distanceToZoom`/`zoomToDistance` for a
+  rough correspondence between the 3D camera's distance-from-globe-center
+  and OpenLayers's zoom level), imported by both `globe3d.js` and used
+  directly by `main.js`'s toggle handler (`map2d.js` does its own
+  lng/lat ↔ Mercator conversion via `ol.proj`, since OpenLayers already
+  has that built in).
+  - The direction↔lng/lat math is derived from — and must stay consistent
+    with — exactly how `THREE.SphereGeometry`'s default UV mapping lays
+    the equirectangular texture onto the sphere in `globe3d.js` (+Y is the
+    north pole, longitude increases eastward from the texture's left
+    edge at -180°). If the sphere is ever rotated, given a different
+    `phiStart`, or the texture is replaced with a differently-oriented
+    one, this conversion needs re-deriving to match — it is *not* a
+    general-purpose spherical-coordinates utility.
+  - The zoom correspondence is **deliberately approximate, not exact**:
+    the 3D camera's usable distance range (`MIN_DISTANCE`/`MAX_DISTANCE`
+    in `globe3d.js`, currently 1.3–8) is far narrower than OpenLayers's
+    zoom range, since the 3D globe has no terrain/city detail to zoom into
+    yet. The mapping is calibrated so each view's own shared starting
+    point (3D distance 3 ↔ 2D zoom 2) matches exactly; requesting a
+    zoom level beyond what the 3D camera's range supports just clamps at
+    `MIN_DISTANCE`/`MAX_DISTANCE` instead of erroring, which is expected,
+    not a bug — verified directly: setting the 2D view to zoom 4 and
+    switching to 3D lands at the clamped equivalent (~zoom 3.2, matching
+    `MIN_DISTANCE`), not an error or a wildly wrong value. Revisit this
+    calibration once V0.4 (terrain) or a later version gives the 3D
+    camera a reason to support a narrower/closer zoom range.
+- Position/zoom carrying is **one-directional per switch**, applied once
+  at the moment of toggling — there's no continuous two-way sync while
+  both views could theoretically be visible (they can't be; only one is
+  shown at a time), so this is the simplest correct approach for what the
+  toggle actually needs.
 
 ## World-data structure (the "common app, swappable data" seam)
 
@@ -327,7 +393,30 @@ sandbox); outgoing tile request URLs match the standard OSM XYZ pattern
 exactly; a simulated pointer drag changes the view's center coordinate
 (confirms pan); a simulated wheel event changes the view's zoom level
 (confirms zoom); no console errors. Real visual appearance and on-device
-touch feel again need the user's phone.
+touch feel again need the user's phone. **V0.2 was subsequently confirmed
+by the user** (they said to continue) before V0.3 began.
+
+For V0.3 (3D/2D toggle): same method, with both libraries vendored into
+one combined test page (mirroring the real merged `index.html`). Verified
+directly, not just structurally: set the 3D view to a specific lng/lat/
+zoom via `globe3d.setView()`, toggled to 2D, and confirmed
+`map2d.getView()` read back the *same* lng/lat/zoom (exact lng/lat, zoom
+matching to floating-point precision); did the same in the other
+direction (set a 2D view, toggle to 3D, confirm `globe3d.getView()`
+matches) including a case chosen specifically to hit the zoom-clamping
+edge case (2D zoom 4, which exceeds what `MIN_DISTANCE` allows on the 3D
+side) and confirmed it clamps to the expected value rather than erroring
+or producing nonsense; switched back to 2D a second time to confirm the
+lazy-construction-then-`updateSize()` path also works, not just the
+first-ever construction; confirmed a pointer drag still rotates the 3D
+globe correctly after multiple toggle round-trips (no leftover broken
+state); confirmed `globe3d.setView()`/`getView()` still behave sanely
+exactly at the true north pole (lat 90) with no `NaN`/crash — the
+underlying sphere/texture rendering code itself is unchanged from V0.1's
+already-verified pole screenshot test, only wrapped into a module and
+given `getView()`/`setView()`, so that verification still stands. No
+console errors in any of this. Real visual appearance and on-device touch
+feel need the user's phone, as always.
 
 ## Working conventions
 

@@ -1,29 +1,41 @@
-// V0.2: a standalone OpenLayers 2D map, kept separate from the 3D globe
-// (index.html/js/main.js) -- no switch button yet, that's V0.3. Real
-// OpenStreetMap tiles are used as a placeholder basemap, same "real data,
-// not fake, until 過速世界's own map exists" convention as the 3D globe's
-// placeholder Earth-photo texture. Pan/pinch-zoom/scroll-zoom all come
-// from OpenLayers's own default interactions -- nothing custom needed.
+// The 2D map (V0.2), wrapped as a self-contained module so V0.3 can mount
+// it alongside the 3D globe and read/set its current view for the toggle
+// button -- see getView()/setView() below.
 //
-// Loaded via OpenLayers's own bundled dist/ol.js (a global `ol` namespace,
-// like the old Cesium build) rather than its raw ESM source files: the
-// ESM source has several bare-specifier npm dependencies (rbush, pbf,
-// earcut, ...) that aren't resolvable through a plain browser import map
-// without mapping each one individually. The bundled build has everything
-// already inlined.
-const map = new ol.Map({
-  target: "map2d",
-  layers: [
-    new ol.layer.Tile({
-      source: new ol.source.OSM(),
+// Loaded via OpenLayers's own bundled dist/ol.js (a global `ol`
+// namespace), not its raw ESM source: the ESM source has several
+// bare-specifier npm dependencies of its own (rbush, pbf, earcut, ...)
+// that aren't resolvable through a plain browser import map without
+// mapping each one individually -- see CLAUDE.md for detail. This file
+// is still a plain ES module (for a clean `import` on the caller's side)
+// even though the library it wraps isn't -- referencing the `ol` global
+// from inside a module works fine, since `<script src=".../ol.js">` runs
+// before any `type="module"` script regardless of tag order in the page.
+export function initMap2D(targetId) {
+  const map = new ol.Map({
+    target: targetId,
+    layers: [
+      new ol.layer.Tile({
+        source: new ol.source.OSM(),
+      }),
+    ],
+    view: new ol.View({
+      center: [0, 0],
+      zoom: 2,
     }),
-  ],
-  view: new ol.View({
-    center: [0, 0],
-    zoom: 2,
-  }),
-});
+  });
 
-map.once("rendercomplete", () => {
-  document.getElementById("loading").classList.add("hidden");
-});
+  function getView() {
+    const view = map.getView();
+    const [lng, lat] = ol.proj.toLonLat(view.getCenter());
+    return { lng, lat, zoom: view.getZoom() };
+  }
+
+  function setView({ lng, lat, zoom }) {
+    const view = map.getView();
+    view.setCenter(ol.proj.fromLonLat([lng, lat]));
+    view.setZoom(zoom);
+  }
+
+  return { map, getView, setView };
+}
