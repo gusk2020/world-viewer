@@ -31,10 +31,30 @@ export function initMap2D(targetId) {
     return { lng, lat, zoom: view.getZoom() };
   }
 
+  // Web Mercator can't represent latitudes near +-90 at all, but
+  // OpenLayers's View compounds that: at a LOW zoom, it silently
+  // repositions the center to whatever latitude fits the current
+  // viewport rectangle inside the projection's valid extent -- e.g. at
+  // zoom 3 on a typical phone-sized viewport, *any* requested latitude
+  // past about -70.7 lands at exactly -70.7, nowhere near the pole and
+  // not obviously related to what was asked for (confirmed directly:
+  // requesting -80, -85, and -89.9999 at zoom 3 all produced the exact
+  // same -70.7 result). Since this app's whole focus is the poles, a
+  // silent jump to an unrelated latitude would be confusing -- so a
+  // near-polar request first forces a higher zoom, landing much closer
+  // to the true target (confirmed: zoom 6 gets within ~1 degree of
+  // Mercator's real ~85.05 degree limit) at the cost of not carrying the
+  // exact 3D zoom level in this one edge case.
+  const NEAR_POLE_LATITUDE = 80;
+  const NEAR_POLE_MIN_ZOOM = 6;
+
   function setView({ lng, lat, zoom }) {
     const view = map.getView();
+    const effectiveZoom = Math.abs(lat) > NEAR_POLE_LATITUDE
+      ? Math.max(zoom, NEAR_POLE_MIN_ZOOM)
+      : zoom;
     view.setCenter(ol.proj.fromLonLat([lng, lat]));
-    view.setZoom(zoom);
+    view.setZoom(effectiveZoom);
   }
 
   return { map, getView, setView };

@@ -39,16 +39,17 @@ continue.
   at either pole**, smooth touch rotate + pinch zoom on a Pixel 7a.
 - **V0.2 (done, user confirmed to continue)**: add an OpenLayers 2D world
   map (separate from the 3D view, not yet switchable).
-- **V0.3 (current)**: add a 3D/2D toggle button, preserving view
-  position/zoom across the switch as closely as practical.
-- **V0.4**: add real global elevation data, giving the 3D globe actual
-  terrain relief (not just a flat textured sphere).
+- **V0.3 (done, user confirmed to continue)**: add a 3D/2D toggle button,
+  preserving view position/zoom across the switch as closely as
+  practical.
+- **V0.4 (current)**: add real global elevation data, giving the 3D globe
+  actual terrain relief (not just a flat textured sphere).
 - **V0.5**: add a sea-level-height control — see "Future sea-level
   design" below for the land/ocean split this implies.
 - **V0.6+**: cities, borders/territories, historical eras, and other
   過速世界-specific data.
 
-Nothing from V0.4 onward is implemented yet. Do not add pieces of them
+Nothing from V0.5 onward is implemented yet. Do not add pieces of them
 now "while already in the file."
 
 ## Architecture (Three.js for 3D, OpenLayers for 2D, one page, toggle button)
@@ -93,14 +94,12 @@ called from `js/main.js`.
   "plain static files, no build step" hosting model. Chrome on Pixel 7a
   has supported import maps since well before this project started, so no
   polyfill is needed.
-- **The globe**: `THREE.SphereGeometry(1, 64, 32)` (radius 1, 64×32
-  segments — smooth enough to look round at any zoom, cheap enough that
-  segment count was never a performance concern even in the software-
-  rendered/swiftshader test environment) with a `THREE.MeshBasicMaterial`
-  (deliberately **unlit** — no `THREE.MeshStandardMaterial` + light setup
-  yet, so the whole globe renders evenly bright everywhere instead of half
-  of it going dark for lack of a light source; revisit this choice once
-  V0.4's terrain relief makes shading actually useful).
+- **The globe**: `THREE.SphereGeometry(1, 128, 64)` (radius 1; bumped from
+  64×32 in V0.1 to actually show the V0.4 elevation relief below at a
+  reasonable resolution — see that section for why not higher) with a
+  `THREE.MeshLambertMaterial` (switched from V0.1-V0.3's unlit
+  `MeshBasicMaterial` in V0.4, once there was real geometry variation for
+  a light to reveal — terrain relief is only visible through shading).
 - **Controls**: `three/addons/controls/OrbitControls.js`, Three.js's own
   official addon — handles touch rotate (one-finger drag) and pinch-zoom
   (two-finger pinch → dolly) out of the box, same "the library already
@@ -137,6 +136,103 @@ called from `js/main.js`.
 - **Hosting**: unchanged — GitHub Pages serving straight from this repo's
   branch, no build/CI step, plain static HTML/CSS/JS (+ one committed
   JPG).
+
+### V0.4: real elevation / terrain relief
+
+Same "one static, verified, self-hosted equirectangular image, no tiles"
+approach that fixed the pole problem for the color texture, applied again
+here — deliberately not going anywhere near a tiled elevation service.
+
+- **The elevation data**: `worlds/kasoku-sekai/textures/elevation.jpg`
+  (1000×500, exact 2:1 equirectangular, ~90KB, self-hosted/committed, no
+  external runtime dependency), `config.json`'s `elevationMap`. This is
+  `01_earthbump1k.jpg` from the `Izaacapp/threejs-earth` GitHub repo,
+  sourced from planetpixelemporium.com's well-known free Earth texture
+  set (their elevation/bump map, derived from real topography+bathymetry
+  data, not hand-painted). **Verified directly before choosing it**:
+  downloaded and inspected with Pillow — confirmed 1000×500 (2:1), confirmed
+  grayscale, and confirmed the top-row (north/Arctic Ocean) and
+  bottom-row (south/Antarctica) pixel values are low-but-uniform and
+  high-but-uniform respectively, geographically sensible (real data, not
+  a corrupted/missing-data gap) — same rigor as the color texture check
+  in V0.1.
+- **Displacement is baked into real CPU-side vertex positions, not a GPU
+  `displacementMap`**: `applyElevation()` in `js/globe3d.js` reads the
+  elevation image into pixel data via an offscreen canvas
+  (`loadElevationSamples()`), then for every sphere vertex samples the
+  corresponding pixel by UV coordinate and pushes that vertex outward (or
+  inward) along its own direction from the sphere's center, before
+  calling `geometry.computeVertexNormals()` so lighting shades the new
+  bumpy surface correctly. A plain `MeshStandardMaterial.displacementMap`
+  would have been less code, but it's a vertex-shader-only effect — the
+  CPU-side `geometry.attributes.position` values never actually change,
+  so nothing on the JS side (raycasting, distance queries, a future
+  "compare this point's height against sea level") could ever see the
+  real 3D shape. Baking it into real geometry now, while it's cheap and
+  the mesh is small, keeps V0.5's planned separate land-terrain-vs-sea-
+  level-sphere comparison (see "Future sea-level design" below) actually
+  possible later.
+- **Exaggerated on purpose, not to scale**: `DISPLACEMENT_SCALE`/
+  `DISPLACEMENT_BIAS` constants in `globe3d.js`. Earth's real elevation
+  range (-11km to +8.8km) is only about ±0.15% of its radius — rendered
+  true-to-scale the globe would look like a perfectly smooth ball (a
+  well-known real fact, not a limitation of this approach). The
+  exaggeration is a deliberate, standard, transparent display choice
+  (same convention used in most scientific terrain visualizations) — the
+  underlying elevation *data* is real, only the *display scale* is
+  inflated for visibility. Tune these two numbers if the relief looks too
+  subtle or too extreme on-phone; nothing else needs to change.
+- **Pole handling, the actual hard part**: every vertex in the sphere's
+  top ring (north pole) and bottom ring (south pole) occupies the exact
+  same 3D point *before* displacement, despite having different
+  longitudes — sampling the elevation map per-vertex there would push
+  these coincident points to different final distances from center,
+  tearing the pole open into a gap or spike (precisely the class of bug
+  this whole project has repeatedly fought with other engines, just via
+  a different mechanism this time). Fixed by forcing every vertex in each
+  pole's ring to the *same* value — the average across that entire row of
+  the source image — keeping them coincident after displacement too.
+  **Verified directly, not just argued**: read back every north-ring and
+  south-ring vertex position after displacement and confirmed zero spread
+  (every vertex in each ring is bit-for-bit identical) — see "How this
+  was tested" below.
+- **A separate, pre-existing, cosmetic-only artifact investigated and
+  deliberately left alone**: zooming the camera in tight directly on a
+  pole shows faint streaks radiating from it. Spent real effort chasing
+  this as a possible new pole bug — tried tapering near-pole vertices'
+  sampled elevation toward the pole's flat average over blend zones ranging
+  from 12° to 30° of latitude, and it made **no visible difference at
+  all**. Isolated the actual cause by swapping in a flat, fully unlit
+  material (no elevation, no lighting) at the same camera angle: the
+  exact same streaks were still there. This means it's the equirectangular
+  **color** texture's own pixel/mipmap sampling becoming highly compressed
+  near a UV-sphere's pole (many texture columns squeezed into a visually
+  tiny screen area), unrelated to elevation or lighting entirely — and
+  it's not new: the same pattern, fainter, is visible on close inspection
+  of V0.1's own already-user-approved pole screenshot at the normal
+  (further) zoom. Left as-is: it's cosmetic, pre-existing, only shows up
+  zoomed in tight directly on a pole (not a typical viewing distance), and
+  a real fix would mean texture filtering/resolution work unrelated to
+  V0.4's actual scope, not an elevation-side change. Don't re-attempt an
+  elevation-blending fix for this specific artifact without re-confirming
+  the color-texture-only cause hasn't changed.
+- **A separate 2D-map interaction found while testing V0.4's near-pole
+  views through the V0.3 toggle** (not a V0.4 bug itself, but only
+  surfaced by finally testing the toggle at extreme latitudes): OpenLayers's
+  `View` doesn't just fail to show latitudes past Mercator's real ~85.05°
+  limit, it silently **repositions the center** at low zoom levels to
+  whatever latitude fits the current viewport rectangle inside the
+  projection's valid extent — confirmed directly that at zoom 3 on a
+  phone-sized viewport, requesting -80, -85, and -89.9999 all produced the
+  *exact same* -70.7° result, nowhere near the pole and not obviously
+  related to any of those requests. Since this app's whole focus is the
+  poles, silently landing somewhere else would be confusing. Fixed in
+  `map2d.js`'s `setView()`: a request beyond ±80° latitude now forces the
+  2D zoom up to at least 6 first (confirmed this lands within about a
+  degree of the real Mercator limit instead), at the cost of not carrying
+  the exact 3D zoom level in this one edge case — position accuracy wins
+  over exact zoom preservation here, consistent with zoom already being
+  documented as approximate, not exact.
 
 ### The OpenLayers 2D map
 
@@ -416,7 +512,42 @@ underlying sphere/texture rendering code itself is unchanged from V0.1's
 already-verified pole screenshot test, only wrapped into a module and
 given `getView()`/`setView()`, so that verification still stands. No
 console errors in any of this. Real visual appearance and on-device touch
-feel need the user's phone, as always.
+feel need the user's phone, as always. **V0.3 was subsequently confirmed
+by the user** before V0.4 began.
+
+For V0.4 (real elevation/terrain relief): the elevation texture is also a
+self-hosted local file, so — same as V0.1's texture check — Playwright
+could load it for real and produce actual rendered proof, not just
+structural checks. Verified: the elevation image loads at its real
+1000×500 size; the sphere geometry has the expected 128×64-segment vertex
+count (8385). **Pole coincidence, the critical check**: read back every
+vertex in the geometry's north-pole ring and south-pole ring (by UV.y) and
+computed the maximum pairwise distance within each ring — both came back
+exactly 0, confirming every vertex in each ring lands at the bit-for-bit
+identical 3D position after displacement (no gap, tear, or spike at
+either pole). **Elevation sanity**: sampled the raw elevation data at a
+known mountain location (the Himalayas, ~85°E 28°N) and a known deep-ocean
+location (mid-Pacific, ~160°W 0°N) and confirmed the mountain value was
+clearly higher than the ocean's exact-zero value — real geographic
+variation, not corrupted or flat data. Confirmed the scene contains the
+expected `Mesh` + `DirectionalLight` + `AmbientLight`. Took real rendered
+screenshots (not just pixel-color spot checks) of the default view, a
+close-up on the Himalayas, and both poles — the default view clearly
+shows visible mountain-range relief silhouetted against the sky at the
+globe's edge and directional shading across the continents (screenshot
+inspected directly, not just described); this is also where the
+color-texture pole-streak investigation happened (see "V0.4: real
+elevation" above) — tried and rejected an elevation-blending fix after
+confirming via a flat-unlit-material comparison render that the streaks
+come from the color texture, not elevation or lighting. Re-ran the full
+V0.3 toggle regression suite (exact view carrying both directions, the
+zoom-clamping edge case, repeated toggles, drag-to-rotate) and it still
+passed after these changes — which is also how the 2D near-pole
+View-repositioning issue was found and then re-verified fixed (request
+-89.9999° at zoom 3, confirm it now lands at -84.1° and zoom 6 instead of
+the pre-fix -70.7°). No console errors. Real visual appearance, on-device
+frame rate with the larger mesh, and touch feel all need the user's
+phone, as always.
 
 ## Working conventions
 

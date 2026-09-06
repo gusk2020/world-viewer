@@ -11,7 +11,7 @@ const WORLD_CONFIG_URL = "./worlds/kasoku-sekai/config.json";
 async function main() {
   const world = await (await fetch(WORLD_CONFIG_URL)).json();
 
-  const globe3d = await initGlobe3D("app", world.globeTexture);
+  const globe3d = await initGlobe3D("app", world.globeTexture, world.elevationMap);
   // The 2D map is created lazily, the first time the user actually
   // switches to it -- OpenLayers measures its container's size at
   // construction time, and #map2d starts out hidden (display:none) since

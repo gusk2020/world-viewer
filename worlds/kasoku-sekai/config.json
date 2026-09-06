@@ -1,5 +1,6 @@
 {
   "id": "kasoku-sekai",
   "name": "過速世界",
-  "globeTexture": "./worlds/kasoku-sekai/textures/globe.jpg"
+  "globeTexture": "./worlds/kasoku-sekai/textures/globe.jpg",
+  "elevationMap": "./worlds/kasoku-sekai/textures/elevation.jpg"
 }
