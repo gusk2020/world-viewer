@@ -4,32 +4,20 @@
   <meta charset="UTF-8" />
   <title>世界地図ビューア - 過速世界</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-  <script>window.CESIUM_BASE_URL = "https://cdn.jsdelivr.net/npm/cesium@1.145.0/Build/Cesium/";</script>
-  <script src="https://cdn.jsdelivr.net/npm/cesium@1.145.0/Build/Cesium/Cesium.js"></script>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cesium@1.145.0/Build/Cesium/Widgets/widgets.css" />
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.185.1/examples/jsm/"
+    }
+  }
+  </script>
   <link rel="stylesheet" href="./css/style.css" />
 </head>
 <body>
-  <div id="cesiumContainer"></div>
+  <div id="app"></div>
   <div id="loading">読み込み中…</div>
-  <button id="compass-btn" aria-label="北を上にする"><span class="compass-arrow">↑</span></button>
-  <div id="scale-bar"></div>
 
-  <div id="controls">
-    <div id="history-panel" class="panel">
-      <div id="year-row">
-        <span id="year-label">2020年</span>
-        <span id="era-note"></span>
-      </div>
-      <input type="range" id="year-slider" min="1100" max="2020" step="20" value="2020" />
-      <button id="city-toggle" class="toggle-btn" aria-pressed="true">都市を表示</button>
-    </div>
-    <div id="terrain-panel" class="panel" hidden>
-      <button id="glacier-toggle" class="toggle-btn" aria-pressed="true">氷河を表示</button>
-    </div>
-    <button id="mode-toggle">地形図に切替</button>
-  </div>
-
-  <script type="module" src="./js/app.js"></script>
+  <script type="module" src="./js/main.js"></script>
 </body>
 </html>

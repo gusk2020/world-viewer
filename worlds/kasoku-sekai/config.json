@@ -1,19 +1,5 @@
 {
   "id": "kasoku-sekai",
   "name": "過速世界",
-  "history": {
-    "indexUrl": "./worlds/kasoku-sekai/eras/index.json",
-    "eraUrlTemplate": "./worlds/kasoku-sekai/eras/{year}.json"
-  },
-  "glaciersUrl": "./worlds/kasoku-sekai/glaciers.json",
-  "terrain": {
-    "url": "https://elevation3d.arcgis.com/arcgis/rest/services/WorldElevation3D/TopoBathy3D/ImageServer",
-    "fallbackUrl": "https://elevation3d.arcgis.com/arcgis/rest/services/WorldElevation3D/Terrain3D/ImageServer"
-  },
-  "imagery": {
-    "url": "https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/BlueMarble_ShadedRelief_Bathymetry/default/500m/{z}/{y}/{x}.jpeg",
-    "wmsBaseUrl": "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi",
-    "wmsLayer": "BlueMarble_ShadedRelief_Bathymetry",
-    "credit": "Imagery: NASA Blue Marble (GIBS). Terrain: Esri World Elevation 3D (TopoBathy)."
-  }
+  "globeTexture": "./worlds/kasoku-sekai/textures/globe.jpg"
 }

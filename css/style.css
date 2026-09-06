@@ -3,14 +3,19 @@ html, body {
   padding: 0;
   height: 100%;
   overscroll-behavior: none;
-  background: #0b1622;
+  background: #000;
 }
 
-#cesiumContainer {
+#app {
   position: fixed;
   inset: 0;
   width: 100vw;
   height: 100dvh;
+}
+
+#app canvas {
+  display: block;
+  touch-action: none;
 }
 
 #loading {
@@ -22,132 +27,11 @@ html, body {
   color: #eaf2ff;
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   font-size: 1rem;
-  background: #0b1622;
+  background: #000;
   z-index: 10;
   pointer-events: none;
 }
 
 #loading.hidden {
   display: none;
-}
-
-#controls {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: env(safe-area-inset-bottom, 0);
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 8px;
-  padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0));
-  padding-bottom: 10px;
-  box-sizing: border-box;
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-  pointer-events: none;
-}
-
-#controls > * {
-  pointer-events: auto;
-}
-
-.panel {
-  background: rgba(15, 23, 35, 0.82);
-  border-radius: 14px;
-  padding: 10px 14px;
-  color: #eaf2ff;
-}
-
-#year-row {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  margin-bottom: 4px;
-  font-size: 0.95rem;
-}
-
-#era-note {
-  font-size: 0.78rem;
-  color: #9db4d1;
-}
-
-#year-slider {
-  width: 100%;
-  height: 32px;
-}
-
-.toggle-btn {
-  margin-top: 6px;
-  width: 100%;
-  min-height: 44px;
-  border: none;
-  border-radius: 10px;
-  background: #3d5a80;
-  color: #ffffff;
-  font-size: 0.95rem;
-  font-weight: 600;
-}
-
-.toggle-btn[aria-pressed="false"] {
-  background: #4a5568;
-  opacity: 0.7;
-}
-
-#mode-toggle {
-  min-height: 44px;
-  border: none;
-  border-radius: 12px;
-  background: rgba(15, 23, 35, 0.82);
-  color: #eaf2ff;
-  font-size: 0.95rem;
-  font-weight: 600;
-}
-
-/* Cesium's own toolbar (scene mode picker) sits top-right by default;
-   pull it in from the literal screen corner so it's easier to tap, and
-   place it BELOW the compass button (see #compass-btn below): its dropdown
-   of 3D/2D/Columbus-view options expands downward from the button, and
-   with the toolbar above the compass that dropdown used to open right on
-   top of the compass button, making both untappable. */
-.cesium-viewer-toolbar {
-  top: calc(env(safe-area-inset-top, 0) + 62px);
-  right: calc(env(safe-area-inset-right, 0) + 10px);
-}
-
-/* Custom compass (reset-to-north) button, top-right, above the scene mode
-   picker (Cesium has no built-in compass widget) so the picker's dropdown
-   doesn't open on top of it. */
-#compass-btn {
-  position: fixed;
-  top: calc(env(safe-area-inset-top, 0) + 10px);
-  right: calc(env(safe-area-inset-right, 0) + 10px);
-  width: 40px;
-  height: 40px;
-  border: none;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.9);
-  font-size: 1.2rem;
-  line-height: 40px;
-  padding: 0;
-  z-index: 5;
-}
-
-#compass-btn .compass-arrow {
-  display: inline-block;
-  transform-origin: 50% 50%;
-}
-
-/* Custom scale bar, top-left (Cesium has no built-in scale bar widget). */
-#scale-bar {
-  position: fixed;
-  top: calc(env(safe-area-inset-top, 0) + 10px);
-  left: calc(env(safe-area-inset-left, 0) + 10px);
-  padding: 2px 8px;
-  background: rgba(15, 23, 35, 0.72);
-  color: #eaf2ff;
-  font-size: 0.78rem;
-  border-bottom: 2px solid #eaf2ff;
-  border-left: 2px solid #eaf2ff;
-  border-right: 2px solid #eaf2ff;
-  z-index: 5;
 }
