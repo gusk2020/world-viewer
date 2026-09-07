@@ -576,6 +576,91 @@ closely as practical" requirement.
   shown at a time), so this is the simplest correct approach for what the
   toggle actually needs.
 
+## Investigated and rejected: higher-resolution elevation/color textures, real bathymetry
+
+After V0.5 shipped, the user asked to improve "地形の高さデータと地球の見た目、
+海面下の海底地形" (elevation data resolution, the globe's visual quality, and
+real seafloor/bathymetry terrain) before moving on to V0.6. Investigated all
+three; none shipped this round.
+
+- **Real bathymetry**: this sandbox's own egress policy blocks every
+  dedicated geo-data host tried — `eoimages.gsfc.nasa.gov`,
+  `visibleearth.nasa.gov`, `gebco.net`, `opentopography.org`,
+  `topex.ucsd.edu`, `commons.wikimedia.org` all returned a proxy-level
+  403/connect-rejected, not a real-world "file doesn't exist." Also
+  checked whether any popular WebGL-globe GitHub repo happens to bundle a
+  real combined topography+bathymetry raster directly (reachable via
+  `raw.githubusercontent.com`, which does work from here) — checked
+  `mrdoob/three.js`'s own bundled bump maps, `vasturiano/three-globe`'s
+  `earth-topology.png`, and the classic NASA "world.topo.bathy" file (only
+  its md5 checksum is committed to `AlbertVeli/heightmap`, sourced from
+  the same blocked NASA host at fetch time) — every one of these had
+  *exactly* 0 for every ocean pixel sampled (mid-Pacific, Mariana Trench,
+  mid-Atlantic Ridge), meaning none of them actually encode bathymetry at
+  all despite some file names suggesting otherwise; they're all derived
+  from the same land-only bump map lineage. Asked the user whether they
+  could download a real topo+bathy file from their own phone (which has
+  normal internet, unlike this sandbox) and send it here — they found
+  that too difficult to attempt right now, so this is parked. If revisited:
+  the concrete, verified-reachable-by-a-human-on-a-phone target is NASA
+  Visible Earth's "Blue Marble Next Generation w/ Topography and
+  Bathymetry" series (e.g. `visibleearth.nasa.gov/images/73909/...`),
+  which does offer a plain one-tap JPEG download at a few resolutions —
+  the user (or a future session with different network access) would
+  need to download it and get the file into this repo some other way,
+  since this sandbox cannot fetch it directly.
+- **Higher-resolution color texture**: found `earth_day_4096.jpg` in
+  `mrdoob/three.js`'s own examples (4096×2048, double the current
+  `earth_atmos_2048.jpg`'s resolution, similar file size ~460KB, poles
+  confirmed white/near-white not black). Swapping it in made the
+  already-known, already-accepted V0.4 pole-streak cosmetic artifact
+  **dramatically** worse — a sharp, high-contrast pinwheel pattern, not
+  the faint one the user had already signed off on. Tried the standard
+  real fix (`texture.anisotropy = renderer.capabilities.getMaxAnisotropy()`)
+  and it made no visible difference (possibly a swiftshader software-
+  renderer limitation, per this project's standing caveat about
+  swiftshader not perfectly replicating real GPU filtering behavior).
+  Reverted to the original `earth_atmos_2048.jpg` rather than ship a
+  visibly worse pole artifact — confirmed via a fresh pole screenshot
+  that this fully restored the original mild streak level.
+- **Higher-resolution elevation data**: extracted the bump/height channel
+  from `mrdoob/three.js`'s `earth_bump_roughness_clouds_4096.jpg` (R
+  channel, resized to 2048×1024 — double the current `elevation.jpg`'s
+  1000×500). This one made the pole-streak artifact dramatically worse
+  too, but confirmed via a clean isolated test (reverted the color
+  texture back to original, kept only the new elevation data, re-tested)
+  that **this time the elevation data itself, not the color texture, was
+  the cause** — a genuinely different mechanism than the color-texture-
+  sampling artifact V0.4 originally diagnosed. Confirmed by direct pixel
+  inspection: the current `elevation.jpg`'s near-pole rows are *exactly*
+  0 with zero variance (Arctic Ocean, legitimately flat in that dataset),
+  while the new source's near-pole rows have small but real variance
+  (0-10 out of 255) — genuine fine terrain/noise detail close to the
+  pole that the old data simply didn't have. That small per-vertex
+  variance, at the extreme circumferential compression near a UV-sphere's
+  pole, creates dramatic lighting-based streaks (the near-pole vertices
+  are physically tiny distances apart in 3D space but sample wildly
+  different U/longitude columns of source data). Tried flattening a
+  ~5°-latitude band near each pole in the source image to a single
+  averaged value (same technique `applyElevation()` already uses for the
+  exact pole ring itself, just widened) — this fixed the innermost ring
+  cleanly (confirmed via screenshot: a clean flat disc right at the
+  pole) but streaks still radiated from just outside that band, meaning
+  the real noise extends further than 5° in this dataset. Did not keep
+  pushing the flattened band wider, since that starts trading away real
+  data for an ever-larger fake-flat region, working against this
+  project's core "real data over convenience" value — reverted to the
+  original elevation data instead of shipping either a pole regression or
+  an increasingly artificial flattened cap.
+- **Net result**: no texture/data files changed this round; both textures
+  are back to their exact V0.4/V0.5 state. If a future session finds a
+  genuinely cleaner higher-resolution source (real bathymetry included,
+  and — critically — checked for near-pole noise the same way before
+  adopting it, not just checked for resolution/file size), re-attempt
+  then. Don't re-try `earth_day_4096.jpg` or the
+  `earth_bump_roughness_clouds_4096.jpg` bump channel specifically
+  without a real fix for their near-pole behavior first.
+
 ## World-data structure (the "common app, swappable data" seam)
 
 Kept deliberately minimal for V0.1 — just enough seam that a second world
