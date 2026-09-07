@@ -2,5 +2,33 @@
   "id": "kasoku-sekai",
   "name": "過速世界",
   "globeTexture": "./worlds/kasoku-sekai/textures/globe.jpg",
-  "elevationMap": "./worlds/kasoku-sekai/textures/elevation.jpg"
+  "terrain": {
+    "source": "GEBCO_2026 Grid (ice surface elevation), 15 arc-second, via CEDA",
+    "encoding": {
+      "type": "rg16-metres",
+      "offsetMetres": 12000
+    },
+    "levels": [
+      {
+        "url": "./worlds/kasoku-sekai/terrain/gebco2026_ice_512x256.png",
+        "width": 512,
+        "height": 256
+      },
+      {
+        "url": "./worlds/kasoku-sekai/terrain/gebco2026_ice_1024x512.png",
+        "width": 1024,
+        "height": 512
+      },
+      {
+        "url": "./worlds/kasoku-sekai/terrain/gebco2026_ice_2048x1024.png",
+        "width": 2048,
+        "height": 1024
+      },
+      {
+        "url": "./worlds/kasoku-sekai/terrain/gebco2026_ice_4096x2048.png",
+        "width": 4096,
+        "height": 2048
+      }
+    ]
+  }
 }

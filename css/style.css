@@ -89,3 +89,10 @@ html, body {
 #sea-level-control input[type="range"] {
   flex: 1;
 }
+
+#sea-level-readout {
+  min-width: 3.5em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}

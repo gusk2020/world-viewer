@@ -11,7 +11,7 @@ const WORLD_CONFIG_URL = "./worlds/kasoku-sekai/config.json";
 async function main() {
   const world = await (await fetch(WORLD_CONFIG_URL)).json();
 
-  const globe3d = await initGlobe3D("app", world.globeTexture, world.elevationMap);
+  const globe3d = await initGlobe3D("app", world);
   // The 2D map is created lazily, the first time the user actually
   // switches to it -- OpenLayers measures its container's size at
   // construction time, and #map2d starts out hidden (display:none) since
@@ -24,6 +24,7 @@ async function main() {
   const toggleButton = document.getElementById("view-toggle");
   const seaLevelControl = document.getElementById("sea-level-control");
   const seaLevelSlider = document.getElementById("sea-level-slider");
+  const seaLevelReadout = document.getElementById("sea-level-readout");
 
   let mode = "3d";
 
@@ -36,9 +37,16 @@ async function main() {
     toggleButton.textContent = mode === "3d" ? "2Dに切替" : "3Dに切替";
   }
 
-  seaLevelSlider.addEventListener("input", () => {
-    globe3d.setSeaLevel(Number(seaLevelSlider.value) / 100);
-  });
+  // The slider is in real metres now that the terrain carries real GEBCO
+  // elevations: +0 m is today's coastline, and the top of the range is
+  // roughly what melting every ice sheet on Earth would add.
+  function applySeaLevel() {
+    const metres = Number(seaLevelSlider.value);
+    globe3d.setSeaLevel(metres);
+    seaLevelReadout.textContent = `+${metres}m`;
+  }
+  seaLevelSlider.addEventListener("input", applySeaLevel);
+  applySeaLevel();
 
   toggleButton.addEventListener("click", () => {
     if (mode === "3d") {

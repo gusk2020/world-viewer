@@ -10,132 +10,42 @@ import {
 const MIN_DISTANCE = 1.3;
 const MAX_DISTANCE = 8;
 
-const SPHERE_WIDTH_SEGMENTS = 128;
-const SPHERE_HEIGHT_SEGMENTS = 64;
+// Quads along one edge of one cube face. **Odd on purpose**: with an even
+// count a vertex lands exactly on the centre of the +Y/-Y face, which is
+// exactly a pole -- the one place on an equirectangular map where
+// longitude is undefined. Odd puts the pole in the middle of a quad
+// instead, so every vertex has a well-defined longitude.
+// 6 faces x 256x256 vertices = 393k vertices, ~780k triangles.
+const FACE_SEGMENTS = 255;
 
-// Exaggerated on purpose, not to scale: Earth's real elevation range (-11km
-// to +8.8km) is only about +/-0.15% of its radius -- rendered true-to-scale
-// the globe would look like a perfectly smooth ball (this is also true in
-// real life, a well-known fact). Scale/bias below are chosen purely for
-// visibility of REAL elevation data, the same widely-used convention as
-// vertical exaggeration in scientific terrain visualizations -- the values
-// themselves are real, only the DISPLAY scale is exaggerated. Tune these
-// two numbers if the terrain relief looks too subtle or too extreme
-// on-phone; nothing else needs to change to adjust it.
-const DISPLACEMENT_SCALE = 0.06;
-const DISPLACEMENT_BIAS = -0.02;
+const EARTH_RADIUS_M = 6371000;
 
-// The color texture's forests/dark terrain measured very dark in the raw
-// source image itself (RGB ~30-60/255 for rainforest, vs ~240/255 for
-// desert) -- confirmed this is baked into the texture, not a lighting
-// artifact, by sampling the raw image data directly. A uniform brightness
-// multiplier would have to blow out already-bright areas (deserts, ice,
-// clouds) to lift those dark greens to a readable level. A gamma curve
-// lifts shadows much more than highlights (anchored at black=black,
-// white=white), so it targets exactly this without washing out the rest
-// of the map -- prioritizing legibility over a literal rendering of the
-// source photo, per explicit user direction ("リアルさより分かりやすさ").
+// Earth's real relief is about +/-0.15% of its radius -- true to scale the
+// globe renders as a featureless ball (a real fact about Earth, not a
+// limitation here). Exaggerated for visibility, the same convention used
+// by essentially every scientific terrain visualisation.
+//
+// Crucially this factor is applied identically to the terrain and to the
+// sea-level sphere, so *which* land ends up underwater is unaffected by
+// it: terrain height h is at radius 1 + k*h and sea level s is at
+// 1 + k*s, so submerged <=> h < s for any k. The exaggeration changes how
+// visible the relief is, never which coastline floods.
+const VERTICAL_EXAGGERATION = 30;
+
+// Forests etc. measured very dark in the source imagery (RGB ~30-60/255
+// for rainforest vs ~240 for desert) -- confirmed baked into the texture
+// itself, not a lighting artifact. A gamma curve lifts shadows far more
+// than highlights (black stays black, white stays white), so it fixes the
+// dark greens without blowing out deserts, ice and cloud. Per the user's
+// explicit "リアルさより分かりやすさ" direction.
 const COLOR_GAMMA = 0.6;
 
-// The sea-level baseline is the elevation map's own minimum pixel value,
-// not a guessed threshold. **First attempt at this got the flooding wildly
-// wrong and is worth recording**: originally picked the height-value
-// percentile matching Earth's real ~71% ocean-area fraction, assuming a
-// roughly continuous elevation surface. Actually inspecting this specific
-// bump map's histogram (Pillow, counted every pixel) showed that's the
-// wrong model for this data: 65% of ALL pixels are *exactly* 0 (ocean
-// encoded as a flat, uniform floor -- no bathymetric variation baked in),
-// and land elevation rises very steeply even from tiny values (just
-// pixel-value 1, barely above the ocean floor, already covers 5% of all
-// *land* pixels; value 3 covers 11%). The 71st-percentile approach landed
-// almost exactly on the ocean floor anyway by coincidence, but a
-// completely different (and much larger, catastrophically wrong -- see
-// below) rise amount had been chosen assuming a gentler, continuous
-// slope. Taking the data's actual minimum directly is simpler and matches
-// what the source data really encodes; **verify this assumption again
-// with a histogram check** (same method) if a future world's elevation
-// data doesn't turn out to have this same "flat ocean floor" property.
-function seaLevelBaseHeightValue(elevationSamples) {
-  const { data } = elevationSamples;
-  let min = 255;
-  for (let i = 0; i < data.length; i += 4) {
-    if (data[i] < min) min = data[i];
-  }
-  return min / 255;
-}
-
-// How far (in the same 0-1 height-value units the elevation map itself
-// uses, then scaled by DISPLACEMENT_SCALE like everything else) the sea
-// surface can rise above its baseline at the slider's maximum. **Second
-// mistake, also worth recording**: an earlier version of this constant
-// (0.025) was specified directly in final *radius* units and sized as "a
-// fraction of the total land relief range" -- reasonable-sounding, but
-// against this data's actual histogram (see above) that rise submerged
-// upwards of 40% of all land, drowning entire regions with no meaningful
-// elevation to speak of (confirmed directly: a mid-continent camera view
-// that should show a clear coastline became entirely blue at max slider).
-//
-// **Third mistake, found only on the user's real Pixel 7a, not in this
-// sandbox's own screenshots**: the fix for the above (picking a value
-// from the histogram to submerge only the lowest ~8-11% of land pixels)
-// was itself too conservative in the other direction. That level (3/255)
-// scaled by DISPLACEMENT_SCALE=0.06 works out to a final radius change of
-// only ~0.0007 -- well under one screen pixel at any normal zoom level,
-// so the slider had NO visible effect at all. The user reported "dark
-// shadow-like patches expand and shrink, not a real coastline change";
-// diffing their own before/after screenshots pixel-by-pixel confirmed the
-// underlying geometry WAS changing exactly along every coastline (so the
-// feature wasn't broken), it was just far too subtle to read by eye --
-// what looked like vague "shadows" was that same imperceptibly-thin
-// change plus ordinary compression/anti-aliasing noise at the boundary.
-//
-// Recalibrated again, prioritizing visibility over exactly matching a
-// modest real-world-plausible flood fraction (per the user's own
-// standing "分かりやすさ over リアルさ" direction). Tried a much larger
-// jump first (level 30/255, ~10x the invisible value) and screenshotted a
-// wide South America view to sanity-check it -- that one clearly
-// reproduced the earlier catastrophe's shape, if not its exact
-// magnitude: the entire Amazon basin shattered into a scatter of small
-// islands, not a coastline change. Backed off to level 10/255 instead:
-// screenshotted the same South America view and a moderate-zoom coastal
-// view (matching the framing of the user's own screenshots) side by side
-// -- the coastal view now shows an unmistakable new bay/inlet forming
-// (nothing like the previous invisible attempt), while South America's
-// overall continental shape stays recognizable (a visible flooded patch
-// appears in the low-lying Amazon interior, but it doesn't fragment the
-// continent). This still submerges a larger *nominal* fraction of "land
-// pixels" (~32%) than the original "8-11%" target -- per the histogram
-// this data's near-sea-level land is heavily front-loaded (a lot of
-// very-low-lying coastal fringe, not dramatic dry land), and a feature
-// that's calibrated "correctly" but invisible has zero value for the
-// user's actual goal of seeing sea level change happen. Still needs the
-// user's on-phone confirmation (this session cannot verify real-device
-// visibility directly, only screenshot proof of the geometric change and
-// a judgment call on what "looks reasonable" in those screenshots) --
-// re-tune from here (same histogram + screenshot method) based on that
-// feedback rather than guessing blind again.
-const SEA_LEVEL_MAX_RISE_HEIGHT = 10 / 255;
-
-// The 3D globe (V0.1-V0.3 texture-only, V0.4 adds real elevation relief,
-// V0.5 adds a sea-level control), wrapped as a self-contained module so
-// V0.3's toggle can read/set its current view -- see getView()/setView()
-// below and js/geoConvert.js for the lng/lat and zoom conversion this
-// relies on.
-export async function initGlobe3D(containerId, textureUrl, elevationMapUrl) {
+// The globe (V0.6: real GEBCO elevation on a pole-free cube-sphere).
+// Exports getView()/setView() for the 3D/2D toggle and setSeaLevel() for
+// the sea-level control.
+export async function initGlobe3D(containerId, worldConfig) {
   const scene = new THREE.Scene();
 
-  // Tried tightening the far plane from V0.1-V0.3's 100 down to 20 (still
-  // comfortably beyond MAX_DISTANCE=8) while chasing the ocean z-fighting
-  // checkerboard below -- it did NOT fix that (confirmed: the artifact was
-  // identical before/after). See OCEAN_FLOOR_EXTRA_DIP near
-  // applyElevation() for what actually fixed it. Also tried tightening
-  // the near plane to 0.5 at the same time, which broke something else:
-  // at MIN_DISTANCE=1.3 the camera can sit only ~0.26 units from the
-  // nearest terrain point (a mountain peak at up to radius ~1.04), which
-  // is *closer than* a 0.5 near plane -- the globe's near-facing surface
-  // was silently clipped away entirely, rendering solid black at close
-  // zoom (caught via a screenshot regression, not by eye). Kept near at
-  // V0.1-V0.3's original 0.1, comfortably below that ~0.26 minimum gap.
   const camera = new THREE.PerspectiveCamera(
     50,
     window.innerWidth / window.innerHeight,
@@ -149,87 +59,48 @@ export async function initGlobe3D(containerId, textureUrl, elevationMapUrl) {
   renderer.setSize(window.innerWidth, window.innerHeight);
   document.getElementById(containerId).appendChild(renderer.domElement);
 
-  const [colorImage, elevationSamples] = await Promise.all([
-    loadImage(textureUrl),
-    loadElevationSamples(elevationMapUrl),
+  const terrain = worldConfig.terrain;
+  const [colorImage, elevation] = await Promise.all([
+    loadImage(worldConfig.globeTexture),
+    loadElevationGrid(pickElevationLevel(terrain.levels), terrain.encoding),
   ]);
 
   const texture = new THREE.CanvasTexture(applyGammaCorrection(colorImage, COLOR_GAMMA));
   texture.colorSpace = THREE.SRGBColorSpace;
+  // Antimeridian-crossing triangles carry u values just past 1 (see
+  // splitSeamVertices) -- they must wrap, not clamp.
+  texture.wrapS = THREE.RepeatWrapping;
 
-  // Computed once, up front: needed both by applyElevation() below (to
-  // dip true ocean-floor vertices a hair below this baseline, avoiding a
-  // z-fighting exact-tie with the sea sphere -- see OCEAN_FLOOR_EXTRA_DIP)
-  // and by the sea sphere's own baseline radius just below. Deriving it
-  // twice would risk the two ever going out of sync.
-  const seaLevelBaseHeight = seaLevelBaseHeightValue(elevationSamples);
+  const geometry = buildTerrainGeometry(FACE_SEGMENTS, elevation);
 
-  const geometry = new THREE.SphereGeometry(1, SPHERE_WIDTH_SEGMENTS, SPHERE_HEIGHT_SEGMENTS);
-  applyElevation(geometry, elevationSamples, seaLevelBaseHeight);
-
-  // MeshLambertMaterial (diffuse-only lighting, no PBR overhead): terrain
-  // relief is only visible through shading, so V0.4 adds real lights
-  // below -- V0.1-V0.3 used an unlit MeshBasicMaterial since there was no
-  // geometry variation for a light to reveal yet.
   const globe = new THREE.Mesh(geometry, new THREE.MeshLambertMaterial({ map: texture }));
   scene.add(globe);
 
-  // V0.5: a separate sea-surface sphere, per the user's explicit design
-  // direction (see "Future sea-level design" in CLAUDE.md) -- land relief
-  // and sea level are two independent objects so raising sea level is
-  // just resizing this sphere, never touching the land geometry above.
-  const seaLevelBaseRadius = 1 + seaLevelBaseHeight * DISPLACEMENT_SCALE + DISPLACEMENT_BIAS;
+  // Land and sea are two independent objects, per the user's own design
+  // direction: raising sea level only resizes this sphere and never
+  // touches or re-bakes the terrain. With real GEBCO metres the sea sits
+  // at exactly radius 1 (elevation 0 m), so no calibration guesswork.
   const seaSphere = new THREE.Mesh(
-    new THREE.SphereGeometry(seaLevelBaseRadius, 64, 32),
+    new THREE.SphereGeometry(1, 128, 64),
     new THREE.MeshLambertMaterial({
       color: 0x2f6fa8,
       transparent: true,
       opacity: 0.6,
       depthWrite: false,
-      // The real fix for the ocean-floor z-fighting checkerboard is
-      // geometric now (OCEAN_FLOOR_EXTRA_DIP, near applyElevation() below)
-      // -- this polygonOffset is kept only as a cheap secondary safety net
-      // for near-miss cases the exact-tie dip doesn't cover (e.g. a pole
-      // row's averaged height landing very close to, but not exactly at,
-      // the sea level baseline). A small value is enough for that; it does
-      // NOT need to be large enough to fix the checkerboard by itself
-      // (that was tried and rejected -- see the comment above
-      // OCEAN_FLOOR_EXTRA_DIP for why a polygon-offset-only fix doesn't
-      // work here).
-      polygonOffset: true,
-      polygonOffsetFactor: -1,
-      polygonOffsetUnits: -1,
     })
   );
   scene.add(seaSphere);
 
-  function setSeaLevel(fraction) {
-    const heightValue = seaLevelBaseHeight + fraction * SEA_LEVEL_MAX_RISE_HEIGHT;
-    const radius = 1 + heightValue * DISPLACEMENT_SCALE + DISPLACEMENT_BIAS;
-    seaSphere.scale.setScalar(radius / seaLevelBaseRadius);
+  function setSeaLevel(metresAbovePresent) {
+    seaSphere.scale.setScalar(radiusForMetres(metresAbovePresent));
   }
   setSeaLevel(0);
 
-  // Fixed "sun" direction (not attached to the camera, so it lights a
-  // consistent hemisphere of the globe regardless of how the camera
-  // orbits) plus a fairly bright ambient fill so the far side is still
-  // clearly visible rather than crushed to black -- there's no day/night
-  // city-lights feature yet to make a fully dark far side meaningful.
-  //
-  // Intensities tuned deliberately, not guessed: this version of Three.js
-  // uses physically-based light units unconditionally (no legacy-lights
-  // toggle exists any more), where intensity 1 reads dimmer than older
-  // tutorials assume. The user reported the first pass (1.2 / 0.7) as
-  // "too dark overall" once real shading replaced the old always-full-
-  // brightness unlit texture. Measured actual rendered pixel brightness
-  // (average luminance across the visible globe) to calibrate rather than
-  // eyeballing: the unlit V0.1-V0.3 texture averaged ~34/255; 1.2/0.7
-  // measured only ~21/255 (noticeably darker, matching the complaint);
-  // 3.0/2.0 measures ~39/255, comfortably brighter than the original
-  // unlit baseline while still leaving enough directional/ambient
-  // difference for terrain shading to actually read as 3D. Re-measure
-  // the same way (render, read back pixels, average luminance) if this
-  // needs retuning rather than adjusting by feel.
+  // Fixed "sun" plus a bright ambient fill so the far side stays readable
+  // (there's no night-side feature that would make a dark half meaningful
+  // yet). Intensities were calibrated by measuring rendered luminance, not
+  // by eye: this three.js uses physically-based light units, where
+  // intensity 1 reads much dimmer than older tutorials assume.
   const sunLight = new THREE.DirectionalLight(0xffffff, 3.0);
   sunLight.position.set(5, 3, 5);
   scene.add(sunLight);
@@ -268,29 +139,279 @@ export async function initGlobe3D(containerId, textureUrl, elevationMapUrl) {
   return { getView, setView, setSeaLevel };
 }
 
+function radiusForMetres(metres) {
+  return 1 + (metres / EARTH_RADIUS_M) * VERTICAL_EXAGGERATION;
+}
+
+// ---------------------------------------------------------------------------
+// Cube-sphere geometry
+//
+// This replaces the UV sphere (THREE.SphereGeometry) that V0.1-V0.5 used.
+// A UV sphere has a genuine singularity at each pole: every vertex of its
+// top and bottom ring sits at the *same* 3D point while carrying different
+// longitudes, and the rings just below are crushed together
+// circumferentially. That is what produced the radial streaks the user kept
+// seeing -- a fan of sliver triangles each smearing a different column of
+// the map across a wedge, plus wildly different elevation samples between
+// vertices millimetres apart. Smoothing the source data only ever hid it.
+//
+// A spherified cube has no pole at all: six ordinary grids, every quad
+// roughly the same size everywhere on the globe, no vertex shared by a
+// whole ring. The poles land in the middle of an ordinary quad on the +Y
+// and -Y faces and get no special treatment whatsoever.
+// ---------------------------------------------------------------------------
+
+// [forward, right, up] per face, chosen so right x up === forward on all
+// six. That makes one single winding order come out front-facing (outward)
+// everywhere, with no per-face special cases.
+const CUBE_FACES = [
+  [[1, 0, 0], [0, 0, -1], [0, 1, 0]],
+  [[-1, 0, 0], [0, 0, 1], [0, 1, 0]],
+  [[0, 1, 0], [0, 0, 1], [1, 0, 0]],
+  [[0, -1, 0], [1, 0, 0], [0, 0, 1]],
+  [[0, 0, 1], [1, 0, 0], [0, 1, 0]],
+  [[0, 0, -1], [-1, 0, 0], [0, 1, 0]],
+];
+
+// Plain normalisation of an evenly-spaced cube grid bunches vertices up
+// towards the face corners. Warping each axis through tan() first spreads
+// them almost evenly over the sphere, which is the whole point of using a
+// cube-sphere here.
+function warpAxis(t) {
+  return Math.tan(t * (Math.PI / 4));
+}
+
+function buildTerrainGeometry(segments, elevation) {
+  const perFace = (segments + 1) * (segments + 1);
+  const vertexCount = perFace * CUBE_FACES.length;
+  const positions = new Float32Array(vertexCount * 3);
+  const uvs = new Float32Array(vertexCount * 2);
+  const indices = new Uint32Array(segments * segments * 6 * CUBE_FACES.length);
+
+  let vi = 0;
+  let ii = 0;
+
+  for (let f = 0; f < CUBE_FACES.length; f++) {
+    const [forward, right, up] = CUBE_FACES[f];
+    const faceStart = f * perFace;
+
+    for (let j = 0; j <= segments; j++) {
+      const wv = warpAxis(-1 + (2 * j) / segments);
+      for (let i = 0; i <= segments; i++) {
+        const wu = warpAxis(-1 + (2 * i) / segments);
+
+        let x = forward[0] + right[0] * wu + up[0] * wv;
+        let y = forward[1] + right[1] * wu + up[1] * wv;
+        let z = forward[2] + right[2] * wu + up[2] * wv;
+        const inv = 1 / Math.hypot(x, y, z);
+        x *= inv;
+        y *= inv;
+        z *= inv;
+
+        const { lng, lat } = directionToLngLat(x, y, z);
+        const radius = radiusForMetres(sampleMetres(elevation, lng, lat));
+
+        positions[vi * 3] = x * radius;
+        positions[vi * 3 + 1] = y * radius;
+        positions[vi * 3 + 2] = z * radius;
+        uvs[vi * 2] = (lng + 180) / 360;
+        uvs[vi * 2 + 1] = (lat + 90) / 180;
+        vi++;
+      }
+    }
+
+    for (let j = 0; j < segments; j++) {
+      for (let i = 0; i < segments; i++) {
+        const a = faceStart + j * (segments + 1) + i;
+        const b = a + 1;
+        const c = a + (segments + 1);
+        const d = c + 1;
+        indices[ii++] = a;
+        indices[ii++] = b;
+        indices[ii++] = d;
+        indices[ii++] = a;
+        indices[ii++] = d;
+        indices[ii++] = c;
+      }
+    }
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
+  geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+  // Normals are computed here, *before* the seam split below, so the
+  // duplicated seam vertices inherit an identical normal from their
+  // original and the antimeridian shows no lighting discontinuity.
+  geometry.computeVertexNormals();
+
+  splitSeamVertices(geometry);
+  geometry.computeBoundingSphere();
+  return geometry;
+}
+
+// A triangle straddling the antimeridian has corners at u ~ 0.99 and
+// u ~ 0.01, so interpolating between them runs the texture backwards
+// across the entire map in one triangle. Give those corners a private copy
+// carrying u + 1 instead (the texture wraps, see wrapS above). Only a few
+// hundred vertices along one meridian are affected, and position and
+// normal are copied verbatim so nothing moves or re-shades.
+function splitSeamVertices(geometry) {
+  const position = geometry.attributes.position.array;
+  const normal = geometry.attributes.normal.array;
+  const uv = geometry.attributes.uv.array;
+  const index = geometry.index.array;
+
+  const extraPositions = [];
+  const extraNormals = [];
+  const extraUvs = [];
+  const copies = new Map();
+  let nextIndex = geometry.attributes.position.count;
+
+  for (let t = 0; t < index.length; t += 3) {
+    const u0 = uv[index[t] * 2];
+    const u1 = uv[index[t + 1] * 2];
+    const u2 = uv[index[t + 2] * 2];
+    if (Math.max(u0, u1, u2) - Math.min(u0, u1, u2) <= 0.5) continue;
+
+    for (let k = 0; k < 3; k++) {
+      const original = index[t + k];
+      if (uv[original * 2] >= 0.5) continue;
+
+      let copy = copies.get(original);
+      if (copy === undefined) {
+        copy = nextIndex++;
+        extraPositions.push(
+          position[original * 3],
+          position[original * 3 + 1],
+          position[original * 3 + 2]
+        );
+        extraNormals.push(
+          normal[original * 3],
+          normal[original * 3 + 1],
+          normal[original * 3 + 2]
+        );
+        extraUvs.push(uv[original * 2] + 1, uv[original * 2 + 1]);
+        copies.set(original, copy);
+      }
+      index[t + k] = copy;
+    }
+  }
+
+  if (copies.size === 0) return;
+
+  geometry.setAttribute("position", concatAttribute(position, extraPositions, 3));
+  geometry.setAttribute("normal", concatAttribute(normal, extraNormals, 3));
+  geometry.setAttribute("uv", concatAttribute(uv, extraUvs, 2));
+  geometry.index.needsUpdate = true;
+}
+
+function concatAttribute(base, extra, itemSize) {
+  const merged = new Float32Array(base.length + extra.length);
+  merged.set(base, 0);
+  merged.set(extra, base.length);
+  return new THREE.BufferAttribute(merged, itemSize);
+}
+
+// ---------------------------------------------------------------------------
+// Elevation data
+// ---------------------------------------------------------------------------
+
+// Elevation arrives as a PNG carrying real metres, not a brightness ramp:
+// each pixel's red and green channels are the high and low byte of an
+// unsigned 16-bit value, and metres = (R*256 + G) - offsetMetres. PNG
+// because it is lossless -- a JPEG would corrupt the byte packing -- and
+// two 8-bit channels because a canvas always hands back 8-bit samples, so
+// a genuine 16-bit greyscale PNG would silently lose its low byte on read.
+// The encoding parameters live in the world's config.json rather than here,
+// so this code stays independent of any one world's data.
+// The pipeline emits several sizes of the same global grid. Downloading
+// the largest would be wasted bytes on a phone: the mesh has about
+// 4 * FACE_SEGMENTS vertices around the equator, so a grid wider than
+// roughly twice that carries detail no vertex can ever express. Take the
+// finest level that is still worth its download, and leave the wider ones
+// in place for when a future version subdivides the mesh further (or
+// loads a high-detail patch for one region, which is what the planned
+// REMA / ArcticDEM polar data will need).
+const USEFUL_GRID_WIDTH = 8 * FACE_SEGMENTS;
+
+function pickElevationLevel(levels) {
+  const affordable = levels.filter((level) => level.width <= USEFUL_GRID_WIDTH);
+  const candidates = affordable.length > 0 ? affordable : levels;
+  return candidates.reduce((best, level) => (level.width > best.width ? level : best));
+}
+
+async function loadElevationGrid(level, encoding) {
+  const image = await loadImage(level.url);
+  const canvas = document.createElement("canvas");
+  canvas.width = image.width;
+  canvas.height = image.height;
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  context.drawImage(image, 0, 0);
+  const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
+  return {
+    data,
+    width: canvas.width,
+    height: canvas.height,
+    offsetMetres: encoding.offsetMetres,
+  };
+}
+
+function texelMetres(grid, x, y) {
+  const i = (y * grid.width + x) * 4;
+  return grid.data[i] * 256 + grid.data[i + 1] - grid.offsetMetres;
+}
+
+// Bilinear, wrapping in longitude and clamping in latitude. Sampling at a
+// higher resolution than the mesh and interpolating keeps the terrain from
+// picking up single-pixel noise as spurious bumps.
+function sampleMetres(grid, lng, lat) {
+  const fx = ((lng + 180) / 360) * grid.width - 0.5;
+  const fy = ((90 - lat) / 180) * grid.height - 0.5;
+  const x0 = Math.floor(fx);
+  const y0 = Math.floor(fy);
+  const tx = fx - x0;
+  const ty = fy - y0;
+
+  const xa = wrapColumn(x0, grid.width);
+  const xb = wrapColumn(x0 + 1, grid.width);
+  const ya = clampRow(y0, grid.height);
+  const yb = clampRow(y0 + 1, grid.height);
+
+  const top = texelMetres(grid, xa, ya) * (1 - tx) + texelMetres(grid, xb, ya) * tx;
+  const bottom = texelMetres(grid, xa, yb) * (1 - tx) + texelMetres(grid, xb, yb) * tx;
+  return top * (1 - ty) + bottom * ty;
+}
+
+function wrapColumn(x, width) {
+  return ((x % width) + width) % width;
+}
+
+function clampRow(y, height) {
+  return Math.min(height - 1, Math.max(0, y));
+}
+
 function loadImage(url) {
   return new Promise((resolve, reject) => {
     const image = new Image();
     image.crossOrigin = "anonymous";
     image.onload = () => resolve(image);
-    image.onerror = reject;
+    image.onerror = () => reject(new Error(`failed to load ${url}`));
     image.src = url;
   });
 }
 
-// Lifts shadows (dark forests etc.) much more than highlights (deserts,
-// ice, clouds) via a gamma curve, using a 256-entry lookup table instead
-// of recomputing Math.pow per pixel (this runs once per pixel of a
-// 2048x1024 image at load time, not per frame). See COLOR_GAMMA above for
-// why a plain brightness multiplier wasn't the right tool here.
+// Lifts shadows much more than highlights via a gamma curve, through a
+// 256-entry lookup table rather than a Math.pow per pixel (this runs once
+// per texture pixel at load, not per frame). See COLOR_GAMMA above.
 function applyGammaCorrection(image, gamma) {
   const canvas = document.createElement("canvas");
   canvas.width = image.width;
   canvas.height = image.height;
-  const ctx = canvas.getContext("2d");
-  ctx.drawImage(image, 0, 0);
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  context.drawImage(image, 0, 0);
 
-  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
   const data = imageData.data;
 
   const lut = new Uint8ClampedArray(256);
@@ -304,153 +425,6 @@ function applyGammaCorrection(image, gamma) {
     data[i + 2] = lut[data[i + 2]];
   }
 
-  ctx.putImageData(imageData, 0, 0);
+  context.putImageData(imageData, 0, 0);
   return canvas;
-}
-
-// Reads a grayscale equirectangular elevation image into plain pixel data
-// (via an offscreen canvas) so applyElevation() below can sample it on the
-// CPU. Displacement is baked into real vertex positions (not a GPU-only
-// `displacementMap`) so the globe's actual 3D shape is available for
-// things like V0.5's land-vs-sea-level comparison later -- a shader-only
-// displacement wouldn't expose real geometry to read back.
-async function loadElevationSamples(url) {
-  const image = await loadImage(url);
-  const canvas = document.createElement("canvas");
-  canvas.width = image.width;
-  canvas.height = image.height;
-  const ctx = canvas.getContext("2d");
-  ctx.drawImage(image, 0, 0);
-  const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  return { data, width: canvas.width, height: canvas.height };
-}
-
-function averageRowHeight(elevationSamples, row) {
-  const { data, width } = elevationSamples;
-  let sum = 0;
-  for (let x = 0; x < width; x++) {
-    sum += data[(row * width + x) * 4];
-  }
-  return sum / width / 255;
-}
-
-// `uvCoordY` here is the geometry's stored UV.y, which for
-// THREE.SphereGeometry is `1 - v` (v being the top-to-bottom sweep
-// fraction) -- i.e. UV.y is 1 at the north pole ring and 0 at the south
-// pole ring, the OPPOSITE of a naive "v=0 is the top" assumption. Combined
-// with THREE's default flipY texture upload, this works out to: UV.y=1
-// samples the source image's first (top) row, UV.y=0 samples its last
-// (bottom) row -- confirmed consistent with V0.1's own verified pole
-// behavior (setting the camera to look at the south pole rendered the
-// image's actual bottom-row content), not just reasoned from the
-// SphereGeometry source alone.
-function sampleElevation(elevationSamples, u, uvCoordY) {
-  const { data, width, height } = elevationSamples;
-  const rowFraction = 1 - uvCoordY;
-  const px = Math.min(width - 1, Math.max(0, Math.floor(u * width)));
-  const py = Math.min(height - 1, Math.max(0, Math.floor(rowFraction * height)));
-  return data[(py * width + px) * 4] / 255;
-}
-
-// Every vertex in the sphere's top ring (north pole) and bottom ring
-// (south pole) occupies the SAME 3D point before displacement, despite
-// having different UV.x/longitude values -- sampling the elevation map
-// per-vertex there would push these coincident points to different
-// final distances from center, tearing the pole open into a gap or spike
-// (exactly the class of bug this whole project has repeatedly fought with
-// other engines). Forcing every pole vertex to the same value (the
-// average across that row of the source image) keeps them coincident
-// after displacement too, the same way the color texture's own poles stay
-// visually seamless.
-const POLE_UV_EPSILON = 1e-4;
-
-// Investigated a faint radiating streak pattern visible when the camera
-// is zoomed in tight directly on a pole (screenshotted and inspected):
-// tried tapering near-pole vertices' sampled height toward the pole's
-// flat average over a wide range of blend distances, and it made no
-// visible difference at any of them. Isolated the real cause by swapping
-// in a flat, unlit material (no elevation, no lighting at all) at the
-// same camera angle -- the exact same streaks were still there, coming
-// from the equirectangular COLOR texture's own pixel/mipmap sampling
-// becoming highly compressed near a UV-sphere's pole (many texture
-// columns squeezed into a visually tiny area), not from elevation
-// displacement or normals at all. Confirmed this already existed,
-// fainter, in V0.1's own already-user-approved pole screenshot at the
-// default (further) zoom -- it's a pre-existing texture-sampling
-// characteristic of the pole-safe UV-sphere approach itself, not
-// something V0.4 introduced, and not a gap/tear (the mesh itself is
-// provably seamless, see the pole-coincidence check below). Left
-// unaddressed for now since it's cosmetic and only shows up zoomed in
-// tight directly on a pole; a real fix would mean mipmapping/anisotropic
-// filtering tuning or a higher-resolution color texture, not an
-// elevation-side change.
-// V0.5 gotcha, found only after actually adding the sea sphere and
-// looking at a rendered screenshot: the true open ocean (65% of this
-// elevation map's pixels, confirmed by histogram -- see
-// seaLevelBaseHeightValue() above) all sit at *exactly* the same height
-// value, which places the land mesh at the *exact same radius* as the sea
-// sphere's own baseline over most of the visible ocean -- not merely
-// close, genuinely tied. Two opaque-ish surfaces at an exact tie is a
-// textbook z-fighting setup: the renderer alternates which one wins per
-// triangle, producing a checkerboard/diamond flicker across the whole
-// ocean (confirmed directly with screenshots, and confirmed it wasn't a
-// transparency/blending artifact by testing with the sea material forced
-// fully opaque -- same pattern either way). Tried fixing it purely as a
-// rendering trick (`polygonOffset` on the sea material) first: too small
-// a value did nothing, a large enough value to clear the ocean also
-// started incorrectly hiding real dry land behind the sea sphere
-// (confirmed with a screenshot showing blotchy fake "flooding" of
-// interior South America that didn't correspond to any real elevation
-// threshold). The actual fix is geometric, not a rendering hack: nudge
-// true ocean-floor vertices a small real amount *below* the sea sphere's
-// baseline, so they're no longer tied. A small `polygonOffset` is kept
-// too, as a cheap safety net for any near-miss cases this doesn't cover
-// (e.g. the pole rows' *averaged* height happening to land very close to
-// the same baseline without being an exact tie).
-//
-// The magnitude was found empirically, not guessed once and assumed
-// correct: 0.001 was tried first and screenshotted -- the checkerboard was
-// still clearly visible, just as bad as with no dip at all. Tested a
-// range up to 0.01 and screenshotted each; 0.003 was the smallest value
-// that came back completely clean (smooth ocean, no flicker), and 0.01
-// looked identical (no land-encroachment risk here even at a larger
-// value, unlike the polygonOffset attempts above -- this dip only ever
-// touches vertices already confirmed to be true ocean floor, never a
-// coastal/land vertex, so there's nothing nearby for a bigger number to
-// accidentally eat). Picked 0.003 for a comfortable margin without going
-// further than needed. Re-verify with fresh screenshots (same method) if
-// this needs revisiting.
-const OCEAN_FLOOR_EXTRA_DIP = 0.003;
-
-function applyElevation(geometry, elevationSamples, seaLevelBaseHeight) {
-  const posAttr = geometry.attributes.position;
-  const uvAttr = geometry.attributes.uv;
-  const northPoleHeight = averageRowHeight(elevationSamples, 0);
-  const southPoleHeight = averageRowHeight(elevationSamples, elevationSamples.height - 1);
-  const vertex = new THREE.Vector3();
-
-  for (let i = 0; i < posAttr.count; i++) {
-    const u = uvAttr.getX(i);
-    const uvCoordY = uvAttr.getY(i);
-
-    let heightValue;
-    if (uvCoordY >= 1 - POLE_UV_EPSILON) {
-      heightValue = northPoleHeight;
-    } else if (uvCoordY <= POLE_UV_EPSILON) {
-      heightValue = southPoleHeight;
-    } else {
-      heightValue = sampleElevation(elevationSamples, u, uvCoordY);
-    }
-
-    vertex.fromBufferAttribute(posAttr, i).normalize();
-    let radiusScale = 1 + heightValue * DISPLACEMENT_SCALE + DISPLACEMENT_BIAS;
-    if (heightValue <= seaLevelBaseHeight) {
-      radiusScale -= OCEAN_FLOOR_EXTRA_DIP;
-    }
-    vertex.multiplyScalar(radiusScale);
-    posAttr.setXYZ(i, vertex.x, vertex.y, vertex.z);
-  }
-
-  posAttr.needsUpdate = true;
-  geometry.computeVertexNormals();
 }
