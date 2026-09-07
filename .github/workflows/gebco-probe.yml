@@ -15,40 +15,13 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: List the ice_surface_elevation directory
+      - name: List the netcdf/ and geotiff/ subdirectories
         run: |
           set +e
-          echo "===== raw listing"
-          curl -sS -L --max-time 60 "$ICE_DIR" | sed -e 's/<[^>]*>//g' | sed '/^\s*$/d'
-
-      - name: THREDDS catalog for the same directory
-        run: |
-          set +e
-          curl -sS -L --max-time 60 \
-            "https://dap.ceda.ac.uk/thredds/catalog/bodc/gebco/global/gebco_2026/ice_surface_elevation/catalog.html" \
-            | sed -e 's/<[^>]*>//g' | sed '/^\s*$/d' | head -40
-
-      - name: HEAD every file found, and measure download throughput
-        run: |
-          set +e
-          # Pull hrefs out of the nginx autoindex, skipping the parent link.
-          files=$(curl -sS -L --max-time 60 "$ICE_DIR" \
-                  | grep -o 'href="[^"]*"' | cut -d'"' -f2 | grep -v '^\.\./$')
-          echo "discovered: $files"
-          for f in $files; do
-            u="${ICE_DIR}${f}"
-            echo "===== HEAD $u"
-            curl -sS -I -L --max-time 60 "$u" | egrep -i 'HTTP/|content-length|accept-ranges|content-type'
+          for sub in netcdf geotiff; do
+            echo "############ $sub/"
+            curl -sS -L --max-time 60 "${ICE_DIR}${sub}/" | sed -e 's/<[^>]*>//g' | sed '/^\s*$/d'
           done
-
-          # Throughput on the first .nc found -- tells us whether pulling the
-          # whole grid in CI is practical, versus needing server-side subsetting.
-          nc=$(echo "$files" | tr ' ' '\n' | grep -i '\.nc$' | head -1)
-          if [ -n "$nc" ]; then
-            echo "===== 200MB range read of $nc"
-            curl -sS -L --max-time 300 -r 0-209715199 -o /dev/null \
-              -w 'speed=%{speed_download} B/s  size=%{size_download}\n' "${ICE_DIR}${nc}"
-          fi
 
       - name: Install GDAL
         run: |
@@ -56,22 +29,49 @@ jobs:
           sudo apt-get install -y -qq gdal-bin >/dev/null
           gdalinfo --version
 
-      - name: Try OPeNDAP and /vsicurl reads on the real file
+      - name: Inspect the netCDF (OPeNDAP + /vsicurl)
         run: |
           set +e
-          files=$(curl -sS -L --max-time 60 "$ICE_DIR" \
-                  | grep -o 'href="[^"]*"' | cut -d'"' -f2 | grep -v '^\.\./$')
-          nc=$(echo "$files" | tr ' ' '\n' | grep -i '\.nc$' | head -1)
-          echo "nc file: $nc"
+          nc=$(curl -sS -L --max-time 60 "${ICE_DIR}netcdf/" \
+               | grep -o 'href="[^"]*"' | cut -d'"' -f2 | grep -i '\.nc$' | head -1)
+          echo "nc file: [$nc]"
+          [ -z "$nc" ] && exit 0
 
-          if [ -n "$nc" ]; then
-            dods="https://dap.ceda.ac.uk/thredds/dodsC/bodc/gebco/global/gebco_2026/ice_surface_elevation/${nc}"
-            echo "===== OPeNDAP DDS"
-            curl -sS -L --max-time 90 "${dods}.dds" | head -c 1200
-            echo
-            echo "===== OPeNDAP strided subset (every 400th cell, as ASCII)"
-            curl -sS -L --max-time 120 "${dods}.ascii?elevation[0:400:43199][0:400:86399]" | head -c 600
-            echo
-            echo "===== gdalinfo over /vsicurl (range reads only)"
-            timeout 300 gdalinfo "/vsicurl/${ICE_DIR}${nc}" 2>&1 | head -40
-          fi
+          echo "===== HEAD"
+          curl -sS -I -L --max-time 60 "${ICE_DIR}netcdf/${nc}" \
+            | egrep -i 'HTTP/|content-length|accept-ranges'
+
+          dods="https://dap.ceda.ac.uk/thredds/dodsC/bodc/gebco/global/gebco_2026/ice_surface_elevation/netcdf/${nc}"
+          echo "===== OPeNDAP DDS  ($dods)"
+          curl -sS -L --max-time 90 "${dods}.dds" | head -c 1200
+          echo
+          echo "===== OPeNDAP strided subset, 6x6 sample"
+          curl -sS -L --max-time 120 "${dods}.ascii?elevation[0:8000:43199][0:16000:86399]" | head -c 900
+          echo
+          echo "===== gdalinfo over /vsicurl"
+          timeout 300 gdalinfo "/vsicurl/${ICE_DIR}netcdf/${nc}" 2>&1 | head -45
+
+      - name: Inspect the GeoTIFF tiles (are they COGs with overviews?)
+        run: |
+          set +e
+          tifs=$(curl -sS -L --max-time 60 "${ICE_DIR}geotiff/" \
+                 | grep -o 'href="[^"]*"' | cut -d'"' -f2 | grep -i '\.tif$')
+          echo "tif files:"; echo "$tifs"
+          first=$(echo "$tifs" | head -1)
+          [ -z "$first" ] && exit 0
+
+          echo "===== HEAD $first"
+          curl -sS -I -L --max-time 60 "${ICE_DIR}geotiff/${first}" \
+            | egrep -i 'HTTP/|content-length|accept-ranges'
+          echo "===== gdalinfo /vsicurl (look for Overviews: and Block=)"
+          timeout 300 gdalinfo "/vsicurl/${ICE_DIR}geotiff/${first}" 2>&1 | head -45
+
+      - name: Throughput check
+        run: |
+          set +e
+          nc=$(curl -sS -L --max-time 60 "${ICE_DIR}netcdf/" \
+               | grep -o 'href="[^"]*"' | cut -d'"' -f2 | grep -iE '\.(nc|zip)$' | head -1)
+          [ -z "$nc" ] && exit 0
+          echo "===== 300MB range read of $nc"
+          curl -sS -L --max-time 300 -r 0-314572799 -o /dev/null \
+            -w 'speed=%{speed_download} B/s  size=%{size_download}\n' "${ICE_DIR}netcdf/${nc}"
