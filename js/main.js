@@ -25,6 +25,8 @@ async function main() {
   const seaLevelControl = document.getElementById("sea-level-control");
   const seaLevelSlider = document.getElementById("sea-level-slider");
   const seaLevelReadout = document.getElementById("sea-level-readout");
+  const waterOpacitySlider = document.getElementById("water-opacity-slider");
+  const waterOpacityReadout = document.getElementById("water-opacity-readout");
 
   let mode = "3d";
 
@@ -47,6 +49,14 @@ async function main() {
   }
   seaLevelSlider.addEventListener("input", applySeaLevel);
   applySeaLevel();
+
+  function applyWaterOpacity() {
+    const percent = Number(waterOpacitySlider.value);
+    globe3d.setWaterOpacity(percent / 100);
+    waterOpacityReadout.textContent = `${percent}%`;
+  }
+  waterOpacitySlider.addEventListener("input", applyWaterOpacity);
+  applyWaterOpacity();
 
   toggleButton.addEventListener("click", () => {
     if (mode === "3d") {

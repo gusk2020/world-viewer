@@ -68,10 +68,9 @@ html, body {
   top: calc(env(safe-area-inset-top, 0) + 16px);
   transform: translateX(-50%);
   display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 44px;
-  padding: 0 16px;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 16px;
   border-radius: 22px;
   background: rgba(15, 23, 35, 0.82);
   color: #eaf2ff;
@@ -82,8 +81,16 @@ html, body {
   width: min(320px, 80vw);
 }
 
+#sea-level-control .control-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+}
+
 #sea-level-control label {
   white-space: nowrap;
+  min-width: 5em;
 }
 
 #sea-level-control input[type="range"] {

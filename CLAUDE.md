@@ -483,7 +483,26 @@ a one-line change to `SOURCE_URL` in the workflow.
 
 **Blue Marble is now imagery only.** Per the user's explicit redirection,
 the colour texture no longer has anything to do with the 3D shape. That
-also retires the old `elevation.jpg` bump map entirely.
+retires the old `elevation.jpg` bump map entirely (deleted).
+
+**The globe texture is now `earth_day_4096.jpg`** (4096×2048, ~460 KB,
+still from `mrdoob/three.js`'s examples, so the same licensing story as
+the 2048 one it replaces). Adopted after the user reported that terrain
+"didn't look any more detailed": a resolution sweep showed **511 segments
+looked identical to 255**, because at any zoom the app allows the limiting
+factor is the surface photo, not the mesh — 2048×1024 is roughly 20 km per
+pixel. Doubling the texture made Japan legible where it had been a purple
+smear. Two side effects worth knowing: this texture has **no cloud layer**
+(better for a map — you see the actual ground), and its colours run
+greener and brighter than the old atmospheric-tinted one, which happens to
+suit the user's earlier "brighten the forests" request. Note this texture
+was tried and *rejected* before V0.6 for making pole streaks worse; that
+was the UV sphere's fault, and it is fine on the cube-sphere.
+
+**Mesh resolution is deliberately staying at 255.** Raising it costs
+memory and load time and changes nothing visible while the photo is the
+bottleneck. The next real step for close-up detail is per-region imagery
+tiles, not more triangles.
 
 **The mesh: why the UV sphere had to go.** `THREE.SphereGeometry` is a
 lat/lon grid, which has a genuine mathematical singularity at each pole:
@@ -553,13 +572,27 @@ correct and the filtering is ordinary anti-aliasing of an oversampled
 projection. A circular running sum keeps it O(width) per row, which
 matters because the window spans most of the image in the last row or two.
 
-**Sea-surface opacity dropped from 0.6 to 0.4.** With real bathymetry
-underneath, 0.6 hid nearly all of it. Compared renders of the
-mid-Atlantic at 0.6 / 0.45 / 0.3: at 0.4 the Mid-Atlantic Ridge, its
-fracture zones and the continental shelves read clearly, while a +100 m
-rise over the Bengal delta still floods unmistakably. If the user wants
-the water to look more solid, or the seafloor clearer, this is the single
-number to move.
+**The sea surface must be a cube-sphere too — this was a real bug.**
+It was first built as `THREE.SphereGeometry(1, 128, 64)`, and the user
+reported dark scalloped blobs across every shallow sea, with the
+sea-level slider seeming to shrink those blobs rather than flood land.
+Reproduced and measured here: a sphere mesh is a polyhedron, and each flat
+facet sags below the true radius by roughly θ²/8 — at 128 segments that is
+3.0×10⁻⁴ radius units, which against 30× exaggerated relief is
+**64 metres of equivalent elevation error**. So anywhere the seabed lay
+within ~64 m of sea level it poked up through the middle of each facet,
+one blob per facet. Rebuilding the sea from `buildCubeSphere` at
+`FACE_SEGMENTS` drops that to about 1 m, below the slider's own step, and
+the blobs vanish entirely. **Lesson: any surface being compared against
+terrain at metre scale needs tessellation error smaller than the
+comparison, and `SphereGeometry`'s default resolutions are nowhere near
+it.** The sea geometry carries no UVs (no texture), so it costs little.
+
+**Water opacity is a user control now** (`setWaterOpacity`, second slider,
+default 40%). There is no single right value — opaque water reads better
+as "flooded", transparent water shows the GEBCO seafloor — so after the
+user asked to adjust it themselves, it stopped being a constant to tune
+here.
 
 **Elevation is real metres now, and that fixes sea level properly.**
 The raster stores metres, so sea level is exactly radius 1 and the slider
@@ -837,14 +870,14 @@ three; none shipped this round.
   project's core "real data over convenience" value — reverted to the
   original elevation data instead of shipping either a pole regression or
   an increasingly artificial flattened cap.
-- **Net result**: no texture/data files changed this round; both textures
-  are back to their exact V0.4/V0.5 state. If a future session finds a
-  genuinely cleaner higher-resolution source (real bathymetry included,
-  and — critically — checked for near-pole noise the same way before
-  adopting it, not just checked for resolution/file size), re-attempt
-  then. Don't re-try `earth_day_4096.jpg` or the
-  `earth_bump_roughness_clouds_4096.jpg` bump channel specifically
-  without a real fix for their near-pole behavior first.
+- **Net result at the time**: no texture/data files changed that round.
+  **Both conclusions were later reversed in V0.6, and correctly so.** The
+  bathymetry blocker was a *network* problem, solved by moving the fetch to
+  GitHub Actions. The near-pole failures blamed on these two textures were
+  really the UV sphere's polar singularity: once the mesh had no pole,
+  `earth_day_4096.jpg` was retried and adopted as the globe texture with
+  clean poles. The lesson to keep is the method (check a candidate's
+  near-pole behaviour before adopting it), not the verdict.
 
 ## World-data structure (the "common app, swappable data" seam)
 

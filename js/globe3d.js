@@ -71,7 +71,7 @@ export async function initGlobe3D(containerId, worldConfig) {
   // splitSeamVertices) -- they must wrap, not clamp.
   texture.wrapS = THREE.RepeatWrapping;
 
-  const geometry = buildTerrainGeometry(FACE_SEGMENTS, elevation);
+  const geometry = buildCubeSphere(FACE_SEGMENTS, { elevation });
 
   const globe = new THREE.Mesh(geometry, new THREE.MeshLambertMaterial({ map: texture }));
   scene.add(globe);
@@ -80,8 +80,19 @@ export async function initGlobe3D(containerId, worldConfig) {
   // direction: raising sea level only resizes this sphere and never
   // touches or re-bakes the terrain. With real GEBCO metres the sea sits
   // at exactly radius 1 (elevation 0 m), so no calibration guesswork.
+  // Built from the same cube-sphere as the terrain, NOT THREE.SphereGeometry.
+  // A sphere mesh is a polyhedron, and each flat facet sags below the true
+  // radius by about theta^2/8. On the 128x64 sphere used at first that sag
+  // was 3.0e-4 radius units, which against 30x-exaggerated relief is
+  // **64 metres of equivalent elevation error** -- so in shallow water the
+  // seabed poked up through the middle of every facet, drawing a grid of
+  // dark scalloped blobs, and raising the level made those blobs shrink
+  // instead of flooding land. Reported from the phone and reproduced here
+  // exactly. At FACE_SEGMENTS the sag is ~4.7e-6, i.e. about 1 metre, which
+  // is below the slider's own 1 m step. Matching the terrain's tessellation
+  // also means the two surfaces cross each other cleanly.
   const seaSphere = new THREE.Mesh(
-    new THREE.SphereGeometry(1, 128, 64),
+    buildCubeSphere(FACE_SEGMENTS),
     new THREE.MeshLambertMaterial({
       color: 0x2f6fa8,
       transparent: true,
@@ -101,6 +112,14 @@ export async function initGlobe3D(containerId, worldConfig) {
     seaSphere.scale.setScalar(radiusForMetres(metresAbovePresent));
   }
   setSeaLevel(0);
+
+  // How opaque the water is. Exposed as a control because there is no one
+  // right answer: opaque water reads better as "flooded", transparent
+  // water shows the GEBCO seafloor underneath, and which matters depends
+  // on what you're looking at.
+  function setWaterOpacity(fraction) {
+    seaSphere.material.opacity = fraction;
+  }
 
   // Fixed "sun" plus a bright ambient fill so the far side stays readable
   // (there's no night-side feature that would make a dark half meaningful
@@ -142,7 +161,7 @@ export async function initGlobe3D(containerId, worldConfig) {
     controls.update();
   }
 
-  return { getView, setView, setSeaLevel };
+  return { getView, setView, setSeaLevel, setWaterOpacity };
 }
 
 function radiusForMetres(metres) {
@@ -187,11 +206,15 @@ function warpAxis(t) {
   return Math.tan(t * (Math.PI / 4));
 }
 
-function buildTerrainGeometry(segments, elevation) {
+// Builds the cube-sphere. With `elevation` it becomes the terrain, carrying
+// equirectangular UVs and displaced to real heights; without it, a plain
+// unit sphere for the sea surface, which needs neither UVs nor the
+// per-vertex trigonometry they require.
+function buildCubeSphere(segments, { elevation = null } = {}) {
   const perFace = (segments + 1) * (segments + 1);
   const vertexCount = perFace * CUBE_FACES.length;
   const positions = new Float32Array(vertexCount * 3);
-  const uvs = new Float32Array(vertexCount * 2);
+  const uvs = elevation ? new Float32Array(vertexCount * 2) : null;
   const indices = new Uint32Array(segments * segments * 6 * CUBE_FACES.length);
 
   let vi = 0;
@@ -214,14 +237,19 @@ function buildTerrainGeometry(segments, elevation) {
         y *= inv;
         z *= inv;
 
-        const { lng, lat } = directionToLngLat(x, y, z);
-        const radius = radiusForMetres(sampleMetres(elevation, lng, lat));
-
-        positions[vi * 3] = x * radius;
-        positions[vi * 3 + 1] = y * radius;
-        positions[vi * 3 + 2] = z * radius;
-        uvs[vi * 2] = (lng + 180) / 360;
-        uvs[vi * 2 + 1] = (lat + 90) / 180;
+        if (elevation) {
+          const { lng, lat } = directionToLngLat(x, y, z);
+          const radius = radiusForMetres(sampleMetres(elevation, lng, lat));
+          positions[vi * 3] = x * radius;
+          positions[vi * 3 + 1] = y * radius;
+          positions[vi * 3 + 2] = z * radius;
+          uvs[vi * 2] = (lng + 180) / 360;
+          uvs[vi * 2 + 1] = (lat + 90) / 180;
+        } else {
+          positions[vi * 3] = x;
+          positions[vi * 3 + 1] = y;
+          positions[vi * 3 + 2] = z;
+        }
         vi++;
       }
     }
@@ -244,14 +272,18 @@ function buildTerrainGeometry(segments, elevation) {
 
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-  geometry.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
   geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+  if (uvs) {
+    geometry.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
+  }
   // Normals are computed here, *before* the seam split below, so the
   // duplicated seam vertices inherit an identical normal from their
   // original and the antimeridian shows no lighting discontinuity.
   geometry.computeVertexNormals();
 
-  splitSeamVertices(geometry);
+  if (uvs) {
+    splitSeamVertices(geometry);
+  }
   geometry.computeBoundingSphere();
   return geometry;
 }
