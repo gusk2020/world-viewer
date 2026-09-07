@@ -47,14 +47,28 @@ continue.
   textured sphere). First pass came back "too dark to read the relief
   clearly" — fixed via measured lighting brightness (see "V0.4: real
   elevation" below) before the user signed off.
-- **V0.5 (current, awaiting Pixel 7a confirmation)**: add a
-  sea-level-height control — see "Future sea-level design" below for the
-  land/ocean split this implies. Bundled together with a forest-brightness
-  fix at the user's explicit request ("森をもう少し明るくしてください...
-  これは次の機能追加とまとめて行ってください") — see "V0.5: forest
-  brightness (gamma correction)" and "V0.5: sea-level control" below.
-- **V0.6+**: cities, borders/territories, historical eras, and other
-  過速世界-specific data.
+- **V0.5 (done, user confirmed on Pixel 7a)**: add a sea-level-height
+  control — see "Future sea-level design" below for the land/ocean split
+  this implies. Bundled together with a forest-brightness fix at the
+  user's explicit request ("森をもう少し明るくしてください...これは次の
+  機能追加とまとめて行ってください") — see "V0.5: forest brightness
+  (gamma correction)" and "V0.5: sea-level control" below. First pass had
+  a real coastline change happening but far too subtle to see on-phone
+  (~0.0007 radius units, under one screen pixel) — recalibrated to a
+  clearly visible magnitude (see the "Third mistake" note under "V0.5:
+  sea-level control" below) before the user signed off with "仮の地形
+  データということであれば合格です" (acceptable, given this is placeholder
+  terrain data).
+- **V0.6+ (current)**: cities, borders/territories, historical eras, and
+  other 過速世界-specific data. This bucket covers several distinct
+  features, not one version — per the "one version at a time" rule, treat
+  each as its own sub-version (V0.6, V0.7, ...) in whatever order makes
+  sense once there's actual 過速世界 data to work from, rather than
+  building any of it speculatively. **Needs the user's own world-setting
+  data first** (city names/locations, territory/border shapes, era
+  definitions) — this is 過速世界 content, not a technical judgment call,
+  so ask the user for it rather than inventing placeholder cities/borders
+  the way placeholder Earth imagery was used for the globe texture itself.
 
 Nothing from V0.6 onward is implemented yet. Do not add pieces of them
 now "while already in the file."
