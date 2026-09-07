@@ -22,14 +22,23 @@
   <div id="loading">読み込み中…</div>
   <div id="sea-level-control">
     <div class="control-row">
-      <label for="sea-level-slider">海面上昇</label>
-      <input type="range" id="sea-level-slider" min="0" max="100" step="1" value="0" />
-      <span id="sea-level-readout">+0m</span>
+      <label for="sea-level-slider">海面の高さ</label>
+      <input type="range" id="sea-level-slider" min="-150" max="100" step="1" value="0" />
+      <span id="sea-level-readout">±0m</span>
     </div>
     <div class="control-row">
       <label for="water-opacity-slider">海の濃さ</label>
       <input type="range" id="water-opacity-slider" min="0" max="100" step="5" value="40" />
       <span id="water-opacity-readout">40%</span>
+    </div>
+    <div class="control-row">
+      <label>海底の色</label>
+      <div id="seabed-style" class="segmented">
+        <button type="button" data-style="photo" class="selected">写真</button>
+        <button type="button" data-style="brown">茶</button>
+        <button type="button" data-style="grey">灰</button>
+        <button type="button" data-style="land">緑茶</button>
+      </div>
     </div>
   </div>
   <button id="view-toggle">2Dに切替</button>

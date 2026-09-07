@@ -631,6 +631,48 @@ feature. Let a frame tick first. (And per the standing note above, canvas
 readback must render in the same synchronous task, or the buffer is
 already cleared and every sampled pixel comes back empty.)
 
+**Draining the water needed a repainted seabed, not just a hidden sea.**
+The user asked to take the water below 0% and see the seabed in earth
+colours. Turning the sea sphere off alone can never do that: **the blue of
+the seabed lives in the satellite photograph, not in the water.** So
+`setSeabedStyle()` repaints every pixel below 0 m from a depth ramp,
+leaving land as photographed. Four options — `photo` (default, the
+untouched image), `brown`, `grey`, `land` — chosen by the user, who asked
+for all three ramps switchable rather than one.
+
+- **Only the colour is invented; the shape and shading stay real GEBCO.**
+  There is no photograph of the seabed to be faithful to, so a depth ramp
+  is the honest option. Worth keeping straight given this project's
+  "real data over looks" line.
+- **Rebuilt on demand, not pre-baked.** Three ready-made 4096×2048
+  textures would be >100 MB of image data on a phone. One spare buffer
+  plus a repaint is far cheaper. Measured in-page: ~265 ms per repaint
+  (~500 ms on the first, which allocates the buffer), so roughly 0.5-0.8 s
+  on a Pixel 7a. `main.js` defers the call by one animation frame so the
+  button's pressed state paints before the work blocks the thread.
+- **Independent of sea level by design**, so dragging that slider never
+  triggers a repaint — the sea sphere covers whatever is currently
+  submerged, over a seabed that is already coloured by its own depth.
+- **Bilinear depth sampling and `SEABED_FADE_M` both earn their cost.**
+  The colour texture is finer than the elevation grid, so nearest-neighbour
+  painted the grid's ~20 km cells as visible staircase blocks along every
+  drained coastline (seen clearly at −120 m over the Sunda shelf).
+  Bilinear plus fading the ramp in over the shallowest 60 m removed them.
+  That tripled the pass from ~90 ms to ~265 ms — worth it for a button
+  press, and the reason not to move this onto a slider.
+- **`SEABED_DEEPEST_M` is 8000, not the real 10.9 km maximum.** Trenches
+  that deep are vanishingly rare; stretching the ramp to reach them wastes
+  most of its range on depths almost nowhere on Earth and flattens the
+  abyssal plains and continental slopes where the shape actually is.
+
+**Sea level runs both ways now** (−150 m to +100 m). `radiusForMetres`
+already handled negatives, so this was a slider range and a readout that
+signs itself. Measured from the committed raster: at −120 m (last glacial
+maximum) land goes from **29.1% to 33.2%** of the globe, exposing the
+Sunda shelf, the North Sea and the Bering land bridge. Note the two
+features are coupled — lowering sea level without a repainted seabed just
+exposes blue photograph, which is why they were built in that order.
+
 **Water opacity is a user control now** (`setWaterOpacity`, second slider,
 default 40%). There is no single right value — opaque water reads better
 as "flooded", transparent water shows the GEBCO seafloor — so after the

@@ -103,3 +103,27 @@ html, body {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+
+.segmented {
+  display: flex;
+  flex: 1;
+  gap: 4px;
+}
+
+.segmented button {
+  flex: 1;
+  min-height: 32px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.14);
+  color: #eaf2ff;
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.segmented button.selected {
+  background: #2f7ee0;
+}

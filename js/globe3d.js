@@ -65,7 +65,14 @@ export async function initGlobe3D(containerId, worldConfig) {
     loadElevationGrid(pickElevationLevel(terrain.levels), terrain.encoding),
   ]);
 
-  const texture = new THREE.CanvasTexture(prepareGlobeTexture(colorImage, COLOR_GAMMA));
+  // The prepared photo is kept as pixels, not just uploaded and forgotten,
+  // because setSeabedStyle below repaints the seabed from it on demand.
+  const surface = prepareGlobeTexture(colorImage, COLOR_GAMMA);
+  const surfaceContext = surface.getContext("2d", { willReadFrequently: true });
+  const photoPixels = surfaceContext.getImageData(0, 0, surface.width, surface.height);
+  let seabedPixels = null;
+
+  const texture = new THREE.CanvasTexture(surface);
   texture.colorSpace = THREE.SRGBColorSpace;
   // Antimeridian-crossing triangles carry u values just past 1 (see
   // splitSeamVertices) -- they must wrap, not clamp.
@@ -119,6 +126,36 @@ export async function initGlobe3D(containerId, worldConfig) {
   // on what you're looking at.
   function setWaterOpacity(fraction) {
     seaSphere.material.opacity = fraction;
+  }
+
+  // Repaints everything below 0 m in a depth ramp, so draining the water
+  // actually reveals *ground* rather than the blue the satellite photo
+  // painted there. Turning the water off alone was never going to work:
+  // the seabed's blue lives in the photograph, not in the water.
+  //
+  // Only the colour is invented here -- it is a function of GEBCO's real
+  // depth, and the shape and shading stay entirely real. There is no
+  // photograph of the seabed to be faithful to.
+  //
+  // Styles are rebuilt on demand rather than pre-baked and held: three
+  // ready-made 4096x2048 textures would be over 100 MB of image data on a
+  // phone, whereas rebuilding costs a fraction of a second and one spare
+  // buffer. Independent of sea level, so moving that slider never triggers
+  // a repaint -- the sea sphere covers whatever is currently submerged.
+  function setSeabedStyle(styleId) {
+    const stops = SEABED_RAMPS[styleId];
+    if (!stops) {
+      surfaceContext.putImageData(photoPixels, 0, 0);
+      texture.needsUpdate = true;
+      return;
+    }
+    if (!seabedPixels) {
+      seabedPixels = surfaceContext.createImageData(surface.width, surface.height);
+    }
+    seabedPixels.data.set(photoPixels.data);
+    paintSeabed(seabedPixels.data, surface.width, surface.height, elevation, rampLut(stops));
+    surfaceContext.putImageData(seabedPixels, 0, 0);
+    texture.needsUpdate = true;
   }
 
   // The light follows the camera instead of sitting at a fixed point in
@@ -203,11 +240,121 @@ export async function initGlobe3D(containerId, worldConfig) {
     controls.update();
   }
 
-  return { getView, setView, setSeaLevel, setWaterOpacity };
+  return { getView, setView, setSeaLevel, setWaterOpacity, setSeabedStyle };
 }
 
 function radiusForMetres(metres) {
   return 1 + (metres / EARTH_RADIUS_M) * VERTICAL_EXAGGERATION;
+}
+
+// ---------------------------------------------------------------------------
+// Seabed colouring
+// ---------------------------------------------------------------------------
+
+// Colour stops as [depthFraction, [r, g, b]], shallow first. Absent from
+// this table (and so left as the original photograph) is the "photo"
+// option, which is the default and costs nothing at load.
+const SEABED_RAMPS = {
+  brown: [
+    [0, [216, 194, 146]],
+    [0.35, [166, 132, 86]],
+    [1, [74, 52, 32]],
+  ],
+  grey: [
+    [0, [190, 186, 178]],
+    [0.35, [138, 134, 128]],
+    [1, [58, 56, 54]],
+  ],
+  land: [
+    [0, [126, 148, 88]],
+    [0.35, [140, 126, 82]],
+    [1, [92, 72, 50]],
+  ],
+};
+
+// Depth at which a ramp reaches its darkest end. Set to 8000 m rather than
+// the true 10.9 km maximum on purpose: trenches that deep are vanishingly
+// rare, and stretching the ramp to reach them would waste most of its range
+// on depths almost nowhere on Earth, flattening the abyssal plains and
+// continental slopes where nearly all the interesting shape actually is.
+const SEABED_DEEPEST_M = 8000;
+
+function rampLut(stops) {
+  const lut = new Uint8ClampedArray(256 * 3);
+  for (let i = 0; i < 256; i++) {
+    const t = i / 255;
+    let hi = 1;
+    while (hi < stops.length - 1 && stops[hi][0] < t) hi++;
+    const [t0, c0] = stops[hi - 1];
+    const [t1, c1] = stops[hi];
+    const k = t1 === t0 ? 0 : (t - t0) / (t1 - t0);
+    lut[i * 3] = c0[0] + (c1[0] - c0[0]) * k;
+    lut[i * 3 + 1] = c0[1] + (c1[1] - c0[1]) * k;
+    lut[i * 3 + 2] = c0[2] + (c1[2] - c0[2]) * k;
+  }
+  return lut;
+}
+
+// Depth over which the seabed colour fades in from the photograph. Without
+// it the shoreline is a hard step drawn on a ~20 km grid, which reads as
+// obvious staircase blocks once you zoom in; fading it over the shallowest
+// water hides the grid without moving the coastline anywhere.
+const SEABED_FADE_M = 60;
+
+// The colour texture and the elevation grid are both equirectangular with
+// the same orientation (row 0 north, column 0 at -180), so pixels map onto
+// each other by plain index scaling -- no trigonometry, which is what keeps
+// this pass fast enough to run on a button press.
+//
+// Depth is sampled bilinearly rather than nearest-neighbour. The colour
+// texture is finer than the elevation grid, so nearest-neighbour would
+// paint the grid's own cells as visible squares along every drained
+// coastline.
+function paintSeabed(data, width, height, elevation, lut) {
+  const { data: elevationData, width: ew, height: eh, offsetMetres } = elevation;
+  const scale = 255 / SEABED_DEEPEST_M;
+  const xScale = ew / width;
+  const yScale = eh / height;
+
+  for (let y = 0; y < height; y++) {
+    const fy = (y + 0.5) * yScale - 0.5;
+    const y0 = Math.floor(fy);
+    const ty = fy - y0;
+    const rowA = Math.min(eh - 1, Math.max(0, y0)) * ew;
+    const rowB = Math.min(eh - 1, Math.max(0, y0 + 1)) * ew;
+    let out = y * width * 4;
+
+    for (let x = 0; x < width; x++, out += 4) {
+      const fx = (x + 0.5) * xScale - 0.5;
+      const x0 = Math.floor(fx);
+      const tx = fx - x0;
+      // Longitude wraps; latitude does not.
+      const xa = ((x0 % ew) + ew) % ew;
+      const xb = ((x0 + 1) % ew + ew) % ew;
+
+      const a = (rowA + xa) * 4;
+      const b = (rowA + xb) * 4;
+      const c = (rowB + xa) * 4;
+      const d = (rowB + xb) * 4;
+
+      const top =
+        (elevationData[a] * 256 + elevationData[a + 1]) * (1 - tx) +
+        (elevationData[b] * 256 + elevationData[b + 1]) * tx;
+      const bottom =
+        (elevationData[c] * 256 + elevationData[c + 1]) * (1 - tx) +
+        (elevationData[d] * 256 + elevationData[d + 1]) * tx;
+      const metres = top * (1 - ty) + bottom * ty - offsetMetres;
+      if (metres >= 0) continue;
+
+      const depth = -metres;
+      const shade = Math.min(255, (depth * scale) | 0) * 3;
+      const mix = depth >= SEABED_FADE_M ? 1 : depth / SEABED_FADE_M;
+
+      data[out] += (lut[shade] - data[out]) * mix;
+      data[out + 1] += (lut[shade + 1] - data[out + 1]) * mix;
+      data[out + 2] += (lut[shade + 2] - data[out + 2]) * mix;
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------

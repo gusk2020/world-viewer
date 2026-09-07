@@ -39,13 +39,14 @@ async function main() {
     toggleButton.textContent = mode === "3d" ? "2Dに切替" : "3Dに切替";
   }
 
-  // The slider is in real metres now that the terrain carries real GEBCO
-  // elevations: +0 m is today's coastline, and the top of the range is
-  // roughly what melting every ice sheet on Earth would add.
+  // Real metres, now running both ways: +100 m is a little more than
+  // melting every ice sheet on Earth, and -150 m goes past the last ice
+  // age's coastline (about -120 m, which turns the Sunda shelf, the North
+  // Sea and the Bering land bridge into dry land).
   function applySeaLevel() {
     const metres = Number(seaLevelSlider.value);
     globe3d.setSeaLevel(metres);
-    seaLevelReadout.textContent = `+${metres}m`;
+    seaLevelReadout.textContent = metres === 0 ? "±0m" : `${metres > 0 ? "+" : ""}${metres}m`;
   }
   seaLevelSlider.addEventListener("input", applySeaLevel);
   applySeaLevel();
@@ -57,6 +58,17 @@ async function main() {
   }
   waterOpacitySlider.addEventListener("input", applyWaterOpacity);
   applyWaterOpacity();
+
+  // Repainting the seabed takes a fraction of a second, so let the pressed
+  // state paint first -- otherwise the button appears not to respond until
+  // the work is already finished.
+  const seabedButtons = document.querySelectorAll("#seabed-style button");
+  seabedButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      seabedButtons.forEach((other) => other.classList.toggle("selected", other === button));
+      requestAnimationFrame(() => globe3d.setSeabedStyle(button.dataset.style));
+    });
+  });
 
   toggleButton.addEventListener("click", () => {
     if (mode === "3d") {
