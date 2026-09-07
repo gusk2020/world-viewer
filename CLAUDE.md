@@ -324,25 +324,55 @@ and corrected, not a straight first-try success**:
   floor" assumption with a fresh histogram check** (same method) before
   reusing this approach for a future world's elevation data — it might not
   hold.
-- **Maximum rise**: the first version of `SEA_LEVEL_MAX_RISE_HEIGHT` was
-  chosen directly in final radius units (0.025) sized as "a plausible
-  fraction of the total land relief range" — reasonable-sounding, but
-  checked against this data's actual histogram it submerged upwards of 40%
-  of all land, confirmed directly with a screenshot: an entire mid-
-  continent view (Brazil's interior) that should show a clear coastline
-  went entirely blue at max slider. Recalibrated from the histogram
-  directly instead of guessing a plausible-sounding fraction:
-  `SEA_LEVEL_MAX_RISE_HEIGHT = 3/255` submerges only the lowest ~8-11% of
-  land pixels at the slider's maximum — a small, plausible coastal band,
-  confirmed via a fresh screenshot at a known low-lying river delta
-  (Bangladesh/Ganges area) showing a modest, believable advance of the
-  waterline, not a catastrophic flood.
+- **Maximum rise, three attempts, not two**: the first version of
+  `SEA_LEVEL_MAX_RISE_HEIGHT` was chosen directly in final radius units
+  (0.025) sized as "a plausible fraction of the total land relief range"
+  — reasonable-sounding, but checked against this data's actual histogram
+  it submerged upwards of 40% of all land, confirmed directly with a
+  screenshot: an entire mid-continent view (Brazil's interior) that
+  should show a clear coastline went entirely blue at max slider.
+  Recalibrated from the histogram directly instead of guessing a
+  plausible-sounding fraction: `SEA_LEVEL_MAX_RISE_HEIGHT = 3/255`
+  submerged only the lowest ~8-11% of land pixels at the slider's
+  maximum, confirmed via a screenshot at a known low-lying river delta
+  showing a modest, believable advance of the waterline. **This shipped
+  to the user and turned out to be the opposite mistake**: 3/255 scaled
+  by `DISPLACEMENT_SCALE=0.06` is a final radius change of only ~0.0007 —
+  under one screen pixel at any normal zoom, so on the user's actual
+  Pixel 7a the slider produced no visible coastline change at all. They
+  reported "dark shadow-like patches expand and shrink, not a real
+  coastline change." Diffing the user's own before/after screenshots
+  pixel-by-pixel (Pillow `ImageChops.difference`, binned into a coarse
+  grid) confirmed the underlying geometry *was* changing exactly along
+  every coastline in view — the feature wasn't broken, the change was
+  just too thin to read as anything but noise. Recalibrated a second
+  time, deliberately trading data-fidelity for visibility per the user's
+  own standing "分かりやすさ over リアルさ" direction: tried level 30/255
+  first (~10x bigger) and screenshotted a wide South America view as a
+  sanity check — it reproduced the earlier catastrophe's shape, shattering
+  the Amazon basin into scattered islands. Backed off to level 10/255:
+  the same South America view now shows a visible flooded patch in the
+  low-lying interior without fragmenting the continent, and a moderate-
+  zoom coastal view (matching the framing of the user's own screenshots)
+  shows an unmistakable new bay forming. Landed on `10/255` as the
+  current value. This submerges a larger nominal fraction of "land
+  pixels" (~32%) than the original 8-11% target, which is fine — the
+  data's near-sea-level land is heavily front-loaded with low-lying
+  coastal fringe, and a "correctly" calibrated but invisible slider has
+  zero value for the user's actual goal of seeing sea level change
+  happen. **Still needs the user's on-phone confirmation** — this session
+  can only judge "looks reasonable" from its own screenshots, not real
+  visibility on the actual device; re-tune from here (same histogram +
+  screenshot method, plus diffing real user screenshots if it's wrong
+  again) rather than guessing blind.
 - **Honesty caveat carried into the README for the user**: this
   calibration is illustrative, derived from this specific placeholder
   elevation dataset's own statistics — not a precise "N meters of real
-  sea-level rise." Re-derive both constants from a fresh histogram
-  whenever the elevation data is replaced with anything else (a higher-
-  resolution dataset, or 過速世界's real terrain later).
+  sea-level rise," and deliberately erring toward a more visible (and so
+  less strictly "realistic") flood extent after the invisible first
+  attempt. Re-derive both constants from a fresh histogram whenever the
+  elevation data is replaced with anything else (a higher-resolution
+  dataset, or 過速世界's real terrain later).
 
 **Z-fighting checkerboard on the ocean, found and fixed while testing the
 above**: because the true ocean floor (65% of the elevation map, all
@@ -762,6 +792,25 @@ brighter forests) and a known low-lying river delta at slider 0 vs. 100
 (a modest, believable advance of the waterline, not a catastrophic
 flood). Real visual appearance and on-device touch/slider feel still need
 the user's phone, as always.
+
+**The user then reported the sea-level slider had no visible effect** —
+"dark shadow-like patches expand/shrink, not a real coastline change" —
+despite the sandbox's own screenshots looking fine. Since this session
+has no way to reproduce the user's actual device rendering, the
+diagnostic method here shifted to analyzing the user's own screenshots
+directly: they sent two photos (slider at 0 and 100, same view), which
+looked visually identical at a glance. Ran `PIL.ImageChops.difference` on
+the two images and binned the result into a coarse grid to visualize
+where they differed — the diff traced the exact coastline shape visible
+in the photos, confirming the underlying geometry genuinely was changing
+in the right place, just far too subtly (the `3/255` calibration's
+~0.0007 radius delta is under one screen pixel) to read as "water rising"
+rather than noise. This is what led to the third `SEA_LEVEL_MAX_RISE_HEIGHT`
+recalibration documented above (10/255) — re-verified with fresh
+screenshots at both a South America catastrophe-check view and a
+moderate-zoom coastal view matching the user's own framing before
+shipping the new value. **This second attempt also still needs the
+user's on-phone confirmation** before being considered settled.
 
 ## Working conventions
 

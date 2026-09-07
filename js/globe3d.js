@@ -74,13 +74,47 @@ function seaLevelBaseHeightValue(elevationSamples) {
 // upwards of 40% of all land, drowning entire regions with no meaningful
 // elevation to speak of (confirmed directly: a mid-continent camera view
 // that should show a clear coastline became entirely blue at max slider).
-// This value is instead picked directly from the histogram to submerge
-// only the lowest ~8% of land pixels at maximum -- a small, plausible-
-// looking coastal band, not "half of South America." Re-derive from a
-// fresh histogram (Pillow: count pixels at each level, express as a
-// fraction of non-zero/non-ocean pixels) rather than guessing again if
-// this needs retuning or a future world's data is swapped in.
-const SEA_LEVEL_MAX_RISE_HEIGHT = 3 / 255;
+//
+// **Third mistake, found only on the user's real Pixel 7a, not in this
+// sandbox's own screenshots**: the fix for the above (picking a value
+// from the histogram to submerge only the lowest ~8-11% of land pixels)
+// was itself too conservative in the other direction. That level (3/255)
+// scaled by DISPLACEMENT_SCALE=0.06 works out to a final radius change of
+// only ~0.0007 -- well under one screen pixel at any normal zoom level,
+// so the slider had NO visible effect at all. The user reported "dark
+// shadow-like patches expand and shrink, not a real coastline change";
+// diffing their own before/after screenshots pixel-by-pixel confirmed the
+// underlying geometry WAS changing exactly along every coastline (so the
+// feature wasn't broken), it was just far too subtle to read by eye --
+// what looked like vague "shadows" was that same imperceptibly-thin
+// change plus ordinary compression/anti-aliasing noise at the boundary.
+//
+// Recalibrated again, prioritizing visibility over exactly matching a
+// modest real-world-plausible flood fraction (per the user's own
+// standing "分かりやすさ over リアルさ" direction). Tried a much larger
+// jump first (level 30/255, ~10x the invisible value) and screenshotted a
+// wide South America view to sanity-check it -- that one clearly
+// reproduced the earlier catastrophe's shape, if not its exact
+// magnitude: the entire Amazon basin shattered into a scatter of small
+// islands, not a coastline change. Backed off to level 10/255 instead:
+// screenshotted the same South America view and a moderate-zoom coastal
+// view (matching the framing of the user's own screenshots) side by side
+// -- the coastal view now shows an unmistakable new bay/inlet forming
+// (nothing like the previous invisible attempt), while South America's
+// overall continental shape stays recognizable (a visible flooded patch
+// appears in the low-lying Amazon interior, but it doesn't fragment the
+// continent). This still submerges a larger *nominal* fraction of "land
+// pixels" (~32%) than the original "8-11%" target -- per the histogram
+// this data's near-sea-level land is heavily front-loaded (a lot of
+// very-low-lying coastal fringe, not dramatic dry land), and a feature
+// that's calibrated "correctly" but invisible has zero value for the
+// user's actual goal of seeing sea level change happen. Still needs the
+// user's on-phone confirmation (this session cannot verify real-device
+// visibility directly, only screenshot proof of the geometric change and
+// a judgment call on what "looks reasonable" in those screenshots) --
+// re-tune from here (same histogram + screenshot method) based on that
+// feedback rather than guessing blind again.
+const SEA_LEVEL_MAX_RISE_HEIGHT = 10 / 255;
 
 // The 3D globe (V0.1-V0.3 texture-only, V0.4 adds real elevation relief,
 // V0.5 adds a sea-level control), wrapped as a self-contained module so
