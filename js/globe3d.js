@@ -71,6 +71,10 @@ export async function initGlobe3D(containerId, worldConfig) {
   const surfaceContext = surface.getContext("2d", { willReadFrequently: true });
   const photoPixels = surfaceContext.getImageData(0, 0, surface.width, surface.height);
   let seabedPixels = null;
+  // Which pixel gets which ramp colour depends only on the elevation grid
+  // and the photo, never on the chosen style, so it is worked out once and
+  // reused -- switching styles after that is a lookup per pixel.
+  let seabedPlan = null;
 
   const texture = new THREE.CanvasTexture(surface);
   texture.colorSpace = THREE.SRGBColorSpace;
@@ -152,8 +156,11 @@ export async function initGlobe3D(containerId, worldConfig) {
     if (!seabedPixels) {
       seabedPixels = surfaceContext.createImageData(surface.width, surface.height);
     }
+    if (!seabedPlan) {
+      seabedPlan = buildSeabedPlan(photoPixels.data, surface.width, surface.height, elevation);
+    }
     seabedPixels.data.set(photoPixels.data);
-    paintSeabed(seabedPixels.data, surface.width, surface.height, elevation, rampLut(stops));
+    paintSeabed(seabedPixels.data, seabedPlan, rampLut(stops));
     surfaceContext.putImageData(seabedPixels, 0, 0);
     texture.needsUpdate = true;
   }
@@ -295,10 +302,15 @@ function rampLut(stops) {
   return lut;
 }
 
+// Deciding what to repaint, once. The result is one byte per texture
+// pixel: 0 means "leave the photograph alone", anything else is a ramp
+// index plus one. It depends only on the elevation grid and the photo, so
+// it survives every style switch and makes those switches cheap.
+//
 // The colour texture and the elevation grid are both equirectangular with
 // the same orientation (row 0 north, column 0 at -180), so pixels map onto
 // each other by plain index scaling -- no trigonometry, which is what keeps
-// this pass fast enough to run on a button press.
+// this pass fast.
 //
 // Depth is sampled bilinearly rather than nearest-neighbour. The colour
 // texture is finer than the elevation grid, so nearest-neighbour would
@@ -311,8 +323,9 @@ function rampLut(stops) {
 // reproduced and isolated by rendering with and without it). Do not
 // reintroduce a fade toward the photo here: the photo's shallow water is
 // bright cyan, so any blending back toward it paints water onto ground.
-function paintSeabed(data, width, height, elevation, lut) {
+function buildSeabedPlan(photo, width, height, elevation) {
   const { data: elevationData, width: ew, height: eh, offsetMetres } = elevation;
+  const plan = new Uint8Array(width * height);
   const scale = 255 / SEABED_DEEPEST_M;
   const xScale = ew / width;
   const yScale = eh / height;
@@ -323,15 +336,15 @@ function paintSeabed(data, width, height, elevation, lut) {
     const ty = fy - y0;
     const rowA = Math.min(eh - 1, Math.max(0, y0)) * ew;
     const rowB = Math.min(eh - 1, Math.max(0, y0 + 1)) * ew;
-    let out = y * width * 4;
+    let i = y * width;
 
-    for (let x = 0; x < width; x++, out += 4) {
+    for (let x = 0; x < width; x++, i++) {
       const fx = (x + 0.5) * xScale - 0.5;
       const x0 = Math.floor(fx);
       const tx = fx - x0;
       // Longitude wraps; latitude does not.
       const xa = ((x0 % ew) + ew) % ew;
-      const xb = ((x0 + 1) % ew + ew) % ew;
+      const xb = (((x0 + 1) % ew) + ew) % ew;
 
       const a = (rowA + xa) * 4;
       const b = (rowA + xb) * 4;
@@ -347,11 +360,101 @@ function paintSeabed(data, width, height, elevation, lut) {
       const metres = top * (1 - ty) + bottom * ty - offsetMetres;
       if (metres >= 0) continue;
 
-      const shade = Math.min(255, (-metres * scale) | 0) * 3;
-      data[out] = lut[shade];
-      data[out + 1] = lut[shade + 1];
-      data[out + 2] = lut[shade + 2];
+      // Ramp index 0-254 (255 is left free so 0 can mean "not painted";
+      // the two deepest steps differ by well under one RGB unit).
+      plan[i] = 1 + Math.min(254, (-metres * scale) | 0);
     }
+  }
+
+  growSeabedOverWater(plan, photo, width, height);
+  return plan;
+}
+
+// A pixel the elevation grid calls dry but the photograph plainly shows as
+// open water still gets repainted. That is what was left of the blue rim
+// after the fade was removed: GEBCO's 0 m contour and the satellite photo's
+// own coastline disagree by about a pixel, and every disagreement left a
+// speck of leftover sea colour stranded on the drained shore -- clearly
+// visible around Japan, the Indonesian islands and the Baltic in the
+// user's screenshots.
+//
+// Measured rather than assumed. Resampling the paint pass from the finer
+// 4096x2048 elevation level removed only 4% of those specks, so this is a
+// disagreement between two datasets, not a resolution shortfall -- worth
+// knowing, because it also means there is no bigger download that would
+// fix it.
+//
+// Two guards keep this from repainting things that are not sea:
+//   - The water test is a blue *ratio*, not a blue difference. Measured
+//     across the actual texture, open water sits at 0.55-0.76 while snow
+//     and ice sit at 0.00-0.09 and every land cover is negative, so the
+//     0.30 threshold has an enormous margin and leaves the ice caps alone.
+//   - Growth spreads outward from genuinely submerged pixels and stops
+//     after a few steps, so it cleans a shoreline without wandering up
+//     rivers into inland lakes. Unbounded, it drains the Great Lakes
+//     through the St. Lawrence; three steps gets 91% of the specks and
+//     goes nowhere near them.
+const SEABED_RIM_PASSES = 3;
+const WATER_BLUE_RATIO = 0.3;
+
+function growSeabedOverWater(plan, photo, width, height) {
+  const looksLikeWater = (i) => {
+    const p = i * 4;
+    const r = photo[p];
+    const g = photo[p + 1];
+    const b = photo[p + 2];
+    return b > g && b - r > b * WATER_BLUE_RATIO;
+  };
+
+  // Seed with the submerged pixels that actually touch dry ground; the
+  // open ocean's interior has nothing to spread into.
+  let frontier = [];
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = y * width + x;
+      if (!plan[i]) continue;
+      const left = x === 0 ? i + width - 1 : i - 1;
+      const right = x === width - 1 ? i - width + 1 : i + 1;
+      if (
+        !plan[left] ||
+        !plan[right] ||
+        (y > 0 && !plan[i - width]) ||
+        (y < height - 1 && !plan[i + width])
+      ) {
+        frontier.push(i);
+      }
+    }
+  }
+
+  for (let pass = 0; pass < SEABED_RIM_PASSES && frontier.length; pass++) {
+    const next = [];
+    for (const i of frontier) {
+      const x = i % width;
+      const y = (i - x) / width;
+      const neighbours = [
+        x === 0 ? i + width - 1 : i - 1,
+        x === width - 1 ? i - width + 1 : i + 1,
+        y > 0 ? i - width : -1,
+        y < height - 1 ? i + width : -1,
+      ];
+      for (const n of neighbours) {
+        if (n < 0 || plan[n] || !looksLikeWater(n)) continue;
+        plan[n] = 1; // shallowest step: these pixels sit right at 0 m.
+        next.push(n);
+      }
+    }
+    frontier = next;
+  }
+}
+
+function paintSeabed(data, plan, lut) {
+  for (let i = 0, out = 0; i < plan.length; i++, out += 4) {
+    const step = plan[i];
+    if (!step) continue;
+    const shade = (step - 1) * 3;
+    data[out] = lut[shade];
+    data[out + 1] = lut[shade + 1];
+    data[out + 2] = lut[shade + 2];
   }
 }
 

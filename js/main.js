@@ -39,12 +39,24 @@ async function main() {
     toggleButton.textContent = mode === "3d" ? "2Dに切替" : "3Dに切替";
   }
 
-  // Real metres, now running both ways: +100 m is a little more than
-  // melting every ice sheet on Earth, and -150 m goes past the last ice
-  // age's coastline (about -120 m, which turns the Sunda shelf, the North
-  // Sea and the Bering land bridge into dry land).
+  // The slider carries steps, not metres, because the two directions want
+  // very different resolution and an <input type="range"> only has one
+  // step. Up is where the interesting numbers are close together (every
+  // ice sheet on Earth melting is about +65 m), so it runs in 2 m steps to
+  // +200 m. Down spans far more ground -- the last ice age's coastline is
+  // -120 m and the continental shelves give out around -2000 m -- so it
+  // runs in 20 m steps. Both directions get 100 steps, which keeps the
+  // travel either side of centre the same on screen.
+  const SEA_LEVEL_STEP_UP_M = 2;
+  const SEA_LEVEL_STEP_DOWN_M = 20;
+
+  function seaLevelMetres() {
+    const steps = Number(seaLevelSlider.value);
+    return steps * (steps >= 0 ? SEA_LEVEL_STEP_UP_M : SEA_LEVEL_STEP_DOWN_M);
+  }
+
   function applySeaLevel() {
-    const metres = Number(seaLevelSlider.value);
+    const metres = seaLevelMetres();
     globe3d.setSeaLevel(metres);
     seaLevelReadout.textContent = metres === 0 ? "±0m" : `${metres > 0 ? "+" : ""}${metres}m`;
   }

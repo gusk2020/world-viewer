@@ -98,7 +98,7 @@ html, body {
 }
 
 #sea-level-readout {
-  min-width: 3.5em;
+  min-width: 4.6em;
   text-align: right;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;

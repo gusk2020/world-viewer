@@ -674,14 +674,70 @@ for all three ramps switchable rather than one.
   that deep are vanishingly rare; stretching the ramp to reach them wastes
   most of its range on depths almost nowhere on Earth and flattens the
   abyssal plains and continental slopes where the shape actually is.
+- **What was left after the fade came out was a two-dataset disagreement,
+  not a resolution shortfall — and that was measured before anything was
+  built.** The user reported the rim "かなりマシになりました" but still
+  saw scattered blue specks along drained coasts, and asked the obvious
+  question: does this need better or different map data? No. GEBCO's 0 m
+  contour and the satellite photograph's own coastline disagree by about
+  one texture pixel, and each disagreement stranded a speck of leftover
+  sea colour on the drained shore. Repainting from the committed
+  4096×2048 elevation level instead of 2048×1024 removed only **4%** of
+  those specks (118,259 → 113,142 pixels globally), which settles it:
+  doubling the elevation resolution buys nothing here, and the 10.9 MB
+  download it would have cost the phone was not worth spending.
+  `growSeabedOverWater` fixes it instead — a pixel the grid calls dry but
+  the *photograph* plainly shows as open water gets the ramp's shallowest
+  colour. Two guards, both calibrated from the real texture rather than
+  guessed:
+  - **A blue *ratio*, not a blue difference** (`WATER_BLUE_RATIO = 0.3`,
+    `(B−R)/B`). Sampled across the actual image, open water sits at
+    0.55–0.76 and snow/ice at 0.00–0.09, with every land cover negative —
+    an enormous margin, and the reason the ice caps come through
+    untouched. A plain `B−R > 15` test does not separate them: it flags
+    118k pixels of which most are Antarctic and Greenland ice.
+  - **Bounded growth outward from genuinely submerged pixels**
+    (`SEABED_RIM_PASSES = 3`). Unbounded, the flood reaches the Great
+    Lakes through the St. Lawrence and drains them; three steps captures
+    91% of the specks and goes nowhere near them. Note the lakes'
+    *deepest* parts were already painted before this change and still are,
+    because GEBCO genuinely puts Lake Superior's bed below sea level —
+    pre-existing, unrelated, and left alone.
+  Measured in rendered frames at −120 m with the water hidden (blue-
+  dominant pixels): Japan **1.29% → 0.19%**, the Sunda shelf 1.27% →
+  0.17%, Australia 0.43% → 0.11%, Greenland's fjords 1.16% → 0.80%,
+  Antarctica 0.50% → 0.48% (i.e. untouched, as intended), and the Baltic
+  3.46% → 2.42% — the remainder there being Vänern, Ladoga and the Finnish
+  lakes, which are lakes and should stay blue.
+- **The paint pass is now split into a cached plan and a cheap repaint.**
+  Which pixel gets which ramp step depends only on the elevation grid and
+  the photo, never on the chosen colour, so `buildSeabedPlan` works it out
+  once into one byte per texture pixel (0 = leave the photograph alone,
+  otherwise ramp index + 1; the index is clamped to 254 so 0 can mean
+  "unpainted", and the two deepest steps differ by well under one RGB
+  unit). Style switches after the first cost **~60 ms instead of ~215 ms**,
+  measured in-page; the first is ~660 ms because it also allocates the
+  spare buffer and runs the rim passes. This is a pure refactor with no
+  visual effect — it was measured separately from the rim fix on purpose,
+  per the lesson above about two changes sharing one round's credit.
 
-**Sea level runs both ways now** (−150 m to +100 m). `radiusForMetres`
-already handled negatives, so this was a slider range and a readout that
-signs itself. Measured from the committed raster: at −120 m (last glacial
-maximum) land goes from **29.1% to 33.2%** of the globe, exposing the
-Sunda shelf, the North Sea and the Bering land bridge. Note the two
-features are coupled — lowering sea level without a repainted seabed just
-exposes blue photograph, which is why they were built in that order.
+**Sea level runs both ways, on an asymmetric scale** (−2000 m to +200 m).
+`radiusForMetres` already handled negatives, so going below zero was a
+slider range and a readout that signs itself. The scale is the part worth
+knowing: the user asked for 2 m steps upward and 20 m steps downward, and
+an `<input type="range">` has exactly one `step`, so the slider carries
+**steps, not metres** and `seaLevelMetres()` in `main.js` multiplies by
+`SEA_LEVEL_STEP_UP_M` or `SEA_LEVEL_STEP_DOWN_M` depending on the sign.
+100 steps either way keeps the travel on screen symmetric even though the
+ranges are not. The asymmetry matches the subject: upward, every
+interesting number is close together (melting every ice sheet is about
++65 m), while downward the shelves run to −2000 m. Measured from the
+committed raster, land as a fraction of the globe: **40.4% at −2000 m,
+33.3% at −120 m** (the last glacial maximum, exposing the Sunda shelf, the
+North Sea and the Bering land bridge), 29.1% today, 21.0% at +200 m. Note
+the descent and the repainted seabed are coupled — lowering sea level
+without one just exposes blue photograph, which is why they were built in
+that order.
 
 **Water opacity is a user control now** (`setWaterOpacity`, second slider,
 default 40%). There is no single right value — opaque water reads better
@@ -1262,6 +1318,33 @@ the YAML block scalar, and GitHub responds not with a parse error but by
 reporting the workflow "does not have 'workflow_dispatch' trigger", which
 is a thoroughly misleading symptom. `python3 -c "import yaml; yaml.safe_load(...)"`
 on the workflow file diagnoses it in seconds.
+
+For the coastal-speck round, the useful diagnostic ran **outside** the
+browser first: the committed texture and both committed elevation levels
+were loaded straight into Python/Pillow/numpy, and the candidate rules were
+simulated over the whole globe before a line of JS was written. That is
+what established, cheaply, that the finer elevation level removes only 4%
+of the specks (so no bigger download would help), that a blue *ratio*
+separates water from ice with a huge margin while a blue *difference* does
+not, and that an unbounded flood drains the Great Lakes while three steps
+does not. Side-by-side crops of the repainted texture over Japan, the
+Sunda shelf, the Baltic and the Great Lakes were rendered from the same
+script and inspected directly. Only then did the rule go into
+`globe3d.js`, where Playwright confirmed the same result in real rendered
+frames by A/B-ing `SEABED_RIM_PASSES` between 0 and 3 in one browser run
+(numbers above). Worth reusing: anything that is a pure function of
+committed raster data can be settled in seconds offline, and the browser
+run then only has to confirm the port.
+
+Also re-verified in the same run, since the paint pass and the sea-level
+slider both changed: the cube-sphere still comes out at 393,730 vertices /
+780,300 triangles with **no inside-out normals and no vertex within 0.0138
+radius units of either pole**; the slider's step→metre mapping and its
+readout are exact at every extreme (−100 → −2000 m, −6 → −120 m, 0 → ±0 m,
++1 → +2 m, +100 → +200 m) and the sea sphere's scale tracks it
+(0.990582 at −2000 m, 1.000942 at +200 m); the ice caps are visually
+unchanged by the rim pass at both Greenland and the south pole; and there
+are no console errors beyond the test server's own favicon 404.
 
 ## Working conventions
 
