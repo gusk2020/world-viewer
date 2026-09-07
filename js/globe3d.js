@@ -25,18 +25,88 @@ const SPHERE_HEIGHT_SEGMENTS = 64;
 const DISPLACEMENT_SCALE = 0.06;
 const DISPLACEMENT_BIAS = -0.02;
 
-// The 3D globe (V0.1-V0.3 texture-only, V0.4 adds real elevation relief),
-// wrapped as a self-contained module so V0.3's toggle can read/set its
-// current view -- see getView()/setView() below and js/geoConvert.js for
-// the lng/lat and zoom conversion this relies on.
+// The color texture's forests/dark terrain measured very dark in the raw
+// source image itself (RGB ~30-60/255 for rainforest, vs ~240/255 for
+// desert) -- confirmed this is baked into the texture, not a lighting
+// artifact, by sampling the raw image data directly. A uniform brightness
+// multiplier would have to blow out already-bright areas (deserts, ice,
+// clouds) to lift those dark greens to a readable level. A gamma curve
+// lifts shadows much more than highlights (anchored at black=black,
+// white=white), so it targets exactly this without washing out the rest
+// of the map -- prioritizing legibility over a literal rendering of the
+// source photo, per explicit user direction ("リアルさより分かりやすさ").
+const COLOR_GAMMA = 0.6;
+
+// The sea-level baseline is the elevation map's own minimum pixel value,
+// not a guessed threshold. **First attempt at this got the flooding wildly
+// wrong and is worth recording**: originally picked the height-value
+// percentile matching Earth's real ~71% ocean-area fraction, assuming a
+// roughly continuous elevation surface. Actually inspecting this specific
+// bump map's histogram (Pillow, counted every pixel) showed that's the
+// wrong model for this data: 65% of ALL pixels are *exactly* 0 (ocean
+// encoded as a flat, uniform floor -- no bathymetric variation baked in),
+// and land elevation rises very steeply even from tiny values (just
+// pixel-value 1, barely above the ocean floor, already covers 5% of all
+// *land* pixels; value 3 covers 11%). The 71st-percentile approach landed
+// almost exactly on the ocean floor anyway by coincidence, but a
+// completely different (and much larger, catastrophically wrong -- see
+// below) rise amount had been chosen assuming a gentler, continuous
+// slope. Taking the data's actual minimum directly is simpler and matches
+// what the source data really encodes; **verify this assumption again
+// with a histogram check** (same method) if a future world's elevation
+// data doesn't turn out to have this same "flat ocean floor" property.
+function seaLevelBaseHeightValue(elevationSamples) {
+  const { data } = elevationSamples;
+  let min = 255;
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i] < min) min = data[i];
+  }
+  return min / 255;
+}
+
+// How far (in the same 0-1 height-value units the elevation map itself
+// uses, then scaled by DISPLACEMENT_SCALE like everything else) the sea
+// surface can rise above its baseline at the slider's maximum. **Second
+// mistake, also worth recording**: an earlier version of this constant
+// (0.025) was specified directly in final *radius* units and sized as "a
+// fraction of the total land relief range" -- reasonable-sounding, but
+// against this data's actual histogram (see above) that rise submerged
+// upwards of 40% of all land, drowning entire regions with no meaningful
+// elevation to speak of (confirmed directly: a mid-continent camera view
+// that should show a clear coastline became entirely blue at max slider).
+// This value is instead picked directly from the histogram to submerge
+// only the lowest ~8% of land pixels at maximum -- a small, plausible-
+// looking coastal band, not "half of South America." Re-derive from a
+// fresh histogram (Pillow: count pixels at each level, express as a
+// fraction of non-zero/non-ocean pixels) rather than guessing again if
+// this needs retuning or a future world's data is swapped in.
+const SEA_LEVEL_MAX_RISE_HEIGHT = 3 / 255;
+
+// The 3D globe (V0.1-V0.3 texture-only, V0.4 adds real elevation relief,
+// V0.5 adds a sea-level control), wrapped as a self-contained module so
+// V0.3's toggle can read/set its current view -- see getView()/setView()
+// below and js/geoConvert.js for the lng/lat and zoom conversion this
+// relies on.
 export async function initGlobe3D(containerId, textureUrl, elevationMapUrl) {
   const scene = new THREE.Scene();
 
+  // Tried tightening the far plane from V0.1-V0.3's 100 down to 20 (still
+  // comfortably beyond MAX_DISTANCE=8) while chasing the ocean z-fighting
+  // checkerboard below -- it did NOT fix that (confirmed: the artifact was
+  // identical before/after). See OCEAN_FLOOR_EXTRA_DIP near
+  // applyElevation() for what actually fixed it. Also tried tightening
+  // the near plane to 0.5 at the same time, which broke something else:
+  // at MIN_DISTANCE=1.3 the camera can sit only ~0.26 units from the
+  // nearest terrain point (a mountain peak at up to radius ~1.04), which
+  // is *closer than* a 0.5 near plane -- the globe's near-facing surface
+  // was silently clipped away entirely, rendering solid black at close
+  // zoom (caught via a screenshot regression, not by eye). Kept near at
+  // V0.1-V0.3's original 0.1, comfortably below that ~0.26 minimum gap.
   const camera = new THREE.PerspectiveCamera(
     50,
     window.innerWidth / window.innerHeight,
     0.1,
-    100
+    20
   );
   camera.position.set(0, 0, 3);
 
@@ -45,14 +115,23 @@ export async function initGlobe3D(containerId, textureUrl, elevationMapUrl) {
   renderer.setSize(window.innerWidth, window.innerHeight);
   document.getElementById(containerId).appendChild(renderer.domElement);
 
-  const [texture, elevationSamples] = await Promise.all([
-    new THREE.TextureLoader().loadAsync(textureUrl),
+  const [colorImage, elevationSamples] = await Promise.all([
+    loadImage(textureUrl),
     loadElevationSamples(elevationMapUrl),
   ]);
+
+  const texture = new THREE.CanvasTexture(applyGammaCorrection(colorImage, COLOR_GAMMA));
   texture.colorSpace = THREE.SRGBColorSpace;
 
+  // Computed once, up front: needed both by applyElevation() below (to
+  // dip true ocean-floor vertices a hair below this baseline, avoiding a
+  // z-fighting exact-tie with the sea sphere -- see OCEAN_FLOOR_EXTRA_DIP)
+  // and by the sea sphere's own baseline radius just below. Deriving it
+  // twice would risk the two ever going out of sync.
+  const seaLevelBaseHeight = seaLevelBaseHeightValue(elevationSamples);
+
   const geometry = new THREE.SphereGeometry(1, SPHERE_WIDTH_SEGMENTS, SPHERE_HEIGHT_SEGMENTS);
-  applyElevation(geometry, elevationSamples);
+  applyElevation(geometry, elevationSamples, seaLevelBaseHeight);
 
   // MeshLambertMaterial (diffuse-only lighting, no PBR overhead): terrain
   // relief is only visible through shading, so V0.4 adds real lights
@@ -60,6 +139,42 @@ export async function initGlobe3D(containerId, textureUrl, elevationMapUrl) {
   // geometry variation for a light to reveal yet.
   const globe = new THREE.Mesh(geometry, new THREE.MeshLambertMaterial({ map: texture }));
   scene.add(globe);
+
+  // V0.5: a separate sea-surface sphere, per the user's explicit design
+  // direction (see "Future sea-level design" in CLAUDE.md) -- land relief
+  // and sea level are two independent objects so raising sea level is
+  // just resizing this sphere, never touching the land geometry above.
+  const seaLevelBaseRadius = 1 + seaLevelBaseHeight * DISPLACEMENT_SCALE + DISPLACEMENT_BIAS;
+  const seaSphere = new THREE.Mesh(
+    new THREE.SphereGeometry(seaLevelBaseRadius, 64, 32),
+    new THREE.MeshLambertMaterial({
+      color: 0x2f6fa8,
+      transparent: true,
+      opacity: 0.6,
+      depthWrite: false,
+      // The real fix for the ocean-floor z-fighting checkerboard is
+      // geometric now (OCEAN_FLOOR_EXTRA_DIP, near applyElevation() below)
+      // -- this polygonOffset is kept only as a cheap secondary safety net
+      // for near-miss cases the exact-tie dip doesn't cover (e.g. a pole
+      // row's averaged height landing very close to, but not exactly at,
+      // the sea level baseline). A small value is enough for that; it does
+      // NOT need to be large enough to fix the checkerboard by itself
+      // (that was tried and rejected -- see the comment above
+      // OCEAN_FLOOR_EXTRA_DIP for why a polygon-offset-only fix doesn't
+      // work here).
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1,
+    })
+  );
+  scene.add(seaSphere);
+
+  function setSeaLevel(fraction) {
+    const heightValue = seaLevelBaseHeight + fraction * SEA_LEVEL_MAX_RISE_HEIGHT;
+    const radius = 1 + heightValue * DISPLACEMENT_SCALE + DISPLACEMENT_BIAS;
+    seaSphere.scale.setScalar(radius / seaLevelBaseRadius);
+  }
+  setSeaLevel(0);
 
   // Fixed "sun" direction (not attached to the camera, so it lights a
   // consistent hemisphere of the globe regardless of how the camera
@@ -116,7 +231,47 @@ export async function initGlobe3D(containerId, textureUrl, elevationMapUrl) {
     controls.update();
   }
 
-  return { getView, setView };
+  return { getView, setView, setSeaLevel };
+}
+
+function loadImage(url) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.crossOrigin = "anonymous";
+    image.onload = () => resolve(image);
+    image.onerror = reject;
+    image.src = url;
+  });
+}
+
+// Lifts shadows (dark forests etc.) much more than highlights (deserts,
+// ice, clouds) via a gamma curve, using a 256-entry lookup table instead
+// of recomputing Math.pow per pixel (this runs once per pixel of a
+// 2048x1024 image at load time, not per frame). See COLOR_GAMMA above for
+// why a plain brightness multiplier wasn't the right tool here.
+function applyGammaCorrection(image, gamma) {
+  const canvas = document.createElement("canvas");
+  canvas.width = image.width;
+  canvas.height = image.height;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(image, 0, 0);
+
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const data = imageData.data;
+
+  const lut = new Uint8ClampedArray(256);
+  for (let level = 0; level < 256; level++) {
+    lut[level] = Math.round(255 * Math.pow(level / 255, gamma));
+  }
+
+  for (let i = 0; i < data.length; i += 4) {
+    data[i] = lut[data[i]];
+    data[i + 1] = lut[data[i + 1]];
+    data[i + 2] = lut[data[i + 2]];
+  }
+
+  ctx.putImageData(imageData, 0, 0);
+  return canvas;
 }
 
 // Reads a grayscale equirectangular elevation image into plain pixel data
@@ -126,8 +281,7 @@ export async function initGlobe3D(containerId, textureUrl, elevationMapUrl) {
 // things like V0.5's land-vs-sea-level comparison later -- a shader-only
 // displacement wouldn't expose real geometry to read back.
 async function loadElevationSamples(url) {
-  const texture = await new THREE.TextureLoader().loadAsync(url);
-  const image = texture.image;
+  const image = await loadImage(url);
   const canvas = document.createElement("canvas");
   canvas.width = image.width;
   canvas.height = image.height;
@@ -196,7 +350,45 @@ const POLE_UV_EPSILON = 1e-4;
 // tight directly on a pole; a real fix would mean mipmapping/anisotropic
 // filtering tuning or a higher-resolution color texture, not an
 // elevation-side change.
-function applyElevation(geometry, elevationSamples) {
+// V0.5 gotcha, found only after actually adding the sea sphere and
+// looking at a rendered screenshot: the true open ocean (65% of this
+// elevation map's pixels, confirmed by histogram -- see
+// seaLevelBaseHeightValue() above) all sit at *exactly* the same height
+// value, which places the land mesh at the *exact same radius* as the sea
+// sphere's own baseline over most of the visible ocean -- not merely
+// close, genuinely tied. Two opaque-ish surfaces at an exact tie is a
+// textbook z-fighting setup: the renderer alternates which one wins per
+// triangle, producing a checkerboard/diamond flicker across the whole
+// ocean (confirmed directly with screenshots, and confirmed it wasn't a
+// transparency/blending artifact by testing with the sea material forced
+// fully opaque -- same pattern either way). Tried fixing it purely as a
+// rendering trick (`polygonOffset` on the sea material) first: too small
+// a value did nothing, a large enough value to clear the ocean also
+// started incorrectly hiding real dry land behind the sea sphere
+// (confirmed with a screenshot showing blotchy fake "flooding" of
+// interior South America that didn't correspond to any real elevation
+// threshold). The actual fix is geometric, not a rendering hack: nudge
+// true ocean-floor vertices a small real amount *below* the sea sphere's
+// baseline, so they're no longer tied. A small `polygonOffset` is kept
+// too, as a cheap safety net for any near-miss cases this doesn't cover
+// (e.g. the pole rows' *averaged* height happening to land very close to
+// the same baseline without being an exact tie).
+//
+// The magnitude was found empirically, not guessed once and assumed
+// correct: 0.001 was tried first and screenshotted -- the checkerboard was
+// still clearly visible, just as bad as with no dip at all. Tested a
+// range up to 0.01 and screenshotted each; 0.003 was the smallest value
+// that came back completely clean (smooth ocean, no flicker), and 0.01
+// looked identical (no land-encroachment risk here even at a larger
+// value, unlike the polygonOffset attempts above -- this dip only ever
+// touches vertices already confirmed to be true ocean floor, never a
+// coastal/land vertex, so there's nothing nearby for a bigger number to
+// accidentally eat). Picked 0.003 for a comfortable margin without going
+// further than needed. Re-verify with fresh screenshots (same method) if
+// this needs revisiting.
+const OCEAN_FLOOR_EXTRA_DIP = 0.003;
+
+function applyElevation(geometry, elevationSamples, seaLevelBaseHeight) {
   const posAttr = geometry.attributes.position;
   const uvAttr = geometry.attributes.uv;
   const northPoleHeight = averageRowHeight(elevationSamples, 0);
@@ -217,7 +409,10 @@ function applyElevation(geometry, elevationSamples) {
     }
 
     vertex.fromBufferAttribute(posAttr, i).normalize();
-    const radiusScale = 1 + heightValue * DISPLACEMENT_SCALE + DISPLACEMENT_BIAS;
+    let radiusScale = 1 + heightValue * DISPLACEMENT_SCALE + DISPLACEMENT_BIAS;
+    if (heightValue <= seaLevelBaseHeight) {
+      radiusScale -= OCEAN_FLOOR_EXTRA_DIP;
+    }
     vertex.multiplyScalar(radiusScale);
     posAttr.setXYZ(i, vertex.x, vertex.y, vertex.z);
   }

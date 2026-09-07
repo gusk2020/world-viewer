@@ -22,14 +22,23 @@ async function main() {
   const appEl = document.getElementById("app");
   const map2dEl = document.getElementById("map2d");
   const toggleButton = document.getElementById("view-toggle");
+  const seaLevelControl = document.getElementById("sea-level-control");
+  const seaLevelSlider = document.getElementById("sea-level-slider");
 
   let mode = "3d";
 
   function applyMode() {
     appEl.hidden = mode !== "3d";
     map2dEl.hidden = mode !== "2d";
+    // V0.5's sea-level control only applies to the 3D view -- the 2D map
+    // has no sea-level concept yet.
+    seaLevelControl.hidden = mode !== "3d";
     toggleButton.textContent = mode === "3d" ? "2Dに切替" : "3Dに切替";
   }
+
+  seaLevelSlider.addEventListener("input", () => {
+    globe3d.setSeaLevel(Number(seaLevelSlider.value) / 100);
+  });
 
   toggleButton.addEventListener("click", () => {
     if (mode === "3d") {

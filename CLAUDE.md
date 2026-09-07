@@ -42,14 +42,21 @@ continue.
 - **V0.3 (done, user confirmed to continue)**: add a 3D/2D toggle button,
   preserving view position/zoom across the switch as closely as
   practical.
-- **V0.4 (current)**: add real global elevation data, giving the 3D globe
-  actual terrain relief (not just a flat textured sphere).
-- **V0.5**: add a sea-level-height control — see "Future sea-level
-  design" below for the land/ocean split this implies.
+- **V0.4 (done, user confirmed to continue)**: add real global elevation
+  data, giving the 3D globe actual terrain relief (not just a flat
+  textured sphere). First pass came back "too dark to read the relief
+  clearly" — fixed via measured lighting brightness (see "V0.4: real
+  elevation" below) before the user signed off.
+- **V0.5 (current, awaiting Pixel 7a confirmation)**: add a
+  sea-level-height control — see "Future sea-level design" below for the
+  land/ocean split this implies. Bundled together with a forest-brightness
+  fix at the user's explicit request ("森をもう少し明るくしてください...
+  これは次の機能追加とまとめて行ってください") — see "V0.5: forest
+  brightness (gamma correction)" and "V0.5: sea-level control" below.
 - **V0.6+**: cities, borders/territories, historical eras, and other
   過速世界-specific data.
 
-Nothing from V0.5 onward is implemented yet. Do not add pieces of them
+Nothing from V0.6 onward is implemented yet. Do not add pieces of them
 now "while already in the file."
 
 ## Architecture (Three.js for 3D, OpenLayers for 2D, one page, toggle button)
@@ -259,6 +266,143 @@ here — deliberately not going anywhere near a tiled elevation service.
   over exact zoom preservation here, consistent with zoom already being
   documented as approximate, not exact.
 
+### V0.5: forest brightness (gamma correction)
+
+User feedback on V0.4's lit globe (after the lighting-intensity fix
+above): "森をもう少し明るくしてください。リアルさより分かりやすさを重視
+します" (brighten the forests a bit; prioritize clarity over realism).
+Measured the actual problem before picking a fix, same as the lighting
+darkness fix: sampled raw texture RGB at known forest coordinates (Amazon
+~(44,46,61), Congo ~(31,34,51)) vs. a known desert coordinate (~(238,215,
+163)) — confirmed the darkness is baked into the source texture's own
+pixel data, not a lighting artifact on top of it. A uniform brightness
+multiplier would have to blow out the already-bright areas (desert, ice,
+clouds) to lift those dark greens to a readable level. Fixed instead with
+a gamma curve (`COLOR_GAMMA = 0.6` in `js/globe3d.js`, applied via
+`applyGammaCorrection()`): `output = 255 * (input/255)^gamma`, computed
+through a 256-entry lookup table (cheap — this runs once per texture pixel
+at load time, not per frame) and applied to the texture via canvas
+`getImageData`/`putImageData` before it's uploaded as a `THREE.
+CanvasTexture`. A gamma curve below 1 lifts shadows much more than
+highlights while keeping black anchored at black and white at white — it
+targets exactly the dark-forest problem without washing out the rest of
+the map. Verified directly: re-measured the same coordinates after the
+fix — Amazon → (89,91,108) (~2x brighter), desert → (245,230,195) (barely
+moved). This is a deliberate clarity-over-realism display choice, same as
+V0.4's elevation exaggeration and per the user's own explicit direction
+this time, not an attempt to reproduce the source photo faithfully.
+
+### V0.5: sea-level control
+
+A slider (`#sea-level-control` in `index.html`, wired up in `js/main.js`,
+only shown in 3D mode — the 2D map has no sea-level concept yet) that
+calls `globe3d.setSeaLevel(fraction)` (0-1) on input. Implements the
+land/ocean split from "Future sea-level design" below: a separate,
+semi-transparent sea sphere (`THREE.MeshLambertMaterial`, blue, opacity
+0.6) sits independently of the land terrain mesh — raising sea level only
+resizes this sphere via `scale.setScalar()`, never touches or re-bakes the
+land geometry.
+
+**Calibrating the baseline and the slider's range — two real mistakes made
+and corrected, not a straight first-try success**:
+
+- **Baseline height**: initially assumed the elevation map's height values
+  form a roughly continuous surface, so the sea-level baseline was picked
+  as the histogram percentile matching Earth's real ~71% ocean-area
+  fraction (`OCEAN_AREA_FRACTION = 0.71`). Actually inspecting this
+  specific bump map's histogram (Python/Pillow, counted every pixel) showed
+  that's the wrong model for this data: **65% of all pixels are exactly
+  0** — the ocean is encoded as a flat, uniform floor with no bathymetric
+  variation at all, not a continuous slope down from the coast. Land
+  elevation also rises very steeply from that floor (pixel value 1 alone
+  already covers 5% of all *land* pixels; value 3 covers 11%). The
+  71st-percentile approach happened to land almost exactly on the ocean
+  floor anyway, by coincidence — but the fix was simplified to match what
+  the data actually encodes: the baseline is just the data's true minimum
+  pixel value (`seaLevelBaseHeightValue()` in `js/globe3d.js`, a plain
+  min-scan), no percentile math needed. **Re-verify this "flat ocean
+  floor" assumption with a fresh histogram check** (same method) before
+  reusing this approach for a future world's elevation data — it might not
+  hold.
+- **Maximum rise**: the first version of `SEA_LEVEL_MAX_RISE_HEIGHT` was
+  chosen directly in final radius units (0.025) sized as "a plausible
+  fraction of the total land relief range" — reasonable-sounding, but
+  checked against this data's actual histogram it submerged upwards of 40%
+  of all land, confirmed directly with a screenshot: an entire mid-
+  continent view (Brazil's interior) that should show a clear coastline
+  went entirely blue at max slider. Recalibrated from the histogram
+  directly instead of guessing a plausible-sounding fraction:
+  `SEA_LEVEL_MAX_RISE_HEIGHT = 3/255` submerges only the lowest ~8-11% of
+  land pixels at the slider's maximum — a small, plausible coastal band,
+  confirmed via a fresh screenshot at a known low-lying river delta
+  (Bangladesh/Ganges area) showing a modest, believable advance of the
+  waterline, not a catastrophic flood.
+- **Honesty caveat carried into the README for the user**: this
+  calibration is illustrative, derived from this specific placeholder
+  elevation dataset's own statistics — not a precise "N meters of real
+  sea-level rise." Re-derive both constants from a fresh histogram
+  whenever the elevation data is replaced with anything else (a higher-
+  resolution dataset, or 過速世界's real terrain later).
+
+**Z-fighting checkerboard on the ocean, found and fixed while testing the
+above**: because the true ocean floor (65% of the elevation map, all
+exactly the baseline value) sits at the *exact same radius* as the sea
+sphere's own baseline, this is a textbook exact depth-tie — the renderer
+alternates which of the two coincident surfaces wins the depth test per
+triangle, producing a flickering checkerboard/diamond pattern across the
+whole ocean (confirmed with screenshots; also confirmed with the sea
+material forced fully opaque that it's genuine z-fighting, not a
+transparency/blending artifact). Tried and rejected purely as a rendering
+trick first: `polygonOffset` on the sea material alone. A small value
+(-1) did nothing visible; a large enough value to clear the checkerboard
+(-8) also started incorrectly hiding real dry land behind the sea sphere
+(confirmed with a screenshot showing blotchy fake "flooding" of interior
+South America with no relation to any real elevation threshold) — a
+polygon offset nudges the *entire* sea sphere's depth values uniformly, so
+a value big enough to win the exact-tie battle over open ocean also wins
+against nearby coastal land that isn't actually submerged. Also tried
+tightening the camera's near/far planes, on the theory that a needlessly
+wide depth range was starving precision where it mattered — measured no
+effect at all on the checkerboard (confirmed via an unchanged screenshot
+before/after), and see the camera-frustum gotcha below for a real
+regression this introduced. The actual fix is geometric, not a rendering
+hack: `applyElevation()` now takes the sea-level baseline height as a
+parameter and subtracts a small real amount (`OCEAN_FLOOR_EXTRA_DIP`) from
+any vertex whose elevation is at or below that baseline, genuinely
+separating true ocean-floor geometry from the sea sphere rather than
+relying on depth-buffer trickery. This only ever touches vertices already
+confirmed to be true ocean floor, never a coastal/land vertex, so — unlike
+`polygonOffset` — there's no land nearby for it to accidentally eat even
+at a larger magnitude. The magnitude itself was found empirically:
+0.001 was tried first and screenshotted — checkerboard still fully
+visible, no better than no dip at all. Tested a range up to 0.01,
+screenshotting each; 0.003 was the smallest value that came back
+completely clean, and larger values looked identical (no land-encroachment
+downside to erring larger, given the above). A small `polygonOffset`
+(-1/-1) is kept on the sea material as a cheap secondary safety net for
+near-miss cases the exact-tie dip doesn't cover (e.g. a pole ring's
+*averaged* height landing very close to, but not exactly at, the
+baseline) — it no longer needs to be large enough to fix the checkerboard
+by itself.
+
+**A real regression caught by the test suite, not by eye, while chasing
+the above**: tightening the camera's near plane from V0.1-V0.4's `0.1` to
+`0.5` (as part of the near/far tightening attempt above) broke close-up
+zoom entirely — at `MIN_DISTANCE = 1.3`, the camera can sit as little as
+~0.26 units from the nearest terrain point (a mountain peak reaching
+radius ~1.04), which is *closer than* a 0.5 near plane, so the globe's
+entire near-facing surface was silently clipped away, rendering solid
+black. Caught via a screenshot at a close zoom level that came back
+completely black instead of showing the expected close-up terrain — not
+something that would have been obvious from the wide default view alone,
+which still rendered fine. Reverted the near plane to the original `0.1`
+(comfortably below that ~0.26 minimum gap); kept the far-plane tightening
+(100 → 20) since it's harmless and still comfortably beyond
+`MAX_DISTANCE = 8`. **Lesson for future camera-frustum tuning**: always
+re-test at both the widest *and* closest zoom levels the app allows, not
+just the default view — a near/far change that looks fine by default can
+silently break only at one extreme of the zoom range.
+
 ### The OpenLayers 2D map
 
 Lives in `js/map2d.js` (`initMap2D(targetId)`, exporting `getView()`/
@@ -407,15 +551,19 @@ data, city/border data, etc.) should land in this same per-world config
 as it's actually implemented — don't add fields speculatively ahead of
 the version that uses them.
 
-## Future sea-level design (V0.5, not yet implemented)
+## Future sea-level design (V0.5, implemented — see "V0.5: sea-level
+control" above)
 
 Per the user's explicit direction: model **land terrain** and **the ocean
 surface** as two separate objects (e.g. two separate meshes/spheres, land
 relief on one and a simple sea-level sphere on the other) rather than one
 combined terrain+water surface, so that raising "sea level" is just moving
 or resizing the ocean sphere relative to the fixed land terrain — not
-re-baking terrain data. This is a design note for V0.4/V0.5, not a
-decision to act on now; V0.1 has no terrain or ocean concept yet.
+re-baking terrain data. This was the original design note (written back in
+V0.1, before there was any terrain or ocean concept yet) and V0.5 followed
+it as specified: `js/globe3d.js`'s land mesh and sea sphere are two
+independent `THREE.Mesh` objects, and `setSeaLevel()` only ever touches the
+sea sphere's `scale`, never the land geometry's vertex positions.
 
 ## Architecture history: MapLibre GL JS + CesiumJS (retired)
 
@@ -585,6 +733,35 @@ picking the pair (3.0/2.0) that landed brighter than the unlit baseline.
 Re-ran the full V0.4 verification suite (pole coincidence, elevation
 sanity, scene contents, toggle regression) after the intensity change to
 confirm nothing else broke — all passed unchanged.
+
+For V0.5 (forest brightness + sea-level control, bundled together per the
+user's own request): same vendor-locally-and-drive-with-Playwright method.
+Verified: the gamma-corrected texture's forest/desert pixel colors match
+the measured before/after values quoted above; the sea-level baseline
+radius falls in the expected land-radius range and the sea sphere's scale
+actually changes in response to the slider; the sea-level control's
+`hidden` attribute correctly tracks 2D/3D mode; the pole-coincidence
+regression (zero spread across every north/south ring vertex) still holds
+after the elevation-function signature change. Caught two real bugs this
+way, neither visible from reading the code alone:
+1. A wiring bug where `applyElevation()` was called before
+   `seaLevelBaseHeight` was computed, silently passing `undefined` and
+   making the new ocean-floor-dip logic a no-op — caught by tracing the
+   actual call order, not by a screenshot (the earlier polygonOffset-only
+   safety net masked it just enough that nothing looked obviously broken).
+2. The near-plane-clipping regression described above (solid black at
+   close zoom) — caught only because the test suite explicitly
+   screenshots a close-zoom view, not just the default one.
+Took a binary-search series of screenshots (`polygonOffset` at -1/-4/-8,
+an opaque-vs-transparent comparison, `OCEAN_FLOOR_EXTRA_DIP` at
+0.001/0.003/0.006/0.01) to find the z-fighting fix and its calibrated
+magnitude empirically rather than guessing once — see "V0.5: sea-level
+control" above for what each attempt showed. Final visual confirmation:
+screenshots of a wide coastal view (clean ocean, no checkerboard, visibly
+brighter forests) and a known low-lying river delta at slider 0 vs. 100
+(a modest, believable advance of the waterline, not a catastrophic
+flood). Real visual appearance and on-device touch/slider feel still need
+the user's phone, as always.
 
 ## Working conventions
 
