@@ -8,55 +8,47 @@ name: GEBCO probe (diagnostic)
 on:
   workflow_dispatch:
 
+env:
+  ICE_DIR: https://dap.ceda.ac.uk/bodc/gebco/global/gebco_2026/ice_surface_elevation/
+
 jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Runner disk space
-        run: |
-          df -h / /mnt 2>/dev/null || df -h
-          echo "---- free space after a typical cleanup would be larger ----"
-
-      - name: CEDA directory listing for gebco_2026
+      - name: List the ice_surface_elevation directory
         run: |
           set +e
-          for u in \
-            "https://dap.ceda.ac.uk/bodc/gebco/global/gebco_2026/" \
-            "https://data.ceda.ac.uk/bodc/gebco/global/gebco_2026" ; do
-            echo "===== GET $u"
-            curl -sS -L --max-time 60 "$u" | head -c 4000
-            echo
-            echo "===== (status $?)"
-          done
+          echo "===== raw listing"
+          curl -sS -L --max-time 60 "$ICE_DIR" | sed -e 's/<[^>]*>//g' | sed '/^\s*$/d'
 
-      - name: HEAD candidate bulk-download URLs
+      - name: THREDDS catalog for the same directory
         run: |
           set +e
-          for u in \
-            "https://www.bodc.ac.uk/data/open_download/gebco/gebco_2026/zip/" \
-            "https://www.bodc.ac.uk/data/open_download/gebco/gebco_2026/geotiff/" \
-            "https://www.bodc.ac.uk/data/open_download/gebco/gebco_2026_sub_ice_topo/zip/" \
-            "https://www.bodc.ac.uk/data/open_download/gebco/gebco_2025/zip/" \
-            "https://www.bodc.ac.uk/data/open_download/gebco/gebco_2024/zip/" ; do
+          curl -sS -L --max-time 60 \
+            "https://dap.ceda.ac.uk/thredds/catalog/bodc/gebco/global/gebco_2026/ice_surface_elevation/catalog.html" \
+            | sed -e 's/<[^>]*>//g' | sed '/^\s*$/d' | head -40
+
+      - name: HEAD every file found, and measure download throughput
+        run: |
+          set +e
+          # Pull hrefs out of the nginx autoindex, skipping the parent link.
+          files=$(curl -sS -L --max-time 60 "$ICE_DIR" \
+                  | grep -o 'href="[^"]*"' | cut -d'"' -f2 | grep -v '^\.\./$')
+          echo "discovered: $files"
+          for f in $files; do
+            u="${ICE_DIR}${f}"
             echo "===== HEAD $u"
-            curl -sS -I -L --max-time 60 "$u" | egrep -i 'HTTP/|content-length|content-type|content-disposition|accept-ranges'
-            echo
+            curl -sS -I -L --max-time 60 "$u" | egrep -i 'HTTP/|content-length|accept-ranges|content-type'
           done
 
-      - name: Probe OPeNDAP endpoints (server-side subsetting)
-        run: |
-          set +e
-          for base in \
-            "https://dap.ceda.ac.uk/thredds/dodsC/bodc/gebco/global/gebco_2026/GEBCO_2026.nc" \
-            "https://dap.ceda.ac.uk/thredds/dodsC/bodc/gebco/global/gebco_2026/gebco_2026.nc" ; do
-            for suffix in ".dds" ".das"; do
-              echo "===== GET ${base}${suffix}"
-              curl -sS -L --max-time 60 "${base}${suffix}" | head -c 1500
-              echo
-            done
-          done
-          echo "===== THREDDS catalog"
-          curl -sS -L --max-time 60 "https://dap.ceda.ac.uk/thredds/catalog/bodc/gebco/global/gebco_2026/catalog.html" | head -c 3000
+          # Throughput on the first .nc found -- tells us whether pulling the
+          # whole grid in CI is practical, versus needing server-side subsetting.
+          nc=$(echo "$files" | tr ' ' '\n' | grep -i '\.nc$' | head -1)
+          if [ -n "$nc" ]; then
+            echo "===== 200MB range read of $nc"
+            curl -sS -L --max-time 300 -r 0-209715199 -o /dev/null \
+              -w 'speed=%{speed_download} B/s  size=%{size_download}\n' "${ICE_DIR}${nc}"
+          fi
 
       - name: Install GDAL
         run: |
@@ -64,17 +56,22 @@ jobs:
           sudo apt-get install -y -qq gdal-bin >/dev/null
           gdalinfo --version
 
-      - name: Can GDAL read the remote grid without downloading it all?
+      - name: Try OPeNDAP and /vsicurl reads on the real file
         run: |
           set +e
-          # /vsicurl/ only fetches the byte ranges it needs -- if the remote
-          # GeoTIFF is tiled and carries overviews, a downsampled read is cheap.
-          for u in \
-            "https://dap.ceda.ac.uk/bodc/gebco/global/gebco_2026/GEBCO_2026.nc" \
-            "https://dap.ceda.ac.uk/bodc/gebco/global/gebco_2026/gebco_2026.nc" ; do
-            echo "===== HEAD $u"
-            curl -sS -I -L --max-time 60 "$u" | egrep -i 'HTTP/|content-length|accept-ranges'
-            echo "===== gdalinfo /vsicurl/$u"
-            timeout 240 gdalinfo "/vsicurl/$u" 2>&1 | head -60
+          files=$(curl -sS -L --max-time 60 "$ICE_DIR" \
+                  | grep -o 'href="[^"]*"' | cut -d'"' -f2 | grep -v '^\.\./$')
+          nc=$(echo "$files" | tr ' ' '\n' | grep -i '\.nc$' | head -1)
+          echo "nc file: $nc"
+
+          if [ -n "$nc" ]; then
+            dods="https://dap.ceda.ac.uk/thredds/dodsC/bodc/gebco/global/gebco_2026/ice_surface_elevation/${nc}"
+            echo "===== OPeNDAP DDS"
+            curl -sS -L --max-time 90 "${dods}.dds" | head -c 1200
             echo
-          done
+            echo "===== OPeNDAP strided subset (every 400th cell, as ASCII)"
+            curl -sS -L --max-time 120 "${dods}.ascii?elevation[0:400:43199][0:400:86399]" | head -c 600
+            echo
+            echo "===== gdalinfo over /vsicurl (range reads only)"
+            timeout 300 gdalinfo "/vsicurl/${ICE_DIR}${nc}" 2>&1 | head -40
+          fi
