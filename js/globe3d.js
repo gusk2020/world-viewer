@@ -295,12 +295,6 @@ function rampLut(stops) {
   return lut;
 }
 
-// Depth over which the seabed colour fades in from the photograph. Without
-// it the shoreline is a hard step drawn on a ~20 km grid, which reads as
-// obvious staircase blocks once you zoom in; fading it over the shallowest
-// water hides the grid without moving the coastline anywhere.
-const SEABED_FADE_M = 60;
-
 // The colour texture and the elevation grid are both equirectangular with
 // the same orientation (row 0 north, column 0 at -180), so pixels map onto
 // each other by plain index scaling -- no trigonometry, which is what keeps
@@ -309,7 +303,14 @@ const SEABED_FADE_M = 60;
 // Depth is sampled bilinearly rather than nearest-neighbour. The colour
 // texture is finer than the elevation grid, so nearest-neighbour would
 // paint the grid's own cells as visible squares along every drained
-// coastline.
+// coastline. Interpolating puts the 0 m contour between cells instead, and
+// that alone is what makes the shoreline smooth -- an earlier version also
+// faded the ramp in over the shallowest 60 m, which turned out to do
+// nothing for the staircase and instead left a blue rim of leftover
+// photograph hugging every drained coast (reported from the phone, then
+// reproduced and isolated by rendering with and without it). Do not
+// reintroduce a fade toward the photo here: the photo's shallow water is
+// bright cyan, so any blending back toward it paints water onto ground.
 function paintSeabed(data, width, height, elevation, lut) {
   const { data: elevationData, width: ew, height: eh, offsetMetres } = elevation;
   const scale = 255 / SEABED_DEEPEST_M;
@@ -346,13 +347,10 @@ function paintSeabed(data, width, height, elevation, lut) {
       const metres = top * (1 - ty) + bottom * ty - offsetMetres;
       if (metres >= 0) continue;
 
-      const depth = -metres;
-      const shade = Math.min(255, (depth * scale) | 0) * 3;
-      const mix = depth >= SEABED_FADE_M ? 1 : depth / SEABED_FADE_M;
-
-      data[out] += (lut[shade] - data[out]) * mix;
-      data[out + 1] += (lut[shade + 1] - data[out + 1]) * mix;
-      data[out + 2] += (lut[shade + 2] - data[out + 2]) * mix;
+      const shade = Math.min(255, (-metres * scale) | 0) * 3;
+      data[out] = lut[shade];
+      data[out + 1] = lut[shade + 1];
+      data[out + 2] = lut[shade + 2];
     }
   }
 }

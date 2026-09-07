@@ -653,13 +653,23 @@ for all three ramps switchable rather than one.
 - **Independent of sea level by design**, so dragging that slider never
   triggers a repaint — the sea sphere covers whatever is currently
   submerged, over a seabed that is already coloured by its own depth.
-- **Bilinear depth sampling and `SEABED_FADE_M` both earn their cost.**
-  The colour texture is finer than the elevation grid, so nearest-neighbour
-  painted the grid's ~20 km cells as visible staircase blocks along every
-  drained coastline (seen clearly at −120 m over the Sunda shelf).
-  Bilinear plus fading the ramp in over the shallowest 60 m removed them.
-  That tripled the pass from ~90 ms to ~265 ms — worth it for a button
-  press, and the reason not to move this onto a slider.
+- **Bilinear depth sampling earns its cost; the fade that shipped beside
+  it did not.** The colour texture is finer than the elevation grid, so
+  nearest-neighbour painted the grid's ~20 km cells as visible staircase
+  blocks along every drained coastline (seen clearly at −120 m over the
+  Sunda shelf). Bilinear sampling fixed that by putting the 0 m contour
+  between cells. **A `SEABED_FADE_M = 60` blend back toward the photograph
+  shipped in the same change and was wrongly credited with the same fix.**
+  It did nothing for the staircase and actively caused a bug: the photo's
+  shallow water is bright cyan, so blending toward it painted a blue rim
+  hugging every drained coastline — which the user then reported, asking
+  whether better data was needed. It wasn't; the fade was removed and the
+  rim went with it (blue-dominant pixels over a drained East Asia shelf:
+  43% → 32%, staircase still absent, pass slightly cheaper at ~215 ms).
+  **Never blend the seabed back toward the photograph** — the photo's
+  water colour is exactly what this feature exists to replace.
+  The wider lesson: two changes went in together and both got the credit,
+  which hid a regression for a whole round. Isolate them next time.
 - **`SEABED_DEEPEST_M` is 8000, not the real 10.9 km maximum.** Trenches
   that deep are vanishingly rare; stretching the ramp to reach them wastes
   most of its range on depths almost nowhere on Earth and flattens the
