@@ -588,6 +588,49 @@ terrain at metre scale needs tessellation error smaller than the
 comparison, and `SphereGeometry`'s default resolutions are nowhere near
 it.** The sea geometry carries no UVs (no texture), so it costs little.
 
+**The light follows the camera, and that is a deliberate cartographic
+choice.** It was originally pinned at `(5, 3, 5)`, which works out to
+overhead at **45°W 23°N — the mid-Atlantic**. So the Atlantic seafloor
+looked superb and the Pacific, its antipode, got ambient light only.
+Ambient light has *no direction*, therefore produces *no shading*, so
+relief there was not merely dark but genuinely flat. The user spotted it
+from the phone and guessed the cause correctly ("大西洋の海底地形は見え
+ますが太平洋は暗くて見にくいです。光の当て方ですか？").
+
+`updateSunLight()` now places the light relative to the camera each frame.
+Two details matter:
+
+- **The offset (`LIGHT_OFFSET_RADIANS`, 38°) is the whole point.** A light
+  aimed straight down the view axis is a headlamp: surfaces facing the
+  camera and surfaces tilted away receive nearly the same illumination, so
+  everything flattens out. Tilting it up-and-left preserves a raking angle
+  at every view — the same reason relief maps are conventionally lit from
+  the upper left.
+- Near the poles the view direction is parallel to +Y, so the reference
+  vector used for the cross products swaps to +Z to stay well conditioned.
+  Verified: the light-to-camera dot product is 0.788 (= cos 38°) at every
+  view tested including both poles.
+
+Measured, not eyeballed — std-dev of luminance over open-water pixels,
+which distinguishes "dark" from "flat" in a way mean brightness cannot:
+Pacific contrast **4.67 → 11.44** (2.4×) and mean 81.9 → 112.7, while the
+Atlantic *also* improved (8.35 → 13.2) because a raking light reveals more
+than the old near-overhead one did. Screenshots confirm the
+Hawaiian-Emperor seamount chain, fracture zones and trench arcs are now
+plainly visible where the Pacific had been featureless.
+
+There is no day/night feature that a fixed sun would serve, so nothing is
+lost. **If one is ever added, this is the trade-off to revisit** — a real
+sun and readable relief everywhere are mutually exclusive without a
+separate shading pass.
+
+**One testing gotcha this re-surfaced**: `updateSunLight()` runs inside the
+animation loop, so reading the light back in the same task as `setView()`
+returns the *previous* frame's value and looks exactly like a broken
+feature. Let a frame tick first. (And per the standing note above, canvas
+readback must render in the same synchronous task, or the buffer is
+already cleared and every sampled pixel comes back empty.)
+
 **Water opacity is a user control now** (`setWaterOpacity`, second slider,
 default 40%). There is no single right value — opaque water reads better
 as "flooded", transparent water shows the GEBCO seafloor — so after the

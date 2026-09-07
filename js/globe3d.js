@@ -121,15 +121,56 @@ export async function initGlobe3D(containerId, worldConfig) {
     seaSphere.material.opacity = fraction;
   }
 
-  // Fixed "sun" plus a bright ambient fill so the far side stays readable
-  // (there's no night-side feature that would make a dark half meaningful
-  // yet). Intensities were calibrated by measuring rendered luminance, not
+  // The light follows the camera instead of sitting at a fixed point in
+  // space. It used to be pinned at (5,3,5), which is overhead at 45W 23N --
+  // the mid-Atlantic. That lit the Atlantic seafloor beautifully and left
+  // the Pacific, its antipode, falling on ambient light only. Ambient has
+  // no direction, so it produces no shading at all, and relief there was
+  // invisible: the user reported exactly this ("大西洋の海底地形は見えますが
+  // 太平洋は暗くて見にくい") and correctly guessed the lighting.
+  //
+  // This is a map to read, not a day/night globe, so a fixed sun buys
+  // nothing. Offsetting the light from the view direction rather than
+  // aiming straight down it matters just as much: a light exactly behind
+  // the viewer flattens everything, because surfaces facing you and
+  // surfaces tilted away are lit almost identically. The offset keeps a
+  // raking angle, which is what makes ridges and trenches read -- the same
+  // reason relief maps are conventionally lit from the upper left.
+  //
+  // Intensities are calibrated by measuring rendered luminance rather than
   // by eye: this three.js uses physically-based light units, where
   // intensity 1 reads much dimmer than older tutorials assume.
   const sunLight = new THREE.DirectionalLight(0xffffff, 3.0);
-  sunLight.position.set(5, 3, 5);
   scene.add(sunLight);
   scene.add(new THREE.AmbientLight(0xffffff, 2.0));
+
+  const LIGHT_OFFSET_RADIANS = (38 * Math.PI) / 180;
+  const lightDirection = new THREE.Vector3();
+  const lightUp = new THREE.Vector3();
+  const lightRight = new THREE.Vector3();
+
+  function updateSunLight() {
+    lightDirection.copy(camera.position).normalize();
+
+    // Any reference that isn't parallel to the view; swapped near the poles
+    // so the cross products below stay well conditioned.
+    lightUp.set(0, 1, 0);
+    if (Math.abs(lightDirection.y) > 0.99) lightUp.set(0, 0, 1);
+
+    lightRight.crossVectors(lightUp, lightDirection).normalize();
+    lightUp.crossVectors(lightDirection, lightRight).normalize();
+
+    // Up and to the left of the viewer, by LIGHT_OFFSET_RADIANS.
+    const tilt = Math.sin(LIGHT_OFFSET_RADIANS) * Math.SQRT1_2;
+    lightDirection
+      .multiplyScalar(Math.cos(LIGHT_OFFSET_RADIANS))
+      .addScaledVector(lightUp, tilt)
+      .addScaledVector(lightRight, -tilt)
+      .normalize();
+
+    sunLight.position.copy(lightDirection).multiplyScalar(10);
+  }
+  updateSunLight();
 
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enablePan = false;
@@ -145,6 +186,7 @@ export async function initGlobe3D(containerId, worldConfig) {
 
   renderer.setAnimationLoop(() => {
     controls.update();
+    updateSunLight();
     renderer.render(scene, camera);
   });
 
