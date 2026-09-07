@@ -66,10 +66,25 @@ export async function initGlobe3D(containerId, textureUrl, elevationMapUrl) {
   // orbits) plus a fairly bright ambient fill so the far side is still
   // clearly visible rather than crushed to black -- there's no day/night
   // city-lights feature yet to make a fully dark far side meaningful.
-  const sunLight = new THREE.DirectionalLight(0xffffff, 1.2);
+  //
+  // Intensities tuned deliberately, not guessed: this version of Three.js
+  // uses physically-based light units unconditionally (no legacy-lights
+  // toggle exists any more), where intensity 1 reads dimmer than older
+  // tutorials assume. The user reported the first pass (1.2 / 0.7) as
+  // "too dark overall" once real shading replaced the old always-full-
+  // brightness unlit texture. Measured actual rendered pixel brightness
+  // (average luminance across the visible globe) to calibrate rather than
+  // eyeballing: the unlit V0.1-V0.3 texture averaged ~34/255; 1.2/0.7
+  // measured only ~21/255 (noticeably darker, matching the complaint);
+  // 3.0/2.0 measures ~39/255, comfortably brighter than the original
+  // unlit baseline while still leaving enough directional/ambient
+  // difference for terrain shading to actually read as 3D. Re-measure
+  // the same way (render, read back pixels, average luminance) if this
+  // needs retuning rather than adjusting by feel.
+  const sunLight = new THREE.DirectionalLight(0xffffff, 3.0);
   sunLight.position.set(5, 3, 5);
   scene.add(sunLight);
-  scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+  scene.add(new THREE.AmbientLight(0xffffff, 2.0));
 
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enablePan = false;

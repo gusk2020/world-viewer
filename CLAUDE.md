@@ -216,6 +216,31 @@ here — deliberately not going anywhere near a tiled elevation service.
   V0.4's actual scope, not an elevation-side change. Don't re-attempt an
   elevation-blending fix for this specific artifact without re-confirming
   the color-texture-only cause hasn't changed.
+- **First-round user feedback, addressed**: the user found the lit globe
+  "too dark overall" to make the new terrain relief out clearly, and
+  separately confirmed the pole streaks above are "better than before,"
+  not something to chase further right now. Fixed the darkness by
+  **measuring** rendered brightness rather than adjusting by feel:
+  average pixel luminance across the visible globe was ~34/255 for the
+  old unlit (V0.1-V0.3) texture, but only ~21/255 with the first lighting
+  pass (`DirectionalLight` 1.2 + `AmbientLight` 0.7) — this version of
+  Three.js uses physically-based light units unconditionally (there is no
+  `useLegacyLights`/`physicallyCorrectLights` toggle to fall back to any
+  more), where intensity 1 reads dimmer than older non-physical tutorials
+  assume, which is almost certainly why the first pass came out darker
+  than the original unlit brightness rather than just "revealing shading
+  on top of it." Retuned to `DirectionalLight` 3.0 + `AmbientLight` 2.0,
+  measured at ~39/255 — brighter than the original unlit baseline, with
+  enough of a directional/ambient split left for terrain shading to still
+  read as three-dimensional. Re-measure the same way (render, read back
+  pixels, average luminance vs. the ~34/255 unlit baseline) if these need
+  retuning again, rather than guessing. **Trade-off worth knowing**: since
+  the pole-streak artifact above is a subtle brightness/contrast pattern,
+  brightening the whole scene made it *somewhat* more visible too (more
+  overall exposure reveals more of any subtle pattern) — flagged to the
+  user rather than treated as a new regression, since it's the same
+  underlying pre-existing, already-discussed cause, not something this
+  brightness change introduced.
 - **A separate 2D-map interaction found while testing V0.4's near-pole
   views through the V0.3 toggle** (not a V0.4 bug itself, but only
   surfaced by finally testing the toggle at extreme latitudes): OpenLayers's
@@ -547,7 +572,19 @@ View-repositioning issue was found and then re-verified fixed (request
 -89.9999° at zoom 3, confirm it now lands at -84.1° and zoom 6 instead of
 the pre-fix -70.7°). No console errors. Real visual appearance, on-device
 frame rate with the larger mesh, and touch feel all need the user's
-phone, as always.
+phone, as always. **The user then reported the lit globe was too dark to
+read the new relief clearly on-phone** (poles unaffected — those were
+separately confirmed as improved and acceptable).
+
+For the brightness fix: measured actual rendered pixel brightness
+directly rather than guessing — swapped in a flat `MeshBasicMaterial` to
+get the old unlit baseline's average luminance (~34/255), then rendered
+the lit scene at several `DirectionalLight`/`AmbientLight` intensity
+combinations and measured each one's average luminance the same way,
+picking the pair (3.0/2.0) that landed brighter than the unlit baseline.
+Re-ran the full V0.4 verification suite (pole coincidence, elevation
+sanity, scene contents, toggle regression) after the intensity change to
+confirm nothing else broke — all passed unchanged.
 
 ## Working conventions
 
