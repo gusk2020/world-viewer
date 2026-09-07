@@ -59,16 +59,27 @@ continue.
   sea-level control" below) before the user signed off with "仮の地形
   データということであれば合格です" (acceptable, given this is placeholder
   terrain data).
-- **V0.6+ (current)**: cities, borders/territories, historical eras, and
-  other 過速世界-specific data. This bucket covers several distinct
-  features, not one version — per the "one version at a time" rule, treat
-  each as its own sub-version (V0.6, V0.7, ...) in whatever order makes
-  sense once there's actual 過速世界 data to work from, rather than
-  building any of it speculatively. **Needs the user's own world-setting
+- **V0.6 (current)**: real global terrain. The user redirected here rather
+  than starting on cities/borders: "地形データの方針を変更してください"
+  — Blue Marble goes back to being *surface imagery only*, and the 3D
+  shape comes from **GEBCO_2026** (land + seafloor in one dataset, both
+  poles included). Their hard requirement: polar streaks/holes are the
+  most important test, and if a lat/lon grid crowding vertices at the
+  poles is the cause, fix the *mesh*, not the data ("データの平滑化で
+  ごまかさず、球体メッシュや極域の生成方法そのものを修正してください").
+  Also: never make the user download/convert multi-GB files — they only
+  have a Pixel 7a — so the data pipeline runs on GitHub Actions. See
+  "V0.6: GEBCO_2026 terrain on a cube-sphere" below.
+- **V0.7+**: cities, borders/territories, historical eras, and other
+  過速世界-specific data. Several distinct features, not one version —
+  treat each as its own sub-version. **Needs the user's own world-setting
   data first** (city names/locations, territory/border shapes, era
-  definitions) — this is 過速世界 content, not a technical judgment call,
-  so ask the user for it rather than inventing placeholder cities/borders
-  the way placeholder Earth imagery was used for the globe texture itself.
+  definitions): that is 過速世界 content, not a technical judgment call,
+  so ask rather than inventing placeholder cities the way placeholder
+  Earth imagery was used for the globe texture.
+- **Deferred by the user, do not build yet**: REMA 10 m (Antarctic) and
+  ArcticDEM 10 m (Arctic) as zoomed-in polar detail. Explicitly "今は
+  実装しないでください" — GEBCO alone first.
 
 Nothing from V0.6 onward is implemented yet. Do not add pieces of them
 now "while already in the file."
@@ -115,12 +126,15 @@ called from `js/main.js`.
   "plain static files, no build step" hosting model. Chrome on Pixel 7a
   has supported import maps since well before this project started, so no
   polyfill is needed.
-- **The globe**: `THREE.SphereGeometry(1, 128, 64)` (radius 1; bumped from
-  64×32 in V0.1 to actually show the V0.4 elevation relief below at a
-  reasonable resolution — see that section for why not higher) with a
-  `THREE.MeshLambertMaterial` (switched from V0.1-V0.3's unlit
-  `MeshBasicMaterial` in V0.4, once there was real geometry variation for
-  a light to reveal — terrain relief is only visible through shading).
+- **The globe**: a **spherified cube** built in `js/globe3d.js`
+  (`buildTerrainGeometry`), radius 1, 6 faces × 255² quads ≈ 393k
+  vertices / 780k triangles, with a `THREE.MeshLambertMaterial` (switched
+  from V0.1-V0.3's unlit `MeshBasicMaterial` in V0.4, once there was real
+  geometry variation for a light to reveal — relief is only visible
+  through shading). **`THREE.SphereGeometry` was removed in V0.6** — see
+  "V0.6: GEBCO_2026 terrain on a cube-sphere" below for why a UV sphere
+  could never render the poles cleanly, no matter what was done to the
+  data.
 - **Controls**: `three/addons/controls/OrbitControls.js`, Three.js's own
   official addon — handles touch rotate (one-finger drag) and pinch-zoom
   (two-finger pinch → dolly) out of the box, same "the library already
@@ -447,6 +461,170 @@ re-test at both the widest *and* closest zoom levels the app allows, not
 just the default view — a near/far change that looks fine by default can
 silently break only at one extreme of the zoom range.
 
+### V0.6: GEBCO_2026 terrain on a cube-sphere
+
+Three things changed together, because none of them works without the
+others: the data source, the mesh, and where the data gets prepared.
+
+**The data: GEBCO_2026, ice-surface version.** 15 arc-second global grid
+(86400×43200, Int16 metres, EPSG:4326), land elevation *and* ocean
+bathymetry in one continuous dataset, full coverage including both poles.
+Fetched from CEDA at
+`https://dap.ceda.ac.uk/bodc/gebco/global/gebco_2026/ice_surface_elevation/netcdf/GEBCO_2026.nc`
+(7.47 GB). This finally answers the question the "Investigated and
+rejected" section below could not: every WebGL-globe bump map that project
+tried encoded a *flat zero* for the entire ocean. GEBCO does not — it is
+the actual reference bathymetry dataset.
+
+There is also a `sub_ice_topography_bathymetry/` variant (bedrock under
+Greenland/Antarctic ice) in the same directory, and a
+`type_identifier_grid/`. The user asked for ice-surface first; swapping is
+a one-line change to `SOURCE_URL` in the workflow.
+
+**Blue Marble is now imagery only.** Per the user's explicit redirection,
+the colour texture no longer has anything to do with the 3D shape. That
+also retires the old `elevation.jpg` bump map entirely.
+
+**The mesh: why the UV sphere had to go.** `THREE.SphereGeometry` is a
+lat/lon grid, which has a genuine mathematical singularity at each pole:
+every vertex of the top and bottom ring occupies the *same 3D point* while
+carrying different longitudes, and the rings just below are crushed
+together circumferentially while staying full-width in texture space. That
+produces a fan of sliver triangles at each pole, each smearing a different
+column of the map across a wedge, and each sampling wildly different
+elevation values from points that are metres apart in 3D. **That is the
+real, structural cause of every "radial streak" round this project has
+fought** — V0.4 misdiagnosed it as purely a colour-texture sampling
+artifact, then a later round proved elevation data mattered too, and both
+"fixes" were really just data smoothing hiding a mesh defect. The user
+called this correctly and told us to fix the mesh.
+
+A spherified cube has no pole at all. Six ordinary square grids, each
+point pushed out to the sphere; quads stay roughly the same size
+everywhere; no vertex is shared by a whole ring; and the poles land in the
+middle of an ordinary quad on the +Y/-Y faces, receiving **no special
+casing whatsoever**. Details worth knowing:
+
+- **`warpAxis` (tangent warp)**: plain normalisation of an evenly spaced
+  cube grid bunches vertices toward face corners. Running each axis
+  through `tan(t·π/4)` first spreads them almost evenly, which is the
+  entire reason for choosing a cube-sphere over just accepting a UV
+  sphere's distortion.
+- **`FACE_SEGMENTS` is odd (255) on purpose.** With an even count a vertex
+  would land exactly on the centre of the +Y/-Y face — exactly on a pole,
+  the one place where longitude is undefined. Odd puts the pole mid-quad,
+  so every vertex has a well-defined longitude and UV. Keep it odd.
+- **`CUBE_FACES` bases are chosen so `right × up === forward` on all
+  six**, which is what lets a single winding order come out front-facing
+  everywhere with no per-face special cases. Verified numerically, not
+  assumed: the test asserts every sampled vertex normal has a positive dot
+  product with its own position (i.e. the globe is not inside-out).
+- **Antimeridian seam**: a triangle straddling ±180° has corners at
+  u≈0.99 and u≈0.01, so interpolating runs the texture backwards across
+  the whole map in one triangle. `splitSeamVertices` gives those corners a
+  private copy carrying `u + 1` (hence `texture.wrapS = RepeatWrapping`).
+  Only ~514 vertices along one meridian are affected. **Normals are
+  computed before the split** so duplicates inherit an identical normal
+  and the seam shows no lighting break — getting that order wrong would
+  put a visible lit stripe down the Pacific.
+- **Cube edges are duplicated by construction** (each of the 12 edges is
+  generated once per adjoining face — the test counts ~3578 coincident
+  vertices, which is expected, not a bug). They sit at identical positions
+  with identical elevations so there is no crack; their normals are
+  computed per-face and could in principle differ, but the surface is
+  smooth there and no edge seam is visible in renders. If a future change
+  ever does show cube-edge lighting seams, that is the place to look.
+
+**The one artifact that survived the mesh change, and why smoothing the
+*texture* is legitimate here.** After the cube-sphere landed, a faint soft
+radial smear was still visible looking straight down a pole. Isolated it
+the same way this project always does — rendered the pole with the colour
+texture removed entirely — and the surface came back perfectly smooth,
+proving the mesh was blameless and the photo was the whole cause. An
+equirectangular image gives every latitude the same pixel width while the
+circle it wraps shrinks by cos(latitude), so near a pole it carries about
+1/cos(lat) times more longitudinal detail than the globe can physically
+hold; that surplus is what smears. `lowPassPolarRows` averages each row
+over a 1/cos(lat)-wide circular window, which discards exactly the
+information that was never really there. **This is not the "smooth the
+data to hide it" move the user rightly rejected** — that would have been
+smoothing *terrain* to mask a mesh defect. Here the mesh is provably
+correct and the filtering is ordinary anti-aliasing of an oversampled
+projection. A circular running sum keeps it O(width) per row, which
+matters because the window spans most of the image in the last row or two.
+
+**Sea-surface opacity dropped from 0.6 to 0.4.** With real bathymetry
+underneath, 0.6 hid nearly all of it. Compared renders of the
+mid-Atlantic at 0.6 / 0.45 / 0.3: at 0.4 the Mid-Atlantic Ridge, its
+fracture zones and the continental shelves read clearly, while a +100 m
+rise over the Bengal delta still floods unmistakably. If the user wants
+the water to look more solid, or the seafloor clearer, this is the single
+number to move.
+
+**Elevation is real metres now, and that fixes sea level properly.**
+The raster stores metres, so sea level is exactly radius 1 and the slider
+reads in real metres instead of an opaque 0-100. `VERTICAL_EXAGGERATION`
+(30×) is applied *identically* to terrain and to the sea sphere, so
+submerged ⟺ `height < sea level` regardless of the exaggeration factor —
+**which coastline floods is geographically exact even though the relief is
+visually exaggerated**. That retires the entire V0.5 calibration saga
+(three wrong constants derived from a bump map's histogram); none of that
+reasoning applies any more and the constants are gone. The
+`OCEAN_FLOOR_EXTRA_DIP` z-fighting hack is gone too: with real bathymetry
+the seafloor is genuinely kilometres below sea level, so the exact depth
+tie that caused the checkerboard cannot occur.
+
+**The encoding, and one gotcha worth remembering.** Elevation ships as a
+PNG where `metres = (R × 256 + G) − offsetMetres` (offset 12000, so the
+whole real range of Earth's relief stays inside a uint16). Two 8-bit
+channels rather than a 16-bit greyscale PNG because **a canvas hands
+JavaScript back 8-bit samples no matter what the file contained** — a
+genuine 16-bit greyscale PNG would silently lose its low byte on read,
+producing plausible-looking wrong elevations. PNG rather than JPEG because
+the packing is only meaningful if every byte survives exactly. The
+encoding parameters live in the world's `config.json`, not in the code.
+
+**The pipeline: `.github/workflows/build-terrain.yml`.** The user cannot
+be asked to handle a 7.5 GB file on a phone, and this sandbox's egress
+proxy blocks every geodata host, so the work happens on a GitHub runner:
+download → area-average downsample → encode → commit only the small PNGs.
+Notes:
+
+- **`-r average`, never point decimation.** Picking every Nth cell of a
+  heightmap drops peaks and trenches outright; averaging keeps each output
+  cell representative of the ground it covers. This matters for a dataset
+  whose whole point is being real.
+- One expensive read produces a 4096×2048 base level; the smaller levels
+  are averaged down from *that*, not by re-reading 7.5 GB per level.
+- CEDA serves roughly 5 MB/s on one connection, so the download uses
+  `aria2c -x 12` with a curl fallback. Expect the whole run to take on the
+  order of half an hour, nearly all of it waiting on CEDA.
+- `tools/verify_elevation.py` runs before the commit step and **fails the
+  build** if the result is not real global terrain: it samples Everest,
+  the Mariana Trench, the Sahara, mid-Pacific abyssal plain and both
+  poles, checks the below-sea-level fraction is Earth-like (55-80%),
+  requires real trenches and mountains, and requires both pole rows to
+  vary rather than be a constant fill. Given this project's history of
+  adopting sources that turned out to be flat-ocean fakes, that check
+  earns its keep.
+- **The repo now has CI, but the *app* still has no build step.** GitHub
+  Pages continues to serve plain static files; the workflow is a data
+  preparation tool that happens to commit its output. Don't let this
+  become a build step for the site itself.
+
+**Levels and "load only what's needed".** The pipeline emits 512×256,
+1024×512, 2048×1024 and 4096×2048. `pickElevationLevel` takes the finest
+level that is still worth its bytes: the mesh has ~4×`FACE_SEGMENTS`
+vertices around the equator, so a grid wider than about twice that carries
+detail no vertex can express. Today that selects 2048×1024. Worth being
+honest about the scope here: with `MIN_DISTANCE = 1.3` the camera never
+gets closer than ~1900 km altitude, where the phone screen shows roughly
+8 km per pixel — so **one global level already saturates what can be seen
+at any allowed zoom**, and region-by-region streaming would currently buy
+nothing. The wider levels exist for when that changes; genuine
+view-dependent tile streaming is the thing to build when the deferred
+REMA/ArcticDEM 10 m polar data arrives and the zoom limit opens up.
+
 ### The OpenLayers 2D map
 
 Lives in `js/map2d.js` (`initMap2D(targetId)`, exporting `getView()`/
@@ -577,6 +755,13 @@ closely as practical" requirement.
   toggle actually needs.
 
 ## Investigated and rejected: higher-resolution elevation/color textures, real bathymetry
+
+**Superseded by V0.6 — read this only for the "what was already tried"
+list, not for conclusions.** The blocker recorded below (no reachable real
+bathymetry) was solved by moving the fetch to GitHub Actions and using
+GEBCO_2026; the pole artifacts blamed on texture/elevation *data* here
+turned out to be the UV sphere's polar singularity, fixed by changing the
+mesh. Both are covered in "V0.6: GEBCO_2026 terrain on a cube-sphere".
 
 After V0.5 shipped, the user asked to improve "地形の高さデータと地球の見た目、
 海面下の海底地形" (elevation data resolution, the globe's visual quality, and
@@ -910,6 +1095,45 @@ screenshots at both a South America catastrophe-check view and a
 moderate-zoom coastal view matching the user's own framing before
 shipping the new value. **This second attempt also still needs the
 user's on-phone confirmation** before being considered settled.
+
+For V0.6 (GEBCO terrain + cube-sphere): the same vendor-and-drive-with-
+Playwright method, plus a new trick for the parts this sandbox cannot
+reach. Since the egress proxy blocks every geodata host, **GitHub Actions
+became the diagnostic instrument**: a throwaway `gebco-probe.yml` ran
+three rounds of `curl`/`gdalinfo` from a runner to find out what was
+actually fetchable, which is how the CEDA archive layout, the exact
+`GEBCO_2026.nc` URL, the grid's shape, and CEDA's ~5 MB/s throughput were
+established rather than guessed. Worth reusing whenever a data source is
+unreachable from here; delete the probe workflow once done.
+
+Client-side verification did not wait on the 30-minute GEBCO run: a
+scratch generator produced a stand-in raster in the *same* R/G-metres
+encoding, so the mesh could be tested immediately. Verified against it:
+393,730 vertices / 780,300 triangles (393,216 base + 514 seam
+duplicates, matching prediction); **every sampled vertex normal has a
+positive dot product with its position**, i.e. the globe is not
+inside-out — worth checking explicitly, since a cube-sphere's winding is
+easy to get wrong on some faces; **no vertex within 0.0043 radius units
+(~27 km) of either pole**, confirming the odd-segment trick keeps
+vertices off the singular point; ~3578 coincident vertices, which is the
+expected shared-cube-edge duplication and not a defect; and rendered
+screenshots pointed straight down at **both poles show no radial streaks,
+no pinwheel, no hole and no gap** — the artifact that survived three
+previous rounds of data-side fixes is simply absent once the mesh has no
+pole. A screenshot centred on the antimeridian confirms the seam split
+works (no stripe down the Pacific), and the V0.3 toggle regression still
+passes.
+
+Two gotchas hit while setting this up, both worth remembering. First, the
+test site's `index.html` must keep its *vendored* import map — copying the
+production one over it silently points three.js and OpenLayers at
+jsdelivr, which this sandbox cannot reach, and the page just never
+finishes loading. Second, a multi-line `git commit -m` message inside a
+workflow's `run: |` block must stay indented; at column 0 it terminates
+the YAML block scalar, and GitHub responds not with a parse error but by
+reporting the workflow "does not have 'workflow_dispatch' trigger", which
+is a thoroughly misleading symptom. `python3 -c "import yaml; yaml.safe_load(...)"`
+on the workflow file diagnoses it in seconds.
 
 ## Working conventions
 

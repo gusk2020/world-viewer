@@ -65,7 +65,7 @@ export async function initGlobe3D(containerId, worldConfig) {
     loadElevationGrid(pickElevationLevel(terrain.levels), terrain.encoding),
   ]);
 
-  const texture = new THREE.CanvasTexture(applyGammaCorrection(colorImage, COLOR_GAMMA));
+  const texture = new THREE.CanvasTexture(prepareGlobeTexture(colorImage, COLOR_GAMMA));
   texture.colorSpace = THREE.SRGBColorSpace;
   // Antimeridian-crossing triangles carry u values just past 1 (see
   // splitSeamVertices) -- they must wrap, not clamp.
@@ -85,7 +85,13 @@ export async function initGlobe3D(containerId, worldConfig) {
     new THREE.MeshLambertMaterial({
       color: 0x2f6fa8,
       transparent: true,
-      opacity: 0.6,
+      // Lowered from V0.5's 0.6 now that there is real seafloor under it:
+      // GEBCO's ridges, trenches and shelves are the point of this
+      // version, and at 0.6 the sea hid nearly all of them. Checked by
+      // rendering the mid-Atlantic at 0.6 / 0.45 / 0.3 -- 0.4 shows the
+      // ridge and the continental shelves while a +100 m rise over the
+      // Bengal delta still reads unmistakably as flooding.
+      opacity: 0.4,
       depthWrite: false,
     })
   );
@@ -333,7 +339,10 @@ function concatAttribute(base, extra, itemSize) {
 // in place for when a future version subdivides the mesh further (or
 // loads a high-detail patch for one region, which is what the planned
 // REMA / ArcticDEM polar data will need).
-const USEFUL_GRID_WIDTH = 8 * FACE_SEGMENTS;
+// 4 faces of (FACE_SEGMENTS + 1) vertices meet around the equator, and 2x
+// that gives a little oversampling headroom so the mesh isn't sampling the
+// raster one-to-one.
+const USEFUL_GRID_WIDTH = 4 * (FACE_SEGMENTS + 1) * 2;
 
 function pickElevationLevel(levels) {
   const affordable = levels.filter((level) => level.width <= USEFUL_GRID_WIDTH);
@@ -401,10 +410,10 @@ function loadImage(url) {
   });
 }
 
-// Lifts shadows much more than highlights via a gamma curve, through a
-// 256-entry lookup table rather than a Math.pow per pixel (this runs once
-// per texture pixel at load, not per frame). See COLOR_GAMMA above.
-function applyGammaCorrection(image, gamma) {
+// Two fixes to the source photo, both applied once at load rather than
+// per frame: the gamma lift described at COLOR_GAMMA, and a polar
+// low-pass described at lowPassPolarRows.
+function prepareGlobeTexture(image, gamma) {
   const canvas = document.createElement("canvas");
   canvas.width = image.width;
   canvas.height = image.height;
@@ -414,17 +423,70 @@ function applyGammaCorrection(image, gamma) {
   const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
   const data = imageData.data;
 
+  // Lifts shadows much more than highlights, through a 256-entry lookup
+  // table rather than a Math.pow per pixel.
   const lut = new Uint8ClampedArray(256);
   for (let level = 0; level < 256; level++) {
     lut[level] = Math.round(255 * Math.pow(level / 255, gamma));
   }
-
   for (let i = 0; i < data.length; i += 4) {
     data[i] = lut[data[i]];
     data[i + 1] = lut[data[i + 1]];
     data[i + 2] = lut[data[i + 2]];
   }
 
+  lowPassPolarRows(data, canvas.width, canvas.height);
+
   context.putImageData(imageData, 0, 0);
   return canvas;
+}
+
+// An equirectangular image gives every latitude the same pixel width, but
+// the circle it wraps around shrinks by cos(latitude) -- so near the poles
+// the image carries far more longitudinal detail than the globe can
+// physically hold, roughly 1/cos(lat) times too much. Rendered, that
+// surplus detail is what smears into faint radial streaks around a pole.
+//
+// Averaging each row over a 1/cos(lat)-wide window discards exactly the
+// information that was never really there, which is ordinary correct
+// anti-aliasing for this projection rather than a cover-up: this is a
+// property of the *photo*, and it was verified to be the only remaining
+// cause here by rendering the pole with the texture removed entirely and
+// finding a perfectly smooth surface. The mesh itself has no pole (see
+// the cube-sphere notes above) and needs no smoothing of any kind.
+//
+// A circular running sum keeps this O(width) per row no matter how wide
+// the window grows, which matters because the window reaches most of the
+// image width in the last row or two.
+function lowPassPolarRows(data, width, height) {
+  const row = new Float32Array(width);
+
+  for (let y = 0; y < height; y++) {
+    const latitude = (0.5 - (y + 0.5) / height) * Math.PI;
+    const window = Math.round(1 / Math.max(Math.cos(latitude), 1e-6));
+    if (window <= 1) continue;
+
+    const radius = Math.min(window >> 1, width >> 1);
+    if (radius < 1) continue;
+
+    const span = 2 * radius + 1;
+    const base = y * width * 4;
+
+    for (let channel = 0; channel < 3; channel++) {
+      for (let x = 0; x < width; x++) {
+        row[x] = data[base + x * 4 + channel];
+      }
+
+      let sum = 0;
+      for (let d = -radius; d <= radius; d++) {
+        sum += row[((d % width) + width) % width];
+      }
+
+      for (let x = 0; x < width; x++) {
+        data[base + x * 4 + channel] = Math.round(sum / span);
+        sum -= row[((x - radius) % width + width) % width];
+        sum += row[((x + radius + 1) % width + width) % width];
+      }
+    }
+  }
 }
