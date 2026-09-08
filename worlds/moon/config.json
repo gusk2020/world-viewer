@@ -16,17 +16,94 @@
     },
     "hypsometric": {
       "stops": [
-        [-9000, [10, 26, 66]],
-        [-4000, [26, 74, 140]],
-        [-1200, [72, 140, 200]],
-        [-80, [140, 195, 225]],
-        [0, [206, 214, 160]],
-        [400, [150, 178, 96]],
-        [2500, [120, 152, 78]],
-        [5000, [178, 152, 84]],
-        [7500, [140, 104, 66]],
-        [9500, [160, 158, 152]],
-        [11000, [248, 248, 248]]
+        [
+          -9000,
+          [
+            10,
+            26,
+            66
+          ]
+        ],
+        [
+          -4000,
+          [
+            26,
+            74,
+            140
+          ]
+        ],
+        [
+          -1200,
+          [
+            72,
+            140,
+            200
+          ]
+        ],
+        [
+          -80,
+          [
+            140,
+            195,
+            225
+          ]
+        ],
+        [
+          0,
+          [
+            206,
+            214,
+            160
+          ]
+        ],
+        [
+          400,
+          [
+            150,
+            178,
+            96
+          ]
+        ],
+        [
+          2500,
+          [
+            120,
+            152,
+            78
+          ]
+        ],
+        [
+          5000,
+          [
+            178,
+            152,
+            84
+          ]
+        ],
+        [
+          7500,
+          [
+            140,
+            104,
+            66
+          ]
+        ],
+        [
+          9500,
+          [
+            160,
+            158,
+            152
+          ]
+        ],
+        [
+          11000,
+          [
+            248,
+            248,
+            248
+          ]
+        ]
       ]
     }
   },
@@ -46,16 +123,70 @@
     "verify": {
       "checkWidth": 2048,
       "landmarks": [
-        { "lon": -17.0, "lat": 33.0, "label": "Mare Imbrium", "minMetres": -5500, "maxMetres": 500 },
-        { "lon": -57.0, "lat": 20.0, "label": "Oceanus Procellarum", "minMetres": -5500, "maxMetres": 1000 },
-        { "lon": -23.0, "lat": 13.0, "label": "Mare Vaporum / central nearside", "minMetres": -5500, "maxMetres": 1500 },
-        { "lon": 180.0, "lat": -55.0, "label": "South Pole-Aitken basin interior", "minMetres": -9500, "maxMetres": -500 },
-        { "lon": 160.0, "lat": 25.0, "label": "far-side highlands", "minMetres": -500, "maxMetres": 9000 }
+        {
+          "lon": -17.0,
+          "lat": 33.0,
+          "label": "Mare Imbrium",
+          "minMetres": -5500,
+          "maxMetres": 500
+        },
+        {
+          "lon": -57.0,
+          "lat": 20.0,
+          "label": "Oceanus Procellarum",
+          "minMetres": -5500,
+          "maxMetres": 1000
+        },
+        {
+          "lon": -23.0,
+          "lat": 13.0,
+          "label": "Mare Vaporum / central nearside",
+          "minMetres": -5500,
+          "maxMetres": 1500
+        },
+        {
+          "lon": 180.0,
+          "lat": -55.0,
+          "label": "South Pole-Aitken basin interior",
+          "minMetres": -9500,
+          "maxMetres": -500
+        },
+        {
+          "lon": 160.0,
+          "lat": 25.0,
+          "label": "far-side highlands",
+          "minMetres": -500,
+          "maxMetres": 9000
+        }
       ],
       "lowestMetres": -7000,
       "highestMetres": 7000,
-      "belowDatumFraction": [0.30, 0.80]
+      "belowDatumFraction": [
+        0.3,
+        0.8
+      ]
     },
-    "levels": []
+    "levels": [
+      {
+        "url": "./worlds/moon/terrain/lola118_ldem_512x256.png",
+        "width": 512,
+        "height": 256
+      },
+      {
+        "url": "./worlds/moon/terrain/lola118_ldem_1024x512.png",
+        "width": 1024,
+        "height": 512
+      },
+      {
+        "url": "./worlds/moon/terrain/lola118_ldem_2048x1024.png",
+        "width": 2048,
+        "height": 1024
+      },
+      {
+        "url": "./worlds/moon/terrain/lola118_ldem_4096x2048.png",
+        "width": 4096,
+        "height": 2048
+      }
+    ]
   }
 }
