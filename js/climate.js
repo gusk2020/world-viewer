@@ -432,11 +432,16 @@ function evaporationByRow(seaLevelC, profileRows, rows, params) {
 
 // The moisture that reaches inland with no help from the prevailing wind.
 // This used to be a plain exponential in the distance to the *nearest* sea,
-// which cannot tell a warm sea from a cold one. It is now the same sweep with
+// which cannot tell a warm sea from a cold one. It is now that same sweep with
 // the source value carried along: each sea cell starts at its own evaporation
 // and every land cell keeps the best any neighbour can deliver after the
-// journey. Weighted, and swept twice in each direction, for the same reasons
-// the distance transform was.
+// journey.
+//
+// The step costs are weighted because a step in longitude is a different
+// distance on the ground at every latitude -- treating the grid as square
+// would make polar continents look far wider than they are -- and longitude
+// wraps, so the sweeps run twice: one pass cannot carry a value the whole way
+// round the globe.
 function stillAirField(isSea, width, height, radiusMetres, evaporation, params) {
   const field = new Float32Array(width * height);
   for (let y = 0; y < height; y++) {
@@ -495,9 +500,9 @@ function stillAirField(isSea, width, height, radiusMetres, evaporation, params) 
 
 // Moisture carried inland by that wind.
 //
-// The sea holds the field at 1; every land cell takes what its *upwind*
-// neighbour has, minus what the journey costs and minus what any climb takes
-// out of it. Sweeping that rule to convergence is what produces the wet
+// Each sea cell holds the field at its own evaporation; every land cell takes
+// what its *upwind* neighbour has, minus what the journey costs and minus what
+// any climb takes out of it. Sweeping that rule to convergence is what produces the wet
 // windward coast and the dry lee, and it is why this is an iteration rather
 // than a formula in the distance to the sea.
 //
@@ -547,13 +552,13 @@ function moistureField({
     rowB[y] = Math.min(height - 1, Math.max(0, y + iy + 1)) * width;
   }
 
-  const sampleAt = (field, y, x) => {
-    const a = rowA[y];
-    const b = rowB[y];
-    const xa = (((x + offX[y]) % width) + width) % width;
+  // The upwind sample. Everything except `x` is constant across a row, so the
+  // callers below hoist the row's five values out of their inner loop and pass
+  // them in; this ran 8.4 million times with five typed-array reads of its own
+  // before that. The arithmetic is unchanged, so the result is bit-identical.
+  const sampleRow = (field, a, b, ox, tx, ty, x) => {
+    const xa = (((x + ox) % width) + width) % width;
     const xb = (xa + 1) % width;
-    const tx = fx[y];
-    const ty = fy[y];
     const top = field[a + xa] * (1 - tx) + field[a + xb] * tx;
     const bottom = field[b + xa] * (1 - tx) + field[b + xb] * tx;
     return top * (1 - ty) + bottom * ty;
@@ -567,8 +572,9 @@ function moistureField({
   for (let y = 0; y < height; y++) {
     if (!moving[y]) continue;
     const row = y * width;
+    const a = rowA[y], b = rowB[y], ox = offX[y], tx = fx[y], ty = fy[y];
     for (let x = 0; x < width; x++) {
-      const rise = Math.max(0, landHeight[row + x] - sampleAt(landHeight, y, x));
+      const rise = Math.max(0, landHeight[row + x] - sampleRow(landHeight, a, b, ox, tx, ty, x));
       transmission[row + x] = decay * Math.exp(-rise / params.orographicRiseM);
     }
   }
@@ -585,12 +591,16 @@ function moistureField({
     const back = sweep % 2 === 1;
     for (let k = 0; k < height; k++) {
       const y = back ? height - 1 - k : k;
+      // A row the wind does not reach has a transmission of zero everywhere,
+      // so it can be skipped outright rather than multiplied by nothing.
+      if (!moving[y]) continue;
       const row = y * width;
+      const a = rowA[y], b = rowB[y], ox = offX[y], tx = fx[y], ty = fy[y];
       for (let j = 0; j < width; j++) {
         const x = back ? width - 1 - j : j;
         const i = row + x;
         if (isSea[i]) continue;
-        const carried = transmission[i] * sampleAt(moisture, y, x);
+        const carried = transmission[i] * sampleRow(moisture, a, b, ox, tx, ty, x);
         if (carried > moisture[i]) moisture[i] = Math.min(1, carried);
       }
     }
@@ -600,7 +610,9 @@ function moistureField({
   // inland without it, and the cells' own rising and sinking air.
   for (let y = 0; y < height; y++) {
     const row = y * width;
-    const convergence = wind.convergence[Math.min(wind.rows - 1, Math.floor((y * wind.rows) / height))];
+    // windField is always built at this grid's own height, so the row index
+    // is the row -- no rescaling, and no chance of an off-by-one in one.
+    const convergence = wind.convergence[y];
     const belt =
       (1 - params.subtropicalDryStrength * Math.max(0, -convergence)) *
       (1 + params.convergenceWetBonus * Math.max(0, convergence));
@@ -615,11 +627,10 @@ function moistureField({
   return moisture;
 }
 
-// Everything about a world that the search cannot change: where the land is,
-// how high it stands above the sea in force, and how far each point is from
-// open water. Split out because a parameter fit runs the model thousands of
-// times over one fixed geography, and the distance transform is by far the
-// most expensive thing here.
+// Everything about a world that the search cannot change: where the land is
+// and how high it stands above the sea in force. Split out because a parameter
+// fit runs the model thousands of times over one fixed geography, and reading
+// the full-resolution raster down to the coarse grid does not need repeating.
 export function computeGeography({ elevation, seaLevelMetres, radiusMetres }) {
   const width = COARSE_WIDTH;
   const height = width / 2;
@@ -683,8 +694,8 @@ export function computeClimate({
 }
 
 // Sea-level temperature per latitude, as a function only of insolation. Kept
-// separate from computeClimate so the paint pass can evaluate it at its own
-// (finer) row spacing without redoing the distance transform.
+// separate from computeClimate, and computed at a finer row spacing than the
+// coarse grid, because the paint pass reads it per texture row.
 export function temperatureProfile(axialTiltDegrees, params, rows = 512) {
   const latitudes = new Float64Array(rows);
   for (let y = 0; y < rows; y++) latitudes[y] = (0.5 - (y + 0.5) / rows) * Math.PI;
@@ -711,18 +722,23 @@ export function temperatureProfile(axialTiltDegrees, params, rows = 512) {
   return { profileRows: rows, seaLevelC, latitudes };
 }
 
-function bilinearCoarse(field, width, height, fx, fy) {
-  const x0 = Math.floor(fx);
-  const y0 = Math.floor(fy);
-  const tx = fx - x0;
-  const ty = fy - y0;
-  const xa = ((x0 % width) + width) % width;
-  const xb = (((x0 + 1) % width) + width) % width;
-  const ya = Math.min(height - 1, Math.max(0, y0)) * width;
-  const yb = Math.min(height - 1, Math.max(0, y0 + 1)) * width;
-  const top = field[ya + xa] * (1 - tx) + field[ya + xb] * tx;
-  const bottom = field[yb + xa] * (1 - tx) + field[yb + xb] * tx;
-  return top * (1 - ty) + bottom * ty;
+// Where one texture column lands in the coarse grid. The painter walks two
+// million pixels and this depends only on x, so it is worked out once per
+// column instead of once per pixel -- a floor and two modulos each time,
+// which is most of what the inner loop was doing.
+function coarseColumns(textureWidth, coarseWidth) {
+  const a = new Int32Array(textureWidth);
+  const b = new Int32Array(textureWidth);
+  const t = new Float64Array(textureWidth);
+  const scale = coarseWidth / textureWidth;
+  for (let x = 0; x < textureWidth; x++) {
+    const fx = (x + 0.5) * scale - 0.5;
+    const x0 = Math.floor(fx);
+    t[x] = fx - x0;
+    a[x] = ((x0 % coarseWidth) + coarseWidth) % coarseWidth;
+    b[x] = (((x0 + 1) % coarseWidth) + coarseWidth) % coarseWidth;
+  }
+  return { a, b, t };
 }
 
 // One point's climate, written into `out` as
@@ -793,8 +809,9 @@ function mix(out, a, b, t) {
 export function paintClimate(data, elevation, climate, seaLevelMetres, params, palette) {
   const { width, height } = elevation;
   const rowScale = climate.profileRows / height;
-  const coarseX = climate.width / width;
   const coarseY = climate.height / height;
+  const column = coarseColumns(width, climate.width);
+  const field = climate.moisture;
 
   const ground = [0, 0, 0];
   const bare = [0, 0, 0];
@@ -803,16 +820,30 @@ export function paintClimate(data, elevation, climate, seaLevelMetres, params, p
 
   for (let y = 0; y < height; y++) {
     const seaLevelC = climate.seaLevelC[Math.min(climate.profileRows - 1, Math.floor(y * rowScale))];
+    // The row's two coarse rows and the weight between them: constant across
+    // the whole row, so they come out of the inner loop too.
     const fy = (y + 0.5) * coarseY - 0.5;
+    const y0 = Math.floor(fy);
+    const ty = fy - y0;
+    const ya = Math.min(climate.height - 1, Math.max(0, y0)) * climate.width;
+    const yb = Math.min(climate.height - 1, Math.max(0, y0 + 1)) * climate.width;
     let i = y * width;
     let out = i * 4;
 
     for (let x = 0; x < width; x++, i++, out += 4) {
       const metres = elevation.metres[i];
-      const moisture = bilinearCoarse(
-        climate.moisture, climate.width, climate.height,
-        (x + 0.5) * coarseX - 0.5, fy
-      );
+      // Sea pixels never read the moisture -- `classifyPoint` returns before
+      // it -- and on Earth they are seven pixels in ten, so the sample is not
+      // taken for them at all.
+      let moisture = 0;
+      if (metres >= seaLevelMetres) {
+        const xa = column.a[x];
+        const xb = column.b[x];
+        const tx = column.t[x];
+        const top = field[ya + xa] * (1 - tx) + field[ya + xb] * tx;
+        const bottom = field[yb + xa] * (1 - tx) + field[yb + xb] * tx;
+        moisture = top * (1 - ty) + bottom * ty;
+      }
       classifyPoint(surface, metres, seaLevelMetres, seaLevelC, moisture, params);
 
       if (surface[SURFACE_IS_SEA]) {
@@ -841,21 +872,33 @@ export function paintClimate(data, elevation, climate, seaLevelMetres, params, p
   }
 }
 
+// How much height it takes for bare rock to reach its lightest shade. Only
+// the 岩 mode uses it, and nothing in the objective can see it, so it is a
+// constant here rather than a parameter nobody would ever fit.
+const ROCK_SHADE_HEIGHT_M = 5000;
+
 // The bare-rock starting point the user asked the flow to begin from: no
 // climate at all, just the body's own shape under a uniform stone colour, with
 // the sea left to the sea sphere.
-export function paintBareRock(data, elevation, seaLevelMetres, palette) {
+//
+// It takes `params` only for the depth the sea ramp bottoms out at. That used
+// to be a `4000` written out here while `paintClimate` read
+// `seaDepthShadingM` -- two places deciding the same thing, which is the
+// duplication class that caused a real bug in V0.6 (see the cleanup pass).
+// They agree today because the parameter sits at its default; they would have
+// silently disagreed the moment anyone fitted it.
+export function paintBareRock(data, elevation, seaLevelMetres, params, palette) {
   const rock = palette.rock;
   for (let i = 0, out = 0; i < elevation.metres.length; i++, out += 4) {
     const metres = elevation.metres[i];
     if (metres < seaLevelMetres) {
-      const t = smoothstep(0, 4000, seaLevelMetres - metres);
+      const t = smoothstep(0, params.seaDepthShadingM, seaLevelMetres - metres);
       data[out] = palette.shallowSea[0] + (palette.deepSea[0] - palette.shallowSea[0]) * t;
       data[out + 1] = palette.shallowSea[1] + (palette.deepSea[1] - palette.shallowSea[1]) * t;
       data[out + 2] = palette.shallowSea[2] + (palette.deepSea[2] - palette.shallowSea[2]) * t;
     } else {
       // A touch of height shading so the relief still reads as relief.
-      const shade = 0.82 + 0.28 * smoothstep(0, 5000, metres - seaLevelMetres);
+      const shade = 0.82 + 0.28 * smoothstep(0, ROCK_SHADE_HEIGHT_M, metres - seaLevelMetres);
       data[out] = Math.min(255, rock[0] * shade);
       data[out + 1] = Math.min(255, rock[1] * shade);
       data[out + 2] = Math.min(255, rock[2] * shade);

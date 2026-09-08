@@ -269,7 +269,6 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
   let climateContext = null;
   let climatePixels = null;
   let climateTexture = null;
-  let climateFields = null;
 
   function ensureClimateTexture() {
     if (climateTexture) return;
@@ -290,15 +289,20 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
   // it just does not re-derive the climate until asked again.
   function setSurfaceMode(mode) {
     if (!supportsClimate) return surfaceMode;
-    surfaceMode = mode;
-    if (mode === "standard") {
+    // Anything unrecognised means the world's own surface, not bare rock --
+    // which is what an unknown name used to fall through to.
+    surfaceMode = mode === "climate" || mode === "rock" ? mode : "standard";
+    if (surfaceMode === "standard") {
       globe.material.map = texture;
       globe.material.needsUpdate = true;
       return surfaceMode;
     }
     ensureClimateTexture();
-    if (mode === "climate") {
-      climateFields = computeClimate({
+    if (surfaceMode === "climate") {
+      // A local, not a field: the coarse grids are about a megabyte and are
+      // read once, on the next line. Holding them for the life of the globe
+      // bought nothing.
+      const fields = computeClimate({
         elevation,
         seaLevelMetres,
         axialTiltDegrees: requireNumber(body.axialTiltDegrees, "body.axialTiltDegrees"),
@@ -308,11 +312,13 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
         params: climate.values,
       });
       paintClimate(
-        climatePixels.data, elevation, climateFields, seaLevelMetres,
+        climatePixels.data, elevation, fields, seaLevelMetres,
         climate.values, climate.palette
       );
     } else {
-      paintBareRock(climatePixels.data, elevation, seaLevelMetres, climate.palette);
+      paintBareRock(
+        climatePixels.data, elevation, seaLevelMetres, climate.values, climate.palette
+      );
     }
     climateContext.putImageData(climatePixels, 0, 0);
     climateTexture.needsUpdate = true;

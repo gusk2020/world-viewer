@@ -84,11 +84,14 @@ continue.
   that paints a plausible-looking surface from a few conditions. Nine stages
   were specified, and the user asked for a report and a pause at each.
   See "V0.8: the climate colouring" below.
-- **V0.8 stage 2 (current, done — needs the user's Pixel 7a confirmation)**:
-  rotation, wind and moisture advection. The user then reported the result
-  looked less natural than stage 1's and "too green overall", which was
-  correct and measurable; see "V0.8 stage 2, retuned against the photograph"
-  below for what was wrong and how it was fixed.
+- **V0.8 stage 2 (done, user-confirmed on Pixel 7a)**: rotation, wind and
+  moisture advection. The user first reported the result looked less natural
+  than stage 1's and "too green overall", which was correct and measurable;
+  after the retune against the satellite photograph they confirmed the
+  improvement, and named Thailand/Vietnam/Cambodia as still too bare alongside
+  the two problems already known — all three to be improved in a later stage.
+- **V0.8 stage 3 (current, done — needs the user's Pixel 7a confirmation)**:
+  the first code inspection. See "V0.8 stage 3: the first code inspection".
 - **V0.9+**: cities, borders/territories, historical eras, and other
   過速世界-specific data. Several distinct features, not one version —
   treat each as its own sub-version. **Needs the user's own world-setting
@@ -1801,10 +1804,23 @@ Evaporation really does depend steeply on sea-surface temperature, so the
 still-air term now starts from each sea's own evaporation and carries it
 inland: the same sweep as before with the source value multiplied along,
 which retired `distanceToSeaKm` entirely (a distance to the *nearest* sea
-cannot tell a warm one from a cold one). A warm Gulf of Mexico and a cold
-South Atlantic then settle North America and Patagonia at once. Measured, the
-vegetated fraction of North America went **0.24 → 0.48** against the
-photograph's 0.59, and Eurasia 0.30 → 0.66 against 0.72.
+cannot tell a warm one from a cold one).
+
+**A correction, found by the Stage 3 inspection and worth reading before
+trusting the paragraph above.** The mechanism is in the code, but at the
+parameters that actually shipped it does *nothing*: the fit put
+`evaporationHalfC` at −19.7 °C with a width of 4.9, so its whole transition
+spans −14.7 to −5.1 °C while the model's seas run **−2.8 to +24.6 °C**. Every
+sea therefore evaporates at exactly 1.000 and the term is inert. The North
+America improvement measured at the time (vegetated fraction **0.24 → 0.48**
+against the photograph's 0.59, Eurasia 0.30 → 0.66 against 0.72) is real, but
+it was bought by the other twenty parameters moving in the same refit, not by
+this one. This is the "two changes went in together and both got the credit"
+lesson for the second time, and the fix is the one already used elsewhere:
+**bound `evaporationHalfC` to the range a sea can actually reach** so the
+search cannot park it out of play, then refit. Left for the tuning stage
+rather than done now, because narrowing it would change a picture the user has
+already approved.
 
 ### Two parameters the Earth objective cannot see at all
 
@@ -1887,6 +1903,114 @@ piece of physics, not another parameter.
   it can return before the first frame is drawn. Wait for the axis readout to
   stop reading `NaN°` instead — that only happens once the animation loop has
   actually run.
+
+## V0.8 stage 3: the first code inspection
+
+The user's staged plan puts an inspection here, and their standing rule
+applies: **do not lose the state that works on the Pixel 7a**, and no
+ground-up rewrite. A restore point went to GitHub first — branch
+**`safe-v0.8-stage2-confirmed`** at `8a02385`, the version they had just
+confirmed. It must not be deleted or moved.
+
+The bar was the same as the V0.6 cleanup's: same pixels out. The harness is
+`scratchpad/stage3-baseline.mjs`, which runs in node and hashes everything the
+model produces — both painted textures byte for byte, the moisture, still-air,
+evaporation and temperature fields, the wind arrays, the same again at a
+second sea level (−120 m), the compatibility rules, and the reversed-spin
+wind. Run before and after: **every hash and every value identical**, and all
+fourteen rendered frames (seven views in 標準, seven in 陸地塗り分け) came back
+byte-identical too.
+
+### What was actually wrong
+
+- **`paintBareRock` carried its own copy of the sea-depth ramp.** It had a
+  literal `4000` where `paintClimate` reads `seaDepthShadingM`. They agree
+  today only because the parameter sits at its default; the first time anyone
+  fitted it, the 岩 mode's sea would have quietly disagreed with the climate
+  mode's. Now it takes `params` — and the identical texture hash is the proof
+  that this changed nothing today.
+- **Four comments described code that no longer exists.** Three still referred
+  to the distance transform the retune deleted, and one said "the sea holds
+  the field at 1" when each sea cell now holds its own evaporation. Stale
+  comments are worse than none: this file is read by future sessions as the
+  explanation of why the model is shaped the way it is.
+- **An unknown surface mode fell through to bare rock.** `setSurfaceMode`
+  tested only for `"standard"` and `"climate"`, so any other string painted
+  rock. It now falls back to the world's own surface.
+- **A megabyte of coarse fields was held for the life of the globe.**
+  `climateFields` was a module-scope `let` read exactly once, on the following
+  line. Now a local, so the grids are freed after the paint.
+- **The wind row index was rescaled against itself.** `windField` is always
+  built at the coarse grid's own height, so `Math.floor(y * wind.rows / height)`
+  was an identity with an off-by-one waiting in it.
+
+### The two hot loops, measured rather than guessed
+
+Timing the pass in node (median of seven runs in one process, because single
+runs vary by 15%) showed the split is not where it looks: the **painter** is
+the cost, not the climate model — 478 ms against 155 ms.
+
+Both hot loops were re-reading per-row and per-column constants inside their
+innermost loop. The moisture sweep's upwind sampler read five typed arrays on
+every one of its 8.4 million calls; the painter recomputed a floor and two
+modulos per pixel for a coarse-grid column index that depends only on `x`, two
+million times per pass. Hoisting both, plus skipping the moisture sample for
+sea pixels (seven pixels in ten on Earth, and `classifyPoint` returns before
+reading it), takes the whole thing **633 ms → 571 ms** in node and
+**697 ms → 616 ms in the browser**. The arithmetic is unchanged, which is why
+every hash still matches.
+
+That is a 10% gain, not the 25% a single noisy run first suggested, and it is
+worth stating at the real number.
+
+**Deliberately not optimised further**: `classifyPoint` writes five slots into
+a `Float64Array` that the painter reads straight back, which is pure overhead
+— and it stays, because that array is the seam that keeps the painter and the
+parameter search evaluating the same formula. Trading it for speed would
+reopen the one bug class this design exists to prevent.
+
+### The objective had a 36% blind spot, and the user found it by eye
+
+They reported Thailand, Vietnam and Cambodia as too bare. Measured, the
+thirteen hand-drawn region boxes covered only **64% of the world's land**, and
+Indochina fell straight down the gap between "south-east Asia" (which stopped
+at 10°N) and "east Asia" (which started at 20°N). The region term could not
+see the place they were complaining about.
+
+The boxes are now a plain 15°×30° grid over every cell that holds at least a
+thousandth of the world's land — 93 of them, **100% coverage**, and no
+judgement of mine deciding which places matter. Scored on the repaired
+objective, the shipped parameters put that cell at **0.24 vegetated against
+the photograph's 0.84, the second-worst region on the globe**. The user's eye
+and the repaired measurement agree exactly, which is the best evidence that
+the measurement is now pointed at the right thing.
+
+The other worst cells are the ones already known: Patagonia (0.87 against
+0.34), the Horn of Africa (0.74 against 0.20), the eastern United States (0.34
+against 0.99). Nothing was refitted here — that is the tuning stage's job, and
+this pass exists to make sure it starts from an objective that can see.
+
+### One more harness defect, fixed because later stages depend on it
+
+The scorer indexed the shared classifier by number — `surface[0]`,
+`surface[1]`, `surface[2]`, `surface[4]` — while the module exports
+`SURFACE_VEGETATION` and friends for exactly that reason. Had that order ever
+changed, the search would have optimised one quantity while the globe painted
+another, silently. Now by name everywhere, with the score confirmed unchanged
+either way.
+
+### Left alone on purpose
+
+- **`hasPhoto` in `main.js` and `supportsClimate` in `globe3d.js`** are the
+  same boolean today but different questions — "does this world have a
+  photograph to repaint" and "does this mesh carry map-shaped UVs". They will
+  diverge the moment climate reaches Mars. Collapsing them would hide that.
+- **Every fitted parameter value.** The user has looked at this picture and
+  accepted it; an inspection that quietly retunes is not an inspection.
+- **`hypsometric.js`, `graticule.js`, `cubeSphere.js`, `elevation.js`,
+  `surface.js`** — read through this round, nothing found worth the risk.
+  `hypsometric.js`'s advancing-stop search is correct for its monotone input
+  and cheap.
 
 ## The V0.6 cleanup pass (no feature changes)
 
