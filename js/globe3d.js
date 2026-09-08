@@ -265,23 +265,30 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
     body3d.updateMatrixWorld(true);
   }
 
-  // How tilted the spin axis *looks* right now: the angle between the axis
-  // projected onto the screen and straight up, in degrees. Upright reads 0
-  // from every angle; a tilted body swings between +obliquity and
-  // -obliquity as you orbit it, which is the point of showing it live.
+  // The angle between the spin axis and "up on your screen", in 3D.
+  //
+  // This started out as the angle of the axis *projected* onto the screen,
+  // which was a mistake: OrbitControls keeps its up vector at +Y, so an
+  // upright body's axis is exactly vertical on screen from every possible
+  // camera position, and the projected angle was pinned at 0 forever. Since
+  // upright is the default, the readout looked simply broken -- which is
+  // what the user reported ("常に0度のままで動かしても変化しません").
+  //
+  // Measured in 3D it always responds, because tipping the axis toward or
+  // away from the viewer is a real change even when it still *draws*
+  // vertical. Upright and looking at the equator reads 0; orbit up to the
+  // pole and it sweeps to 90 as the axis turns to point at you. A tilted
+  // body at the reference pose reads its own obliquity, so the readout and
+  // the button still agree. It also has no degenerate case to guard: looking
+  // straight down the axis is simply 90 degrees.
   const axisWorld = new THREE.Vector3();
-  const cameraRight = new THREE.Vector3();
   const cameraUp = new THREE.Vector3();
 
-  function getAxisScreenAngle() {
+  function getAxisAngle() {
     axisWorld.set(0, 1, 0).applyQuaternion(body3d.quaternion);
-    camera.matrixWorld.extractBasis(cameraRight, cameraUp, new THREE.Vector3());
-    const x = axisWorld.dot(cameraRight);
-    const y = axisWorld.dot(cameraUp);
-    // Looking straight down the axis leaves nothing to measure an angle
-    // against; hold the last reading rather than printing noise.
-    if (Math.hypot(x, y) < 1e-3) return null;
-    return Math.abs((Math.atan2(x, y) * 180) / Math.PI);
+    camera.matrixWorld.extractBasis(new THREE.Vector3(), cameraUp, new THREE.Vector3());
+    const cosine = Math.min(1, Math.max(-1, axisWorld.dot(cameraUp)));
+    return (Math.acos(cosine) * 180) / Math.PI;
   }
 
   // Built on first use: a graticule nobody has switched on should cost
@@ -440,7 +447,7 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
     setWaterOpacity,
     setSeabedStyle,
     setAxisTilt,
-    getAxisScreenAngle,
+    getAxisAngle,
     setGraticule,
     getMetresPerPixel,
     dispose,

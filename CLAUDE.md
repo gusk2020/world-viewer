@@ -1358,13 +1358,32 @@ Rotating about X instead leans it across the screen, the familiar
 globe-on-a-stand pose, and the readout reads 23°/25°/7° the moment it is
 pressed. Caught by the test asserting the readout, not by looking.
 
-**The readout is the *apparent* angle**, i.e. the spin axis projected onto
-the screen, measured from vertical. That is the quantity the button
-controls, so the two agree: upright reads 0° from every angle, and a tilted
-body swings between +obliquity and −obliquity as it is dragged around,
-which is the point of showing it live. Looking straight down the axis leaves
-nothing to measure against, so it holds the last reading rather than
-printing noise.
+**The readout is the angle between the spin axis and "up on your screen",
+measured in 3D** — and getting there took a correction worth recording.
+
+It began as the angle of the axis *projected* onto the screen. That was
+wrong in a way no amount of testing the tilted state would reveal:
+OrbitControls keeps its up vector at +Y, so an upright body's axis draws
+exactly vertical from every possible camera position, and the projected
+angle is pinned at **0 for ever**. Upright is the default, so the live
+readout looked simply broken, and the user reported exactly that — "常に0度
+のままで動かしても変化しません". The bug had been sitting in front of a
+passing test suite the whole time, because every assertion checked the
+tilted state, where the projected angle does move.
+
+Measured in 3D (`acos(axis · cameraUp)`) it always responds, because tipping
+the axis toward or away from the viewer is a real change even when it still
+*draws* vertical. Upright at the equator reads 0°; orbit up to the pole and
+it sweeps to 90° as the axis turns to point at you (so in the upright state
+it doubles as "how far north or south am I looking"). A tilted body at the
+reference pose reads its own obliquity — 23°/25°/7° — so the readout and the
+button still agree. It also has no degenerate case left to special-case:
+looking straight down the axis is simply 90°.
+
+Orbiting *horizontally* on an upright body still holds at 0°, and that is
+geometrically true rather than a leftover of the bug — a vertical axis stays
+vertical relative to screen-up however far you spin around it. Any up-down
+component in the drag moves the number.
 
 ### The graticule
 

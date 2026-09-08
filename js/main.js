@@ -170,13 +170,10 @@ async function main() {
   let shownScale = null;
 
   function onFrame() {
-    const angle = globe3d.getAxisScreenAngle();
-    if (angle !== null) {
-      const rounded = Math.round(angle);
-      if (rounded !== shownAxis) {
-        shownAxis = rounded;
-        axisReadout.textContent = `${rounded}°`;
-      }
+    const rounded = Math.round(globe3d.getAxisAngle());
+    if (rounded !== shownAxis) {
+      shownAxis = rounded;
+      axisReadout.textContent = `${rounded}°`;
     }
     if (!scaleBar.hidden) {
       const bar = scaleBarFor(globe3d.getMetresPerPixel());
