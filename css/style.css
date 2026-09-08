@@ -69,23 +69,26 @@ html, body {
   transform: translateX(-50%);
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 8px 16px;
-  border-radius: 22px;
+  gap: 2px;
+  padding: 5px 12px 6px;
+  border-radius: 18px;
   background: rgba(15, 23, 35, 0.82);
   color: #eaf2ff;
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-  font-size: 0.9rem;
+  font-size: 0.88rem;
   font-weight: 600;
   z-index: 5;
-  width: min(320px, 80vw);
+  /* Wider and shorter than it was. The panel had grown to six rows and a
+     third of the screen height; folding the axis and graticule controls onto
+     one row needs the extra width to fit, and buys back the height. */
+  width: min(368px, 92vw);
 }
 
 #sea-level-control .control-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 36px;
+  gap: 8px;
+  min-height: 30px;
 }
 
 /* A row set to display:flex outranks the browser's own
@@ -97,7 +100,7 @@ html, body {
 
 #sea-level-control label {
   white-space: nowrap;
-  min-width: 5em;
+  min-width: 4.6em;
 }
 
 #sea-level-control input[type="range"] {
@@ -119,7 +122,7 @@ html, body {
 
 .segmented button {
   flex: 1;
-  min-height: 32px;
+  min-height: 28px;
   padding: 0 4px;
   border: 0;
   border-radius: 16px;
@@ -139,10 +142,10 @@ html, body {
    readable on a phone in sunlight, so it stays at the panel's own contrast
    rather than being greyed out. */
 #virtual-sea-note {
-  margin: 0 2px 2px;
-  font-size: 0.72rem;
+  margin: 0 2px 1px;
+  font-size: 0.68rem;
   font-weight: 400;
-  line-height: 1.35;
+  line-height: 1.25;
   color: #c8d6ea;
 }
 
@@ -150,8 +153,8 @@ html, body {
    controls, but each is a single button that cycles through its states. */
 .pill {
   flex: 1;
-  min-height: 32px;
-  padding: 0 10px;
+  min-height: 28px;
+  padding: 0 8px;
   border: 0;
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.14);

@@ -33,6 +33,9 @@ const SURFACE_LIFT = 0.0015;
 // same black line gives 35, which matches what the white line managed
 // there. So dark wins outright: seven times the contrast where white failed,
 // and no loss where white worked.
+// Must match the sea sphere's renderOrder in globe3d.js (its default, 0).
+const SEA_RENDER_ORDER = 0;
+
 const COLOR = 0x000000;
 const OPACITY = 0.45;
 
@@ -80,10 +83,24 @@ function linesFrom(polylines) {
     "position",
     new THREE.BufferAttribute(new Float32Array(positions), 3)
   );
-  return new THREE.LineSegments(
+  const lines = new THREE.LineSegments(
     geometry,
     new THREE.LineBasicMaterial({ color: COLOR, transparent: true, opacity: OPACITY })
   );
+  // Draw after the sea. Both the sea and these lines are transparent, so
+  // three.js sorts them back to front -- and wherever the seabed lies below
+  // sea level the lines are *further* from the camera than the water, so
+  // they were painted first and the water then covered them. Past about 60%
+  // opacity that made the graticule vanish over every ocean, which is
+  // exactly what the user reported ("海の下に潜る感じ").
+  //
+  // Ordering them last is safe rather than a hack: the sea has
+  // depthWrite: false, so the depth buffer holds only the terrain, and these
+  // lines still depth-test against it. Lines on the far side of the globe
+  // stay hidden; only the water stops hiding them. A graticule is a map
+  // overlay, and overlays belong on top of what they annotate.
+  lines.renderOrder = SEA_RENDER_ORDER + 1;
+  return lines;
 }
 
 function buildSet(step, radiusAt) {

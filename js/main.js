@@ -40,21 +40,30 @@ async function main() {
   let globe3d = null;
   let world = null;
 
-  // The axial-tilt button has two positions: upright, and the body's real
-  // obliquity (23.4 degrees for Earth, 25.2 for Mars, 6.7 for the Moon --
-  // each from its own config, measured against its own orbital plane).
-  // "Upright" is absolute, so one press straightens the globe however it is
-  // currently turned.
+  // A posture button, not just a tilt. Both of its positions put the body
+  // back into the same reference pose -- equator horizontal and lng/lat 0,0
+  // dead centre, facing the viewer -- and differ only in whether the spin
+  // axis stands vertical or leans at the body's real obliquity (23.4 degrees
+  // for Earth, 25.2 for Mars, 6.7 for the Moon, each from its own config and
+  // measured against its own orbital plane). So one press straightens and
+  // re-centres the globe however far it has been dragged, and a second press
+  // tilts it from that same known pose.
+  //
+  // Zoom is deliberately left alone: how far in you are is not part of the
+  // orientation, and throwing away a close-up view would make the button
+  // annoying to press.
   let axisUpright = true;
 
   // Four states in a cycle, in the order the user asked for: press once for
   // parallels, again to add meridians, again for meridians alone, again to
   // clear them.
+  // Short labels because these two controls share one row now; the row is
+  // only ~350px wide on a phone.
   const GRATICULE_STATES = [
     { mode: "off", label: "なし" },
-    { mode: "parallels", label: "緯度線" },
-    { mode: "both", label: "緯度経度線" },
-    { mode: "meridians", label: "経度線" },
+    { mode: "parallels", label: "緯度" },
+    { mode: "both", label: "緯度+経度" },
+    { mode: "meridians", label: "経度" },
   ];
   let graticuleIndex = 0;
 
@@ -114,21 +123,35 @@ async function main() {
   seaLevelSlider.addEventListener("input", applySeaLevel);
   waterOpacitySlider.addEventListener("input", applyWaterOpacity);
 
-  function applyAxis() {
+  function applyAxis({ recentre }) {
     const tilt = axisUpright ? 0 : world.config.body.axialTiltDegrees;
+    const zoom = globe3d.getView().zoom;
     globe3d.setAxisTilt(tilt);
-    axisButton.textContent = axisUpright ? "垂直" : `${tilt}°`;
+    // Only on a press. Doing it on load too would move the opening view,
+    // which sits at lng -90 and which the user has already signed off on.
+    if (recentre) globe3d.setView({ lng: 0, lat: 0, zoom });
+    axisButton.textContent = axisUpright ? "軸 垂直" : `軸 ${tilt}°`;
     axisButton.classList.toggle("active", !axisUpright);
   }
+  // Not a plain toggle. "One press returns to the zero pose from any
+  // orientation, a second press tilts from there" only holds if a press
+  // that finds the globe dragged away snaps it back rather than advancing
+  // to the other state -- otherwise the very first press on a freshly
+  // loaded (already upright) globe would tilt it instead of resetting it.
+  function atZeroPose() {
+    if (!axisUpright) return false;
+    const view = globe3d.getView();
+    return Math.abs(view.lng) < 0.5 && Math.abs(view.lat) < 0.5;
+  }
   axisButton.addEventListener("click", () => {
-    axisUpright = !axisUpright;
-    applyAxis();
+    axisUpright = !atZeroPose();
+    applyAxis({ recentre: true });
   });
 
   function applyGraticule() {
     const state = GRATICULE_STATES[graticuleIndex];
     globe3d.setGraticule(state.mode);
-    graticuleButton.textContent = state.label;
+    graticuleButton.textContent = `線 ${state.label}`;
     graticuleButton.classList.toggle("active", state.mode !== "off");
     // The scale is only shown alongside a graticule, as asked -- the two
     // answer the same question, "how big is what I am looking at".
@@ -207,7 +230,7 @@ async function main() {
 
     applySeaLevel();
     applyWaterOpacity();
-    applyAxis();
+    applyAxis({ recentre: false });
     applyGraticule();
     applyMode();
     loading.classList.add("hidden");

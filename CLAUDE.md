@@ -1310,14 +1310,34 @@ graticule starts off and is not even built until first used. Verified the
 usual way — every measured value matched and **every screenshot was
 byte-identical below the control panel**.
 
-### The axial tilt
+### The axial tilt — really a posture button
 
-One button with two positions: upright, and the body's real obliquity from
-its config (`body.axialTiltDegrees`: Earth 23.44°, Mars 25.19°, Moon 6.68°,
-each measured against its own orbital plane, which is the convention that
-makes Earth's figure 23.44 rather than 0). "Upright" is set as an absolute
-rotation rather than a relative nudge, so one press straightens the globe
-however it has been dragged — which is what the user asked for.
+One button with two positions, and **both of them put the body into the same
+reference pose**: equator horizontal, spin axis in the screen's vertical
+plane, and lng/lat 0,0 dead centre facing the viewer. They differ only in
+whether the axis stands vertical or leans at the body's real obliquity
+(`body.axialTiltDegrees`: Earth 23.44°, Mars 25.19°, Moon 6.68°, each
+measured against its own orbital plane, the convention that makes Earth's
+figure 23.44 rather than 0). The user's own framing: "どんな向きになって
+いてもその表示に戻る姿勢リセットボタン".
+
+**It is not a plain toggle, and that distinction is the whole feature.**
+"One press returns to the zero pose from any orientation, a second press
+tilts from there" only holds if a press that finds the globe dragged away
+*snaps it back* rather than advancing to the other state — otherwise the
+very first press on a freshly loaded, already-upright globe would tilt it
+instead of resetting it, which is the opposite of what was asked for. So
+`atZeroPose()` checks both the tilt and that the view is within half a
+degree of 0,0, and the press only advances when it is already there.
+
+**Zoom is deliberately not reset.** How far in you are is not part of the
+orientation, and discarding a close-up would make the button annoying to
+press.
+
+**The recentring happens only on a press, never on load.** The opening view
+sits at lng −90 (camera at `(0, 0, 3)`), which the user has already signed
+off on; recentring during `loadWorld` would quietly move it. `applyAxis`
+takes a `recentre` flag for exactly this.
 
 **The body is tilted, not the camera.** That keeps `OrbitControls`' own up
 vector at +Y, so dragging, the polar clamp and the zoom limits all behave
@@ -1364,6 +1384,31 @@ for the whole globe and nearly empty close in, 10° the reverse. Both are a
 few thousand points, so both are built once and the swap is a visibility
 flag.
 
+**They are drawn after the sea, and that was a real bug.** The user
+reported the graticule fading out above about 50-60% water opacity and
+vanishing at 100% — "海の下や地形の下に潜る感じ". Both the sea and the lines
+are transparent, so three.js sorts them back to front, and wherever the
+seabed lies below sea level the lines are *further* from the camera than the
+water: they were painted first and the water covered them. Giving the lines
+`renderOrder = 1` fixes it, and it is safe rather than a hack — the sea has
+`depthWrite: false`, so the depth buffer holds only the terrain and the
+lines still depth-test against it. Lines on the far side of the globe stay
+hidden; only the water stops hiding them. A graticule is a map overlay, and
+overlays belong on top of what they annotate.
+
+Measured by A/B on that one line, on Mars at the same view: without it,
+100% water leaves only **2048** of ~7090 line pixels (just the ones over
+land) and 60% water washes the survivors from contrast 29.7 down to 17.3.
+With it, all **7090** survive at every opacity, contrast 29.7 → 33.2.
+
+**One methodology note worth keeping**: the first attempt to measure this
+scanned for the sharpest luminance edge in a row and reported *no
+difference at all* — because over a coastline the sharpest edge is the
+coast, not the graticule. The measurement that works renders the same frame
+with the lines off and on and diffs the two: whatever changes **is** the
+lines. When a probe says "no effect" and the eye says otherwise, suspect the
+probe.
+
 **Dark lines, and that was measured rather than assumed.** The luminance
 step across a line, against the two hardest backgrounds the app draws: over
 the Sahara (the brightest ground, ~224) a white line at 0.42 opacity moves
@@ -1374,6 +1419,15 @@ there. So dark wins outright: seven times the contrast where white failed
 and no loss where white worked. Raising white's opacity does not fix it
 (0.7 only reaches 22 on the Sahara while glaring at 54 on the ocean) — the
 problem is the colour, not the strength.
+
+### The control panel
+
+Folded to **169 px, 19% of a Pixel 7a's screen, from 252 px / 28%** after
+the user said it had grown too big. The axis and graticule controls share
+one row (which needed the panel widened from 320 to 368 px to fit), row
+height went 36 → 30 px, gaps 4 → 2 px, and the buttons carry their own
+short prefixes (`軸 垂直`, `線 緯度+経度`) since a shared row has no space
+for a left-hand label. Same height on all three bodies.
 
 ### The scale bar
 
