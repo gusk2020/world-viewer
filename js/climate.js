@@ -94,6 +94,22 @@ export const CLIMATE_PARAMETERS = {
       "e-folding distance. Since Stage 2 this is only the still-air part; " +
       "`stillAirMoisture` says how much of the total it is allowed to be.",
   },
+  evaporationHalfC: {
+    value: 10, kind: "empirical", min: -20, max: 35,
+    note:
+      "Sea-surface temperature at which a sea gives up half as much moisture " +
+      "as a warm one. Evaporation really does depend steeply on temperature, " +
+      "and leaving it out was a visible fault rather than a refinement: with " +
+      "every sea equally wet, the only way to get moisture into North " +
+      "America was to lower the vegetation threshold worldwide, which turned " +
+      "the whole globe too green -- and the only way to keep the globe honest " +
+      "was to leave the continent bare. A warm Gulf of Mexico and a cold " +
+      "South Atlantic settle both at once.",
+  },
+  evaporationWidthC: {
+    value: 15, kind: "empirical", min: 3, max: 40,
+    note: "How sharply that falls away as a sea gets colder.",
+  },
   stillAirMoisture: {
     value: 0.35, kind: "empirical", min: 0, max: 1,
     note:
@@ -136,8 +152,12 @@ export const CLIMATE_PARAMETERS = {
     note:
       "How much a slower spin widens the cells. At 0 the cell structure is " +
       "fixed whatever the day length; positive, and a slow rotator collapses " +
-      "to a single cell per hemisphere, which is what Venus and Titan " +
-      "actually do.",
+      "toward a single cell per hemisphere, which is what Venus and Titan " +
+      "actually do. Set to 1/3, which is what the standard scaling for the " +
+      "width of a Hadley cell gives, and then left out of the automatic " +
+      "search -- Earth's spin is the reference, so this term has *no effect " +
+      "whatsoever* on an objective measured on Earth, and a search allowed " +
+      "to move it is fitting noise. It matters only for another body.",
   },
   advectionRangeKm: {
     value: 2500, kind: "empirical", min: 100, max: 8000,
@@ -187,13 +207,17 @@ export const CLIMATE_PARAMETERS = {
     note: "Moisture at which plant cover is half of what warmth allows.",
   },
   vegetationMoistureWidth: {
-    value: 0.22, kind: "empirical", min: 0.15, max: 1,
+    value: 0.22, kind: "empirical", min: 0.15, max: 0.35,
     note:
       "How gradually plant cover fades out as it gets drier. Floored well " +
       "above zero because the user asked for natural gradients and the search " +
       "will otherwise collapse this into a hard desert/forest edge -- it goes " +
       "straight to the floor every time, so where the floor sits is where the " +
-      "gradient ends up.",
+      "gradient ends up. Capped at the top for the opposite reason: a ramp " +
+      "this wide needs the moisture to swing across nearly its whole range " +
+      "before ground is fully green, so almost nothing ever is, and the " +
+      "continent turns to mush. Smooth gradients come from the moisture field " +
+      "being smooth in space, not from the ramp being wide.",
   },
 
   sandTemperatureC: {
@@ -312,64 +336,6 @@ export function annualInsolationByLatitude(latitudesRad, tiltDegrees, steps = 18
   return out;
 }
 
-// Distance from every land cell to the nearest sea, in kilometres, by a
-// two-pass weighted chamfer transform. Weighted because a step in longitude is
-// a different distance on the ground at every latitude -- treating the grid as
-// square would make polar continents look far wider than they are. Longitude
-// wraps, so the passes run twice: one sweep cannot carry a distance the whole
-// way around the globe.
-function distanceToSeaKm(isSea, width, height, radiusMetres) {
-  const distance = new Float32Array(width * height);
-  distance.fill(Infinity);
-  for (let i = 0; i < distance.length; i++) if (isSea[i]) distance[i] = 0;
-
-  const stepY = (Math.PI * radiusMetres) / height / 1000;
-  const stepX = new Float64Array(height);
-  for (let y = 0; y < height; y++) {
-    const lat = ((0.5 - (y + 0.5) / height) * Math.PI);
-    stepX[y] = ((2 * Math.PI * radiusMetres) / width / 1000) * Math.max(Math.cos(lat), 1e-3);
-  }
-
-  const relax = (i, j, cost) => {
-    const candidate = distance[j] + cost;
-    if (candidate < distance[i]) distance[i] = candidate;
-  };
-
-  for (let sweep = 0; sweep < 2; sweep++) {
-    for (let y = 0; y < height; y++) {
-      const row = y * width;
-      const dx = stepX[y];
-      const diag = Math.hypot(dx, stepY);
-      for (let x = 0; x < width; x++) {
-        const i = row + x;
-        relax(i, row + ((x - 1 + width) % width), dx);
-        if (y > 0) {
-          const up = row - width;
-          relax(i, up + x, stepY);
-          relax(i, up + ((x - 1 + width) % width), diag);
-          relax(i, up + ((x + 1) % width), diag);
-        }
-      }
-    }
-    for (let y = height - 1; y >= 0; y--) {
-      const row = y * width;
-      const dx = stepX[y];
-      const diag = Math.hypot(dx, stepY);
-      for (let x = width - 1; x >= 0; x--) {
-        const i = row + x;
-        relax(i, row + ((x + 1) % width), dx);
-        if (y < height - 1) {
-          const down = row + width;
-          relax(i, down + x, stepY);
-          relax(i, down + ((x - 1 + width) % width), diag);
-          relax(i, down + ((x + 1) % width), diag);
-        }
-      }
-    }
-  }
-  return distance;
-}
-
 const COARSE_WIDTH = 512;
 
 // Earth's sidereal day. Every spin in this model is measured against it, so
@@ -446,6 +412,87 @@ export function windField(rows, dayLengthHours, rotationDirection, params) {
   return { rows, spin, cellEdgeDeg, east, north, convergence };
 }
 
+// How much moisture a sea gives up, per latitude row. A sea's temperature is
+// the moderated profile `classifyPoint` already uses for open water, so this
+// costs nothing beyond the smoothstep.
+function evaporationByRow(seaLevelC, profileRows, rows, params) {
+  const out = new Float64Array(rows);
+  for (let y = 0; y < rows; y++) {
+    const t = seaLevelC[Math.min(profileRows - 1, Math.floor((y * profileRows) / rows))];
+    const temperature =
+      params.meanTemperatureC + params.oceanModeration * (t - params.meanTemperatureC);
+    out[y] = smoothstep(
+      params.evaporationHalfC - params.evaporationWidthC,
+      params.evaporationHalfC + params.evaporationWidthC,
+      temperature
+    );
+  }
+  return out;
+}
+
+// The moisture that reaches inland with no help from the prevailing wind.
+// This used to be a plain exponential in the distance to the *nearest* sea,
+// which cannot tell a warm sea from a cold one. It is now the same sweep with
+// the source value carried along: each sea cell starts at its own evaporation
+// and every land cell keeps the best any neighbour can deliver after the
+// journey. Weighted, and swept twice in each direction, for the same reasons
+// the distance transform was.
+function stillAirField(isSea, width, height, radiusMetres, evaporation, params) {
+  const field = new Float32Array(width * height);
+  for (let y = 0; y < height; y++) {
+    const row = y * width;
+    for (let x = 0; x < width; x++) if (isSea[row + x]) field[row + x] = evaporation[y];
+  }
+
+  const stepY = (Math.PI * radiusMetres) / height / 1000;
+  const decay = params.moistureDecayKm;
+  const stepX = new Float64Array(height);
+  for (let y = 0; y < height; y++) {
+    const lat = (0.5 - (y + 0.5) / height) * Math.PI;
+    stepX[y] = ((2 * Math.PI * radiusMetres) / width / 1000) * Math.max(Math.cos(lat), 1e-3);
+  }
+  const relax = (i, j, cost) => {
+    const candidate = field[j] * Math.exp(-cost / decay);
+    if (candidate > field[i]) field[i] = candidate;
+  };
+
+  for (let sweep = 0; sweep < 2; sweep++) {
+    for (let y = 0; y < height; y++) {
+      const row = y * width;
+      const dx = stepX[y];
+      const diag = Math.hypot(dx, stepY);
+      for (let x = 0; x < width; x++) {
+        const i = row + x;
+        if (isSea[i]) continue;
+        relax(i, row + ((x - 1 + width) % width), dx);
+        if (y > 0) {
+          const up = row - width;
+          relax(i, up + x, stepY);
+          relax(i, up + ((x - 1 + width) % width), diag);
+          relax(i, up + ((x + 1) % width), diag);
+        }
+      }
+    }
+    for (let y = height - 1; y >= 0; y--) {
+      const row = y * width;
+      const dx = stepX[y];
+      const diag = Math.hypot(dx, stepY);
+      for (let x = width - 1; x >= 0; x--) {
+        const i = row + x;
+        if (isSea[i]) continue;
+        relax(i, row + ((x + 1) % width), dx);
+        if (y < height - 1) {
+          const down = row + width;
+          relax(i, down + x, stepY);
+          relax(i, down + ((x - 1 + width) % width), diag);
+          relax(i, down + ((x + 1) % width), diag);
+        }
+      }
+    }
+  }
+  return field;
+}
+
 // Moisture carried inland by that wind.
 //
 // The sea holds the field at 1; every land cell takes what its *upwind*
@@ -460,7 +507,7 @@ export function windField(rows, dayLengthHours, rotationDirection, params) {
 // worked out once into a per-cell transmission factor and each sweep is four
 // reads and three multiplies.
 function moistureField({
-  isSea, landHeight, distanceKm, width, height, radiusMetres, wind, params,
+  isSea, landHeight, width, height, radiusMetres, wind, evaporation, still, params,
 }) {
   const stepYKm = (Math.PI * radiusMetres) / height / 1000;
   const decay = Math.exp(-stepYKm / params.advectionRangeKm);
@@ -527,7 +574,10 @@ function moistureField({
   }
 
   const moisture = new Float32Array(width * height);
-  for (let i = 0; i < moisture.length; i++) moisture[i] = isSea[i] ? 1 : 0;
+  for (let y = 0; y < height; y++) {
+    const row = y * width;
+    for (let x = 0; x < width; x++) moisture[row + x] = isSea[row + x] ? evaporation[y] : 0;
+  }
 
   // In place, alternating direction, so each sweep propagates a long way with
   // the flow instead of only one cell.
@@ -556,9 +606,9 @@ function moistureField({
       (1 + params.convergenceWetBonus * Math.max(0, convergence));
     for (let x = 0; x < width; x++) {
       const i = row + x;
-      const still = params.coastalMoisture * Math.exp(-distanceKm[i] / params.moistureDecayKm);
       const wind_ = moisture[i];
-      const total = wind_ + params.stillAirMoisture * still * (1 - wind_);
+      const total =
+        wind_ + params.stillAirMoisture * params.coastalMoisture * still[i] * (1 - wind_);
       moisture[i] = Math.min(1, Math.max(0, total * belt));
     }
   }
@@ -599,10 +649,7 @@ export function computeGeography({ elevation, seaLevelMetres, radiusMetres }) {
     }
   }
 
-  return {
-    width, height, isSea, landHeight, radiusMetres,
-    distanceKm: distanceToSeaKm(isSea, width, height, radiusMetres),
-  };
+  return { width, height, isSea, landHeight, radiusMetres };
 }
 
 // The fields that vary smoothly -- the wind, how far inland a point is, how
@@ -615,16 +662,23 @@ export function computeClimate({
   dayLengthHours, rotationDirection, params, geography,
 }) {
   const geo = geography || computeGeography({ elevation, seaLevelMetres, radiusMetres });
+  const profile = temperatureProfile(axialTiltDegrees, params);
+  const evaporation = evaporationByRow(
+    profile.seaLevelC, profile.profileRows, geo.height, params
+  );
+  const still = stillAirField(
+    geo.isSea, geo.width, geo.height, geo.radiusMetres, evaporation, params
+  );
   const wind = windField(geo.height, dayLengthHours, rotationDirection, params);
   const moisture = moistureField({
-    isSea: geo.isSea, landHeight: geo.landHeight, distanceKm: geo.distanceKm,
+    isSea: geo.isSea, landHeight: geo.landHeight,
     width: geo.width, height: geo.height, radiusMetres: geo.radiusMetres,
-    wind, params,
+    wind, evaporation, still, params,
   });
 
   return {
-    width: geo.width, height: geo.height, distanceKm: geo.distanceKm, moisture, wind,
-    ...temperatureProfile(axialTiltDegrees, params),
+    width: geo.width, height: geo.height, moisture, wind, evaporation, still,
+    ...profile,
   };
 }
 

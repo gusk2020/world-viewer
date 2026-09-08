@@ -25,26 +25,55 @@
     }
   },
   "climate": {
-    "_note": "Overrides for js/climate.js, which holds the schema (default, physical/empirical, range, meaning). Missing entries take the default; unknown ones are ignored. Fitted by a program, never by hand: an objective of zonal land-cover fractions plus 20 named places, four independent searches per round and several rounds of refinement, roughly 40,000 trials. Not comparable with the Stage 1 set it replaces -- the model and the objective both changed.",
-    "insolationSensitivityC": 71.015,
-    "polarExtraC": 10.944,
-    "oceanModeration": 0.734,
-    "coastalMoisture": 0.974,
-    "moistureDecayKm": 1152,
-    "stillAirMoisture": 0.644,
-    "circulationCellEdgeDeg": 26.875,
-    "cellRotationExponent": 0.126,
-    "advectionRangeKm": 7459,
-    "orographicRiseM": 435,
-    "subtropicalDryStrength": 0.543,
-    "convergenceWetBonus": 0.618,
-    "vegetationWarmthC": -8.173,
-    "vegetationWarmthWidthC": 3.209,
-    "vegetationMoistureHalf": 0.325,
-    "vegetationMoistureWidth": 0.15,
-    "permanentSnowOffsetC": -9.379,
-    "snowBlendC": 2.041,
-    "seaIceBlendC": 3.266
+    "_note": "Overrides for js/climate.js, which holds the schema (default, physical/empirical, range, meaning). Missing entries take the default; unknown ones are ignored. Fitted by a program, never by hand, against this world's own satellite photograph: the photo is classified pixel by pixel into vegetation, bare ground and snow, and the model is scored against that -- globally, per region (so one continent's excess cannot pay for another's shortfall), and at twenty named places.",
+    "insolationSensitivityC": 81.698,
+    "polarExtraC": 11.516,
+    "oceanModeration": 0.584,
+    "coastalMoisture": 0.919,
+    "moistureDecayKm": 2880,
+    "stillAirMoisture": 0.627,
+    "evaporationHalfC": -9.865,
+    "evaporationWidthC": 4.798,
+    "circulationCellEdgeDeg": 28.535,
+    "advectionRangeKm": 8000,
+    "orographicRiseM": 100,
+    "subtropicalDryStrength": 0.301,
+    "convergenceWetBonus": 1.229,
+    "vegetationWarmthC": -12,
+    "vegetationWarmthWidthC": 5.902,
+    "vegetationMoistureHalf": 0.611,
+    "vegetationMoistureWidth": 0.568,
+    "permanentSnowOffsetC": -12.89,
+    "snowBlendC": 6.448,
+    "seaIceBlendC": 1.948,
+    "_paletteNote": "Measured from this world's own photograph, not chosen: each swatch is the mean of the pixels at one end of a class's real range -- the greenest vegetated ground, the brightest hot bare ground, the darkest cold bare ground, the veg/bare transition, and snow.",
+    "palette": {
+      "rock": [
+        127,
+        124,
+        100
+      ],
+      "sand": [
+        235,
+        220,
+        202
+      ],
+      "dryGrass": [
+        145,
+        149,
+        123
+      ],
+      "vegetation": [
+        100,
+        128,
+        81
+      ],
+      "snow": [
+        230,
+        230,
+        233
+      ]
+    }
   },
   "terrain": {
     "source": "GEBCO_2026 Grid (ice surface elevation), 15 arc-second, via CEDA",

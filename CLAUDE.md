@@ -85,8 +85,10 @@ continue.
   were specified, and the user asked for a report and a pause at each.
   See "V0.8: the climate colouring" below.
 - **V0.8 stage 2 (current, done — needs the user's Pixel 7a confirmation)**:
-  rotation, wind and moisture advection. See "V0.8 stage 2: rotation, wind
-  and moisture" below.
+  rotation, wind and moisture advection. The user then reported the result
+  looked less natural than stage 1's and "too green overall", which was
+  correct and measurable; see "V0.8 stage 2, retuned against the photograph"
+  below for what was wrong and how it was fixed.
 - **V0.9+**: cities, borders/territories, historical eras, and other
   過速世界-specific data. Several distinct features, not one version —
   treat each as its own sub-version. **Needs the user's own world-setting
@@ -1737,6 +1739,141 @@ other terms compensating.
 - **Tibet is still white**, as in Stage 1, though less solidly: the rock/sand
   split now shows the plateau's flanks as rock rather than one white blob. An
   annual-mean model puts 5000 m at -8 °C and cannot know the summer melts it.
+
+### The user was right about the green, and the reason was the teacher data
+
+They reported the globe looked less natural than stage 1's and asked for a
+retune: "全体に緑が多すぎるのではないか？". Measuring it settled the question
+immediately, and against the best possible reference — **the satellite
+photograph the app already ships**, which is what the 標準 surface shows them
+and therefore their own standard for "natural". Classifying that photograph by
+colour (bright and neutral is snow, G > R is vegetation, the rest is bare
+ground; checked against fifteen named places first, and it puts every one on
+the right side) gives the vegetated fraction of land per latitude band:
+
+| band | my stage-1 target | the photograph | what shipped |
+| --- | --- | --- | --- |
+| 0-15 | 0.75 | **0.618** | 0.794 |
+| 15-30 | 0.30 | **0.199** | 0.315 |
+| 30-45 | 0.55 | **0.270** | 0.492 |
+| 45-60 | 0.80 | **0.720** | 0.907 |
+| 60-75 | 0.55 | **0.385** | 0.523 |
+
+**Every target I had written down from general geography was greener than the
+real Earth, and the fit did exactly what it was told.** Globally the
+photograph puts 39.8% of land under vegetation, 47.3% bare and 12.9% snow.
+That is the whole explanation, and it is worth remembering next time a
+placeholder target is invented "just to get started": the fit cannot be better
+than what it is aimed at, and here a real measurement was available the whole
+time.
+
+The objective is now scored **pixel by pixel against that classification**,
+which subsumes the bands and the named places and needs nothing invented.
+
+### A global score hides the thing the user actually looks at
+
+The first refit matched the bands well and still rendered a washed-out North
+America. Measured region by region, the reason was plain: Africa sat at twice
+the photograph's vegetated fraction while Eurasia sat at half of it, and the
+two errors paid for each other inside one global number. Nobody looks at the
+whole globe at once; they look at a continent.
+
+So the objective also scores thirteen named regions. Two rounds were needed to
+get that term right, and the second is the interesting one: scoring each
+region by its **mean vegetated fraction** rewards mush, because a model that
+paints every pixel half-vegetated hits the right average while looking like
+nothing at all. It is now each region's own **pixel error**, every region
+counting equally. `vegetationMoistureWidth` is capped at 0.35 for the same
+reason — the search had pushed it to 0.57, where the moisture has to swing
+across nearly its whole range before ground is fully green, so almost nothing
+ever is. Smooth gradients come from the moisture field being smooth in space,
+not from the ramp being wide.
+
+### Warm seas evaporate more, and that was a model fault rather than a tuning one
+
+With every sea equally wet, the only way to get moisture into North America
+was to lower the vegetation threshold worldwide — which is precisely what made
+the globe too green — and the only way to keep the globe honest was to leave
+the continent bare. Both were shipped, one after the other, before the cause
+was clear.
+
+Evaporation really does depend steeply on sea-surface temperature, so the
+still-air term now starts from each sea's own evaporation and carries it
+inland: the same sweep as before with the source value multiplied along,
+which retired `distanceToSeaKm` entirely (a distance to the *nearest* sea
+cannot tell a warm one from a cold one). A warm Gulf of Mexico and a cold
+South Atlantic then settle North America and Patagonia at once. Measured, the
+vegetated fraction of North America went **0.24 → 0.48** against the
+photograph's 0.59, and Eurasia 0.30 → 0.66 against 0.72.
+
+### Two parameters the Earth objective cannot see at all
+
+`coriolisStrength` was already fixed for this reason. `cellRotationExponent`
+turned out to be worse: Earth's spin *is* the reference, so that term has
+**literally no effect** on any objective measured on Earth — confirmed by
+pinning it and watching the score come back identical to four decimals. The
+search had been fitting noise, and had driven it to 0.055, which quietly
+switched off the "a slow rotator has wider cells" behaviour. It is now 1/3,
+which is what the standard scaling for a Hadley cell's width gives, and out of
+the search. A slow rotator's first cell boundary is back at 85° (one cell per
+hemisphere) instead of 35°.
+
+### The palette is measured, and two ways of measuring it were wrong
+
+The swatches were also more saturated than anything on the real Earth — the
+vegetation colour had G−R = 42 where the greenest ground in the photograph
+reaches 25 — so the colour was contributing to "too green" as much as the
+area was. Three attempts, and the two failures are the instructive part:
+
+- **Least squares against the photograph made it worse to look at.** The blend
+  weights are linear in the palette, so the optimum is a 5×5 solve — and it
+  moved every swatch toward the local mean (vegetation came out at [124,135,97],
+  barely greener than the bare ground beside it) for a 4-point gain in RMSE.
+  Squared error is minimised by predicting the mean, so it rewards a flat
+  picture, and a flat picture was the complaint.
+- **Matching the photograph's colour *distribution* instead gave magenta rock
+  and cyan snow.** A per-channel histogram says nothing about which channel
+  belongs with which, so the search matched the deciles with colours that
+  exist nowhere on Earth.
+
+What shipped is measured directly and cannot be either: each swatch is the
+mean of the pixels at one end of a class's own real range in the photograph —
+the greenest vegetated ground, the brightest hot bare ground, the darkest cold
+bare ground, the veg/bare transition, and snow. A fourth variant, searched
+over "how far along each class's range to sit", scored better in texture space
+but slightly worse in rendered frames, which is what the user sees, so it was
+dropped. **Rendered frames are the tie-breaker, not texture statistics.**
+
+Also measured and rejected: giving vegetation a warm/cool colour split like
+bare ground's. The photograph says vegetated land is [116,132,82] in the
+tropics and [119,133,92] at 45-60°N — the same colour. Not worth a parameter.
+
+### Where it ended up, and what is still wrong
+
+Greenness (mean G−R over the non-ocean part of a rendered frame), before this
+retune → after → the photograph at the same view:
+
+| view | before | after | photograph |
+| --- | --- | --- | --- |
+| whole globe (Americas) | +11.4 | **+4.9** | +3.9 |
+| Africa | +5.8 | +6.6 | −0.5 |
+| North America | +5.9 | −0.8 | +5.7 |
+| South America | −2.6 | −2.4 | +1.4 |
+| Asia | −4.3 | −3.4 | −3.2 |
+
+The default view — the one that opens, and the one the complaint was about —
+now matches the photograph closely. The remaining errors are a **pattern, not
+a level**: the model is still too green in the subtropics (Africa, Australia,
+India, central Asia) and too bare in the mid-latitudes, and no setting of
+these parameters fixes both at once. Region errors bottom out around 0.35 and
+several more rounds of searching moved the score by under 3%, which is the
+model's ceiling rather than the search's.
+
+The two worst regions say why: **east Asia** (model 0.16 vegetated against the
+photograph's 0.62) and **Central America** (0.39 against 0.76). Both are
+monsoon climates — wet because the wind reverses with the season — and an
+annual-mean wind cannot represent a reversal at all. That is the next real
+piece of physics, not another parameter.
 
 ### Two harness traps, both of which produced convincing false results
 
