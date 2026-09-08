@@ -44,9 +44,11 @@ async function main() {
   // step. Up is where the interesting numbers are close together (every
   // ice sheet on Earth melting is about +65 m), so it runs in 2 m steps to
   // +200 m. Down spans far more ground -- the last ice age's coastline is
-  // -120 m and the continental shelves give out around -2000 m -- so it
-  // runs in 20 m steps. Both directions get 100 steps, which keeps the
-  // travel either side of centre the same on screen.
+  // -120 m, the shelf edge is around -2000 m and the abyssal plains sit
+  // near -6000 m -- so it runs in 20 m steps to -6000 m. That is 300 steps
+  // down against 100 up, so present-day sea level sits three quarters of
+  // the way along the track rather than in the middle; the range in
+  // index.html has to match these two constants.
   const SEA_LEVEL_STEP_UP_M = 2;
   const SEA_LEVEL_STEP_DOWN_M = 20;
 

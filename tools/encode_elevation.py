@@ -11,8 +11,10 @@ Why this encoding rather than a plain greyscale height image:
   exactly. JPEG would quietly corrupt low bytes into plausible-looking
   nonsense, i.e. wrong elevations rather than obviously broken ones.
 * The value stored is real metres, offset to keep it non-negative:
-      metres = (R * 256 + G) - OFFSET_M
-  so the client never has to guess a scale, and sea level is exactly 0.
+      metres = (R * 256 + G) - offset
+  so the client never has to guess a scale, and sea level is exactly 0. The
+  offset comes from the world's own config.json, which is also where the
+  browser reads it -- see tools/elevation_encoding.py.
 
 Called by .github/workflows/build-terrain.yml.
 """
@@ -23,24 +25,25 @@ import sys
 import numpy as np
 from PIL import Image
 
-# Chosen so the whole real range of Earth's relief (Challenger Deep at
-# about -10.9 km, Everest at about +8.8 km) stays inside an unsigned 16-bit
-# value with room to spare. Must match `terrain.encoding.offsetMetres` in
-# each world's config.json.
-OFFSET_M = 12000
+from elevation_encoding import offset_metres
 
 
 def main() -> int:
-    if len(sys.argv) != 5:
-        print("usage: encode_elevation.py <raw.bin> <width> <height> <out.png>")
+    if len(sys.argv) != 6:
+        print(
+            "usage: encode_elevation.py <raw.bin> <width> <height> <out.png> "
+            "<world-dir>"
+        )
         return 2
 
-    raw_path, width, height, out_path = (
+    raw_path, width, height, out_path, world_dir = (
         sys.argv[1],
         int(sys.argv[2]),
         int(sys.argv[3]),
         sys.argv[4],
+        sys.argv[5],
     )
+    offset = offset_metres(world_dir)
 
     expected = width * height * 2
     actual = os.path.getsize(raw_path)
@@ -50,7 +53,7 @@ def main() -> int:
 
     metres = np.fromfile(raw_path, dtype="<i2").reshape(height, width).astype(np.int32)
 
-    packed = metres + OFFSET_M
+    packed = metres + offset
     clipped = int(np.count_nonzero((packed < 0) | (packed > 65535)))
     if clipped:
         # Never expected with real GEBCO data; loud rather than silent so a

@@ -1,3 +1,12 @@
+// The 3D globe: scene, camera, lighting, touch controls, the terrain mesh
+// and the sea surface. The pieces that are really about *data* rather than
+// about drawing live next door -- elevation.js reads the height raster,
+// cubeSphere.js builds the mesh, surface.js prepares and repaints the
+// colour texture -- so this file stays about the view.
+//
+// Everything specific to the body being drawn (its radius, how much the
+// relief is exaggerated, the photo's gamma, how deep the seabed ramp runs)
+// comes from the world's config.json, not from constants here.
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import {
@@ -6,46 +15,54 @@ import {
   distanceToZoom,
   zoomToDistance,
 } from "./geoConvert.js";
+import { decodeElevationGrid, pickElevationLevel, sampleMetres } from "./elevation.js";
+import { buildCubeSphere } from "./cubeSphere.js";
+import {
+  SEABED_RAMPS,
+  buildSeabedPlan,
+  paintSeabed,
+  prepareSurfaceTexture,
+  rampLut,
+} from "./surface.js";
 
 const MIN_DISTANCE = 1.3;
 const MAX_DISTANCE = 8;
 
-// Quads along one edge of one cube face. **Odd on purpose**: with an even
-// count a vertex lands exactly on the centre of the +Y/-Y face, which is
-// exactly a pole -- the one place on an equirectangular map where
-// longitude is undefined. Odd puts the pole in the middle of a quad
-// instead, so every vertex has a well-defined longitude.
-// 6 faces x 256x256 vertices = 393k vertices, ~780k triangles.
+// Quads along one edge of one cube face. Odd on purpose -- see
+// buildCubeSphere. 6 faces x 256x256 vertices = 393k vertices, ~780k
+// triangles.
 const FACE_SEGMENTS = 255;
 
-const EARTH_RADIUS_M = 6371000;
+// 4 faces of (FACE_SEGMENTS + 1) vertices meet around the equator, and 2x
+// that gives a little oversampling headroom so the mesh isn't sampling the
+// raster one-to-one. Wider levels than this carry detail no vertex can
+// express, so downloading them would be wasted bytes on a phone.
+const USEFUL_GRID_WIDTH = 4 * (FACE_SEGMENTS + 1) * 2;
 
-// Earth's real relief is about +/-0.15% of its radius -- true to scale the
-// globe renders as a featureless ball (a real fact about Earth, not a
-// limitation here). Exaggerated for visibility, the same convention used
-// by essentially every scientific terrain visualisation.
-//
-// Crucially this factor is applied identically to the terrain and to the
-// sea-level sphere, so *which* land ends up underwater is unaffected by
-// it: terrain height h is at radius 1 + k*h and sea level s is at
-// 1 + k*s, so submerged <=> h < s for any k. The exaggeration changes how
-// visible the relief is, never which coastline floods.
-const VERTICAL_EXAGGERATION = 30;
-
-// Forests etc. measured very dark in the source imagery (RGB ~30-60/255
-// for rainforest vs ~240 for desert) -- confirmed baked into the texture
-// itself, not a lighting artifact. A gamma curve lifts shadows far more
-// than highlights (black stays black, white stays white), so it fixes the
-// dark greens without blowing out deserts, ice and cloud. Per the user's
-// explicit "リアルさより分かりやすさ" direction.
-const COLOR_GAMMA = 0.6;
-
-// The globe (V0.6: real GEBCO elevation on a pole-free cube-sphere).
-// Exports getView()/setView() for the 3D/2D toggle and setSeaLevel() for
-// the sea-level control.
+// Exports getView()/setView() for the 3D/2D toggle, plus the three controls
+// on screen: sea level, water opacity and seabed colour.
 export async function initGlobe3D(containerId, worldConfig) {
+  const body = worldConfig.body;
+  const display = worldConfig.display;
+  const terrain = worldConfig.terrain;
+
+  // Relief is exaggerated because true to scale a planet renders as a
+  // featureless ball -- Earth's real relief is about +/-0.15% of its radius
+  // (a fact about the planet, not a limitation here). Crucially the same
+  // factor is applied to the terrain and to the sea sphere, so *which* land
+  // ends up underwater is unaffected by it: terrain height h sits at radius
+  // 1 + k*h and sea level s at 1 + k*s, so submerged <=> h < s for any k.
+  const metresToRadius =
+    requireNumber(display.verticalExaggeration, "display.verticalExaggeration") /
+    requireNumber(body.radiusMetres, "body.radiusMetres");
+  const radiusForMetres = (metres) => 1 + metres * metresToRadius;
+
   const scene = new THREE.Scene();
 
+  // The near plane has to stay well under the closest the camera can get to
+  // the highest terrain: at MIN_DISTANCE the gap is only ~0.26 units, and a
+  // near plane above that silently clips the whole near face of the globe
+  // away to black. Re-test at both zoom extremes if these ever change.
   const camera = new THREE.PerspectiveCamera(
     50,
     window.innerWidth / window.innerHeight,
@@ -59,15 +76,18 @@ export async function initGlobe3D(containerId, worldConfig) {
   renderer.setSize(window.innerWidth, window.innerHeight);
   document.getElementById(containerId).appendChild(renderer.domElement);
 
-  const terrain = worldConfig.terrain;
-  const [colorImage, elevation] = await Promise.all([
+  const [colorImage, elevationImage] = await Promise.all([
     loadImage(worldConfig.globeTexture),
-    loadElevationGrid(pickElevationLevel(terrain.levels), terrain.encoding),
+    loadImage(pickElevationLevel(terrain.levels, USEFUL_GRID_WIDTH).url),
   ]);
+  const elevation = decodeElevationGrid(elevationImage, terrain.encoding);
 
   // The prepared photo is kept as pixels, not just uploaded and forgotten,
   // because setSeabedStyle below repaints the seabed from it on demand.
-  const surface = prepareGlobeTexture(colorImage, COLOR_GAMMA);
+  const surface = prepareSurfaceTexture(
+    colorImage,
+    requireNumber(display.surfaceGamma, "display.surfaceGamma")
+  );
   const surfaceContext = surface.getContext("2d", { willReadFrequently: true });
   const photoPixels = surfaceContext.getImageData(0, 0, surface.width, surface.height);
   let seabedPixels = null;
@@ -79,73 +99,63 @@ export async function initGlobe3D(containerId, worldConfig) {
   const texture = new THREE.CanvasTexture(surface);
   texture.colorSpace = THREE.SRGBColorSpace;
   // Antimeridian-crossing triangles carry u values just past 1 (see
-  // splitSeamVertices) -- they must wrap, not clamp.
+  // splitSeamVertices in cubeSphere.js) -- they must wrap, not clamp.
   texture.wrapS = THREE.RepeatWrapping;
 
-  const geometry = buildCubeSphere(FACE_SEGMENTS, { elevation });
-
-  const globe = new THREE.Mesh(geometry, new THREE.MeshLambertMaterial({ map: texture }));
+  const globe = new THREE.Mesh(
+    buildCubeSphere(FACE_SEGMENTS, {
+      radiusAt: (lng, lat) => radiusForMetres(sampleMetres(elevation, lng, lat)),
+    }),
+    new THREE.MeshLambertMaterial({ map: texture })
+  );
   scene.add(globe);
 
   // Land and sea are two independent objects, per the user's own design
   // direction: raising sea level only resizes this sphere and never
-  // touches or re-bakes the terrain. With real GEBCO metres the sea sits
-  // at exactly radius 1 (elevation 0 m), so no calibration guesswork.
-  // Built from the same cube-sphere as the terrain, NOT THREE.SphereGeometry.
-  // A sphere mesh is a polyhedron, and each flat facet sags below the true
-  // radius by about theta^2/8. On the 128x64 sphere used at first that sag
-  // was 3.0e-4 radius units, which against 30x-exaggerated relief is
-  // **64 metres of equivalent elevation error** -- so in shallow water the
-  // seabed poked up through the middle of every facet, drawing a grid of
-  // dark scalloped blobs, and raising the level made those blobs shrink
-  // instead of flooding land. Reported from the phone and reproduced here
-  // exactly. At FACE_SEGMENTS the sag is ~4.7e-6, i.e. about 1 metre, which
-  // is below the slider's own 1 m step. Matching the terrain's tessellation
-  // also means the two surfaces cross each other cleanly.
+  // touches or re-bakes the terrain. With real metres the sea sits at
+  // exactly radius 1 (elevation 0 m), so no calibration guesswork.
+  //
+  // Built from the same cube-sphere as the terrain, NOT
+  // THREE.SphereGeometry. A sphere mesh is a polyhedron and each flat facet
+  // sags below the true radius by about theta^2/8. On the 128x64 sphere
+  // used at first that sag was 3.0e-4 radius units, which against 30x
+  // exaggerated relief is **64 metres of equivalent elevation error** -- so
+  // in shallow water the seabed poked up through the middle of every facet,
+  // drawing a grid of dark scalloped blobs, and raising the level made
+  // those blobs shrink instead of flooding land. Reported from the phone
+  // and reproduced here exactly. At FACE_SEGMENTS the sag is ~4.7e-6, about
+  // 1 metre. Matching the terrain's tessellation also means the two
+  // surfaces cross each other cleanly.
   const seaSphere = new THREE.Mesh(
     buildCubeSphere(FACE_SEGMENTS),
     new THREE.MeshLambertMaterial({
       color: 0x2f6fa8,
+      // Opacity is a user control, not a constant: opaque water reads
+      // better as "flooded", transparent water shows the seafloor, and
+      // which matters depends on what you are looking at. main.js sets the
+      // starting value from the slider.
       transparent: true,
-      // Lowered from V0.5's 0.6 now that there is real seafloor under it:
-      // GEBCO's ridges, trenches and shelves are the point of this
-      // version, and at 0.6 the sea hid nearly all of them. Checked by
-      // rendering the mid-Atlantic at 0.6 / 0.45 / 0.3 -- 0.4 shows the
-      // ridge and the continental shelves while a +100 m rise over the
-      // Bengal delta still reads unmistakably as flooding.
       opacity: 0.4,
       depthWrite: false,
     })
   );
   scene.add(seaSphere);
 
-  function setSeaLevel(metresAbovePresent) {
-    seaSphere.scale.setScalar(radiusForMetres(metresAbovePresent));
+  function setSeaLevel(metres) {
+    seaSphere.scale.setScalar(radiusForMetres(metres));
   }
   setSeaLevel(0);
 
-  // How opaque the water is. Exposed as a control because there is no one
-  // right answer: opaque water reads better as "flooded", transparent
-  // water shows the GEBCO seafloor underneath, and which matters depends
-  // on what you're looking at.
   function setWaterOpacity(fraction) {
     seaSphere.material.opacity = fraction;
   }
 
-  // Repaints everything below 0 m in a depth ramp, so draining the water
-  // actually reveals *ground* rather than the blue the satellite photo
-  // painted there. Turning the water off alone was never going to work:
-  // the seabed's blue lives in the photograph, not in the water.
-  //
-  // Only the colour is invented here -- it is a function of GEBCO's real
-  // depth, and the shape and shading stay entirely real. There is no
-  // photograph of the seabed to be faithful to.
-  //
   // Styles are rebuilt on demand rather than pre-baked and held: three
-  // ready-made 4096x2048 textures would be over 100 MB of image data on a
-  // phone, whereas rebuilding costs a fraction of a second and one spare
-  // buffer. Independent of sea level, so moving that slider never triggers
-  // a repaint -- the sea sphere covers whatever is currently submerged.
+  // ready-made copies of a 4096x2048 texture would be over 100 MB of image
+  // data on a phone, whereas rebuilding costs a fraction of a second and
+  // one spare buffer. Independent of sea level, so moving that slider never
+  // triggers a repaint -- the sea sphere covers whatever is submerged, over
+  // a seabed already coloured by its own depth.
   function setSeabedStyle(styleId) {
     const stops = SEABED_RAMPS[styleId];
     if (!stops) {
@@ -157,7 +167,13 @@ export async function initGlobe3D(containerId, worldConfig) {
       seabedPixels = surfaceContext.createImageData(surface.width, surface.height);
     }
     if (!seabedPlan) {
-      seabedPlan = buildSeabedPlan(photoPixels.data, surface.width, surface.height, elevation);
+      seabedPlan = buildSeabedPlan(
+        photoPixels.data,
+        surface.width,
+        surface.height,
+        elevation,
+        requireNumber(display.seabedDeepestMetres, "display.seabedDeepestMetres")
+      );
     }
     seabedPixels.data.set(photoPixels.data);
     paintSeabed(seabedPixels.data, seabedPlan, rampLut(stops));
@@ -216,6 +232,10 @@ export async function initGlobe3D(containerId, worldConfig) {
   }
   updateSunLight();
 
+  // OrbitControls gives one-finger rotate and two-finger pinch-zoom out of
+  // the box -- no custom gesture code. Panning is off because there is
+  // nothing to pan a free-floating globe relative to, and the distance
+  // bounds keep the camera outside the terrain and in sight of it.
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enablePan = false;
   controls.minDistance = MIN_DISTANCE;
@@ -250,476 +270,14 @@ export async function initGlobe3D(containerId, worldConfig) {
   return { getView, setView, setSeaLevel, setWaterOpacity, setSeabedStyle };
 }
 
-function radiusForMetres(metres) {
-  return 1 + (metres / EARTH_RADIUS_M) * VERTICAL_EXAGGERATION;
-}
-
-// ---------------------------------------------------------------------------
-// Seabed colouring
-// ---------------------------------------------------------------------------
-
-// Colour stops as [depthFraction, [r, g, b]], shallow first. Absent from
-// this table (and so left as the original photograph) is the "photo"
-// option, which is the default and costs nothing at load.
-const SEABED_RAMPS = {
-  brown: [
-    [0, [216, 194, 146]],
-    [0.35, [166, 132, 86]],
-    [1, [74, 52, 32]],
-  ],
-  grey: [
-    [0, [190, 186, 178]],
-    [0.35, [138, 134, 128]],
-    [1, [58, 56, 54]],
-  ],
-  land: [
-    [0, [126, 148, 88]],
-    [0.35, [140, 126, 82]],
-    [1, [92, 72, 50]],
-  ],
-};
-
-// Depth at which a ramp reaches its darkest end. Set to 8000 m rather than
-// the true 10.9 km maximum on purpose: trenches that deep are vanishingly
-// rare, and stretching the ramp to reach them would waste most of its range
-// on depths almost nowhere on Earth, flattening the abyssal plains and
-// continental slopes where nearly all the interesting shape actually is.
-const SEABED_DEEPEST_M = 8000;
-
-function rampLut(stops) {
-  const lut = new Uint8ClampedArray(256 * 3);
-  for (let i = 0; i < 256; i++) {
-    const t = i / 255;
-    let hi = 1;
-    while (hi < stops.length - 1 && stops[hi][0] < t) hi++;
-    const [t0, c0] = stops[hi - 1];
-    const [t1, c1] = stops[hi];
-    const k = t1 === t0 ? 0 : (t - t0) / (t1 - t0);
-    lut[i * 3] = c0[0] + (c1[0] - c0[0]) * k;
-    lut[i * 3 + 1] = c0[1] + (c1[1] - c0[1]) * k;
-    lut[i * 3 + 2] = c0[2] + (c1[2] - c0[2]) * k;
+// A missing config number would otherwise propagate as NaN into vertex
+// positions and render a black screen with no error at all -- worth one
+// check to fail where the mistake actually is.
+function requireNumber(value, name) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error(`${name} must be a number in the world's config.json`);
   }
-  return lut;
-}
-
-// Deciding what to repaint, once. The result is one byte per texture
-// pixel: 0 means "leave the photograph alone", anything else is a ramp
-// index plus one. It depends only on the elevation grid and the photo, so
-// it survives every style switch and makes those switches cheap.
-//
-// The colour texture and the elevation grid are both equirectangular with
-// the same orientation (row 0 north, column 0 at -180), so pixels map onto
-// each other by plain index scaling -- no trigonometry, which is what keeps
-// this pass fast.
-//
-// Depth is sampled bilinearly rather than nearest-neighbour. The colour
-// texture is finer than the elevation grid, so nearest-neighbour would
-// paint the grid's own cells as visible squares along every drained
-// coastline. Interpolating puts the 0 m contour between cells instead, and
-// that alone is what makes the shoreline smooth -- an earlier version also
-// faded the ramp in over the shallowest 60 m, which turned out to do
-// nothing for the staircase and instead left a blue rim of leftover
-// photograph hugging every drained coast (reported from the phone, then
-// reproduced and isolated by rendering with and without it). Do not
-// reintroduce a fade toward the photo here: the photo's shallow water is
-// bright cyan, so any blending back toward it paints water onto ground.
-function buildSeabedPlan(photo, width, height, elevation) {
-  const { data: elevationData, width: ew, height: eh, offsetMetres } = elevation;
-  const plan = new Uint8Array(width * height);
-  const scale = 255 / SEABED_DEEPEST_M;
-  const xScale = ew / width;
-  const yScale = eh / height;
-
-  for (let y = 0; y < height; y++) {
-    const fy = (y + 0.5) * yScale - 0.5;
-    const y0 = Math.floor(fy);
-    const ty = fy - y0;
-    const rowA = Math.min(eh - 1, Math.max(0, y0)) * ew;
-    const rowB = Math.min(eh - 1, Math.max(0, y0 + 1)) * ew;
-    let i = y * width;
-
-    for (let x = 0; x < width; x++, i++) {
-      const fx = (x + 0.5) * xScale - 0.5;
-      const x0 = Math.floor(fx);
-      const tx = fx - x0;
-      // Longitude wraps; latitude does not.
-      const xa = ((x0 % ew) + ew) % ew;
-      const xb = (((x0 + 1) % ew) + ew) % ew;
-
-      const a = (rowA + xa) * 4;
-      const b = (rowA + xb) * 4;
-      const c = (rowB + xa) * 4;
-      const d = (rowB + xb) * 4;
-
-      const top =
-        (elevationData[a] * 256 + elevationData[a + 1]) * (1 - tx) +
-        (elevationData[b] * 256 + elevationData[b + 1]) * tx;
-      const bottom =
-        (elevationData[c] * 256 + elevationData[c + 1]) * (1 - tx) +
-        (elevationData[d] * 256 + elevationData[d + 1]) * tx;
-      const metres = top * (1 - ty) + bottom * ty - offsetMetres;
-      if (metres >= 0) continue;
-
-      // Ramp index 0-254 (255 is left free so 0 can mean "not painted";
-      // the two deepest steps differ by well under one RGB unit).
-      plan[i] = 1 + Math.min(254, (-metres * scale) | 0);
-    }
-  }
-
-  growSeabedOverWater(plan, photo, width, height);
-  return plan;
-}
-
-// A pixel the elevation grid calls dry but the photograph plainly shows as
-// open water still gets repainted. That is what was left of the blue rim
-// after the fade was removed: GEBCO's 0 m contour and the satellite photo's
-// own coastline disagree by about a pixel, and every disagreement left a
-// speck of leftover sea colour stranded on the drained shore -- clearly
-// visible around Japan, the Indonesian islands and the Baltic in the
-// user's screenshots.
-//
-// Measured rather than assumed. Resampling the paint pass from the finer
-// 4096x2048 elevation level removed only 4% of those specks, so this is a
-// disagreement between two datasets, not a resolution shortfall -- worth
-// knowing, because it also means there is no bigger download that would
-// fix it.
-//
-// Two guards keep this from repainting things that are not sea:
-//   - The water test is a blue *ratio*, not a blue difference. Measured
-//     across the actual texture, open water sits at 0.55-0.76 while snow
-//     and ice sit at 0.00-0.09 and every land cover is negative, so the
-//     0.30 threshold has an enormous margin and leaves the ice caps alone.
-//   - Growth spreads outward from genuinely submerged pixels and stops
-//     after a few steps, so it cleans a shoreline without wandering up
-//     rivers into inland lakes. Unbounded, it drains the Great Lakes
-//     through the St. Lawrence; three steps gets 91% of the specks and
-//     goes nowhere near them.
-const SEABED_RIM_PASSES = 3;
-const WATER_BLUE_RATIO = 0.3;
-
-function growSeabedOverWater(plan, photo, width, height) {
-  const looksLikeWater = (i) => {
-    const p = i * 4;
-    const r = photo[p];
-    const g = photo[p + 1];
-    const b = photo[p + 2];
-    return b > g && b - r > b * WATER_BLUE_RATIO;
-  };
-
-  // Seed with the submerged pixels that actually touch dry ground; the
-  // open ocean's interior has nothing to spread into.
-  let frontier = [];
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const i = y * width + x;
-      if (!plan[i]) continue;
-      const left = x === 0 ? i + width - 1 : i - 1;
-      const right = x === width - 1 ? i - width + 1 : i + 1;
-      if (
-        !plan[left] ||
-        !plan[right] ||
-        (y > 0 && !plan[i - width]) ||
-        (y < height - 1 && !plan[i + width])
-      ) {
-        frontier.push(i);
-      }
-    }
-  }
-
-  for (let pass = 0; pass < SEABED_RIM_PASSES && frontier.length; pass++) {
-    const next = [];
-    for (const i of frontier) {
-      const x = i % width;
-      const y = (i - x) / width;
-      const neighbours = [
-        x === 0 ? i + width - 1 : i - 1,
-        x === width - 1 ? i - width + 1 : i + 1,
-        y > 0 ? i - width : -1,
-        y < height - 1 ? i + width : -1,
-      ];
-      for (const n of neighbours) {
-        if (n < 0 || plan[n] || !looksLikeWater(n)) continue;
-        plan[n] = 1; // shallowest step: these pixels sit right at 0 m.
-        next.push(n);
-      }
-    }
-    frontier = next;
-  }
-}
-
-function paintSeabed(data, plan, lut) {
-  for (let i = 0, out = 0; i < plan.length; i++, out += 4) {
-    const step = plan[i];
-    if (!step) continue;
-    const shade = (step - 1) * 3;
-    data[out] = lut[shade];
-    data[out + 1] = lut[shade + 1];
-    data[out + 2] = lut[shade + 2];
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Cube-sphere geometry
-//
-// This replaces the UV sphere (THREE.SphereGeometry) that V0.1-V0.5 used.
-// A UV sphere has a genuine singularity at each pole: every vertex of its
-// top and bottom ring sits at the *same* 3D point while carrying different
-// longitudes, and the rings just below are crushed together
-// circumferentially. That is what produced the radial streaks the user kept
-// seeing -- a fan of sliver triangles each smearing a different column of
-// the map across a wedge, plus wildly different elevation samples between
-// vertices millimetres apart. Smoothing the source data only ever hid it.
-//
-// A spherified cube has no pole at all: six ordinary grids, every quad
-// roughly the same size everywhere on the globe, no vertex shared by a
-// whole ring. The poles land in the middle of an ordinary quad on the +Y
-// and -Y faces and get no special treatment whatsoever.
-// ---------------------------------------------------------------------------
-
-// [forward, right, up] per face, chosen so right x up === forward on all
-// six. That makes one single winding order come out front-facing (outward)
-// everywhere, with no per-face special cases.
-const CUBE_FACES = [
-  [[1, 0, 0], [0, 0, -1], [0, 1, 0]],
-  [[-1, 0, 0], [0, 0, 1], [0, 1, 0]],
-  [[0, 1, 0], [0, 0, 1], [1, 0, 0]],
-  [[0, -1, 0], [1, 0, 0], [0, 0, 1]],
-  [[0, 0, 1], [1, 0, 0], [0, 1, 0]],
-  [[0, 0, -1], [-1, 0, 0], [0, 1, 0]],
-];
-
-// Plain normalisation of an evenly-spaced cube grid bunches vertices up
-// towards the face corners. Warping each axis through tan() first spreads
-// them almost evenly over the sphere, which is the whole point of using a
-// cube-sphere here.
-function warpAxis(t) {
-  return Math.tan(t * (Math.PI / 4));
-}
-
-// Builds the cube-sphere. With `elevation` it becomes the terrain, carrying
-// equirectangular UVs and displaced to real heights; without it, a plain
-// unit sphere for the sea surface, which needs neither UVs nor the
-// per-vertex trigonometry they require.
-function buildCubeSphere(segments, { elevation = null } = {}) {
-  const perFace = (segments + 1) * (segments + 1);
-  const vertexCount = perFace * CUBE_FACES.length;
-  const positions = new Float32Array(vertexCount * 3);
-  const uvs = elevation ? new Float32Array(vertexCount * 2) : null;
-  const indices = new Uint32Array(segments * segments * 6 * CUBE_FACES.length);
-
-  let vi = 0;
-  let ii = 0;
-
-  for (let f = 0; f < CUBE_FACES.length; f++) {
-    const [forward, right, up] = CUBE_FACES[f];
-    const faceStart = f * perFace;
-
-    for (let j = 0; j <= segments; j++) {
-      const wv = warpAxis(-1 + (2 * j) / segments);
-      for (let i = 0; i <= segments; i++) {
-        const wu = warpAxis(-1 + (2 * i) / segments);
-
-        let x = forward[0] + right[0] * wu + up[0] * wv;
-        let y = forward[1] + right[1] * wu + up[1] * wv;
-        let z = forward[2] + right[2] * wu + up[2] * wv;
-        const inv = 1 / Math.hypot(x, y, z);
-        x *= inv;
-        y *= inv;
-        z *= inv;
-
-        if (elevation) {
-          const { lng, lat } = directionToLngLat(x, y, z);
-          const radius = radiusForMetres(sampleMetres(elevation, lng, lat));
-          positions[vi * 3] = x * radius;
-          positions[vi * 3 + 1] = y * radius;
-          positions[vi * 3 + 2] = z * radius;
-          uvs[vi * 2] = (lng + 180) / 360;
-          uvs[vi * 2 + 1] = (lat + 90) / 180;
-        } else {
-          positions[vi * 3] = x;
-          positions[vi * 3 + 1] = y;
-          positions[vi * 3 + 2] = z;
-        }
-        vi++;
-      }
-    }
-
-    for (let j = 0; j < segments; j++) {
-      for (let i = 0; i < segments; i++) {
-        const a = faceStart + j * (segments + 1) + i;
-        const b = a + 1;
-        const c = a + (segments + 1);
-        const d = c + 1;
-        indices[ii++] = a;
-        indices[ii++] = b;
-        indices[ii++] = d;
-        indices[ii++] = a;
-        indices[ii++] = d;
-        indices[ii++] = c;
-      }
-    }
-  }
-
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-  geometry.setIndex(new THREE.BufferAttribute(indices, 1));
-  if (uvs) {
-    geometry.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
-  }
-  // Normals are computed here, *before* the seam split below, so the
-  // duplicated seam vertices inherit an identical normal from their
-  // original and the antimeridian shows no lighting discontinuity.
-  geometry.computeVertexNormals();
-
-  if (uvs) {
-    splitSeamVertices(geometry);
-  }
-  geometry.computeBoundingSphere();
-  return geometry;
-}
-
-// A triangle straddling the antimeridian has corners at u ~ 0.99 and
-// u ~ 0.01, so interpolating between them runs the texture backwards
-// across the entire map in one triangle. Give those corners a private copy
-// carrying u + 1 instead (the texture wraps, see wrapS above). Only a few
-// hundred vertices along one meridian are affected, and position and
-// normal are copied verbatim so nothing moves or re-shades.
-function splitSeamVertices(geometry) {
-  const position = geometry.attributes.position.array;
-  const normal = geometry.attributes.normal.array;
-  const uv = geometry.attributes.uv.array;
-  const index = geometry.index.array;
-
-  const extraPositions = [];
-  const extraNormals = [];
-  const extraUvs = [];
-  const copies = new Map();
-  let nextIndex = geometry.attributes.position.count;
-
-  for (let t = 0; t < index.length; t += 3) {
-    const u0 = uv[index[t] * 2];
-    const u1 = uv[index[t + 1] * 2];
-    const u2 = uv[index[t + 2] * 2];
-    if (Math.max(u0, u1, u2) - Math.min(u0, u1, u2) <= 0.5) continue;
-
-    for (let k = 0; k < 3; k++) {
-      const original = index[t + k];
-      if (uv[original * 2] >= 0.5) continue;
-
-      let copy = copies.get(original);
-      if (copy === undefined) {
-        copy = nextIndex++;
-        extraPositions.push(
-          position[original * 3],
-          position[original * 3 + 1],
-          position[original * 3 + 2]
-        );
-        extraNormals.push(
-          normal[original * 3],
-          normal[original * 3 + 1],
-          normal[original * 3 + 2]
-        );
-        extraUvs.push(uv[original * 2] + 1, uv[original * 2 + 1]);
-        copies.set(original, copy);
-      }
-      index[t + k] = copy;
-    }
-  }
-
-  if (copies.size === 0) return;
-
-  geometry.setAttribute("position", concatAttribute(position, extraPositions, 3));
-  geometry.setAttribute("normal", concatAttribute(normal, extraNormals, 3));
-  geometry.setAttribute("uv", concatAttribute(uv, extraUvs, 2));
-  geometry.index.needsUpdate = true;
-}
-
-function concatAttribute(base, extra, itemSize) {
-  const merged = new Float32Array(base.length + extra.length);
-  merged.set(base, 0);
-  merged.set(extra, base.length);
-  return new THREE.BufferAttribute(merged, itemSize);
-}
-
-// ---------------------------------------------------------------------------
-// Elevation data
-// ---------------------------------------------------------------------------
-
-// Elevation arrives as a PNG carrying real metres, not a brightness ramp:
-// each pixel's red and green channels are the high and low byte of an
-// unsigned 16-bit value, and metres = (R*256 + G) - offsetMetres. PNG
-// because it is lossless -- a JPEG would corrupt the byte packing -- and
-// two 8-bit channels because a canvas always hands back 8-bit samples, so
-// a genuine 16-bit greyscale PNG would silently lose its low byte on read.
-// The encoding parameters live in the world's config.json rather than here,
-// so this code stays independent of any one world's data.
-// The pipeline emits several sizes of the same global grid. Downloading
-// the largest would be wasted bytes on a phone: the mesh has about
-// 4 * FACE_SEGMENTS vertices around the equator, so a grid wider than
-// roughly twice that carries detail no vertex can ever express. Take the
-// finest level that is still worth its download, and leave the wider ones
-// in place for when a future version subdivides the mesh further (or
-// loads a high-detail patch for one region, which is what the planned
-// REMA / ArcticDEM polar data will need).
-// 4 faces of (FACE_SEGMENTS + 1) vertices meet around the equator, and 2x
-// that gives a little oversampling headroom so the mesh isn't sampling the
-// raster one-to-one.
-const USEFUL_GRID_WIDTH = 4 * (FACE_SEGMENTS + 1) * 2;
-
-function pickElevationLevel(levels) {
-  const affordable = levels.filter((level) => level.width <= USEFUL_GRID_WIDTH);
-  const candidates = affordable.length > 0 ? affordable : levels;
-  return candidates.reduce((best, level) => (level.width > best.width ? level : best));
-}
-
-async function loadElevationGrid(level, encoding) {
-  const image = await loadImage(level.url);
-  const canvas = document.createElement("canvas");
-  canvas.width = image.width;
-  canvas.height = image.height;
-  const context = canvas.getContext("2d", { willReadFrequently: true });
-  context.drawImage(image, 0, 0);
-  const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
-  return {
-    data,
-    width: canvas.width,
-    height: canvas.height,
-    offsetMetres: encoding.offsetMetres,
-  };
-}
-
-function texelMetres(grid, x, y) {
-  const i = (y * grid.width + x) * 4;
-  return grid.data[i] * 256 + grid.data[i + 1] - grid.offsetMetres;
-}
-
-// Bilinear, wrapping in longitude and clamping in latitude. Sampling at a
-// higher resolution than the mesh and interpolating keeps the terrain from
-// picking up single-pixel noise as spurious bumps.
-function sampleMetres(grid, lng, lat) {
-  const fx = ((lng + 180) / 360) * grid.width - 0.5;
-  const fy = ((90 - lat) / 180) * grid.height - 0.5;
-  const x0 = Math.floor(fx);
-  const y0 = Math.floor(fy);
-  const tx = fx - x0;
-  const ty = fy - y0;
-
-  const xa = wrapColumn(x0, grid.width);
-  const xb = wrapColumn(x0 + 1, grid.width);
-  const ya = clampRow(y0, grid.height);
-  const yb = clampRow(y0 + 1, grid.height);
-
-  const top = texelMetres(grid, xa, ya) * (1 - tx) + texelMetres(grid, xb, ya) * tx;
-  const bottom = texelMetres(grid, xa, yb) * (1 - tx) + texelMetres(grid, xb, yb) * tx;
-  return top * (1 - ty) + bottom * ty;
-}
-
-function wrapColumn(x, width) {
-  return ((x % width) + width) % width;
-}
-
-function clampRow(y, height) {
-  return Math.min(height - 1, Math.max(0, y));
+  return value;
 }
 
 function loadImage(url) {
@@ -730,85 +288,4 @@ function loadImage(url) {
     image.onerror = () => reject(new Error(`failed to load ${url}`));
     image.src = url;
   });
-}
-
-// Two fixes to the source photo, both applied once at load rather than
-// per frame: the gamma lift described at COLOR_GAMMA, and a polar
-// low-pass described at lowPassPolarRows.
-function prepareGlobeTexture(image, gamma) {
-  const canvas = document.createElement("canvas");
-  canvas.width = image.width;
-  canvas.height = image.height;
-  const context = canvas.getContext("2d", { willReadFrequently: true });
-  context.drawImage(image, 0, 0);
-
-  const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-  const data = imageData.data;
-
-  // Lifts shadows much more than highlights, through a 256-entry lookup
-  // table rather than a Math.pow per pixel.
-  const lut = new Uint8ClampedArray(256);
-  for (let level = 0; level < 256; level++) {
-    lut[level] = Math.round(255 * Math.pow(level / 255, gamma));
-  }
-  for (let i = 0; i < data.length; i += 4) {
-    data[i] = lut[data[i]];
-    data[i + 1] = lut[data[i + 1]];
-    data[i + 2] = lut[data[i + 2]];
-  }
-
-  lowPassPolarRows(data, canvas.width, canvas.height);
-
-  context.putImageData(imageData, 0, 0);
-  return canvas;
-}
-
-// An equirectangular image gives every latitude the same pixel width, but
-// the circle it wraps around shrinks by cos(latitude) -- so near the poles
-// the image carries far more longitudinal detail than the globe can
-// physically hold, roughly 1/cos(lat) times too much. Rendered, that
-// surplus detail is what smears into faint radial streaks around a pole.
-//
-// Averaging each row over a 1/cos(lat)-wide window discards exactly the
-// information that was never really there, which is ordinary correct
-// anti-aliasing for this projection rather than a cover-up: this is a
-// property of the *photo*, and it was verified to be the only remaining
-// cause here by rendering the pole with the texture removed entirely and
-// finding a perfectly smooth surface. The mesh itself has no pole (see
-// the cube-sphere notes above) and needs no smoothing of any kind.
-//
-// A circular running sum keeps this O(width) per row no matter how wide
-// the window grows, which matters because the window reaches most of the
-// image width in the last row or two.
-function lowPassPolarRows(data, width, height) {
-  const row = new Float32Array(width);
-
-  for (let y = 0; y < height; y++) {
-    const latitude = (0.5 - (y + 0.5) / height) * Math.PI;
-    const window = Math.round(1 / Math.max(Math.cos(latitude), 1e-6));
-    if (window <= 1) continue;
-
-    const radius = Math.min(window >> 1, width >> 1);
-    if (radius < 1) continue;
-
-    const span = 2 * radius + 1;
-    const base = y * width * 4;
-
-    for (let channel = 0; channel < 3; channel++) {
-      for (let x = 0; x < width; x++) {
-        row[x] = data[base + x * 4 + channel];
-      }
-
-      let sum = 0;
-      for (let d = -radius; d <= radius; d++) {
-        sum += row[((d % width) + width) % width];
-      }
-
-      for (let x = 0; x < width; x++) {
-        data[base + x * 4 + channel] = Math.round(sum / span);
-        sum -= row[((x - radius) % width + width) % width];
-        sum += row[((x + radius + 1) % width + width) % width];
-      }
-    }
-  }
 }

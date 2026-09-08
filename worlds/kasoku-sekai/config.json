@@ -2,6 +2,14 @@
   "id": "kasoku-sekai",
   "name": "過速世界",
   "globeTexture": "./worlds/kasoku-sekai/textures/globe.jpg",
+  "body": {
+    "radiusMetres": 6371000
+  },
+  "display": {
+    "verticalExaggeration": 30,
+    "surfaceGamma": 0.6,
+    "seabedDeepestMetres": 8000
+  },
   "terrain": {
     "source": "GEBCO_2026 Grid (ice surface elevation), 15 arc-second, via CEDA",
     "encoding": {

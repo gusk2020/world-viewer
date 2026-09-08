@@ -26,6 +26,8 @@ permissions:
   contents: write
 
 env:
+  # tools/*.py import elevation_encoding.py from beside them.
+  PYTHONPATH: tools
   SOURCE_URL: https://dap.ceda.ac.uk/bodc/gebco/global/gebco_2026/ice_surface_elevation/netcdf/GEBCO_2026.nc
   # Widest level built. Every smaller level is averaged down from this one
   # instead of re-reading the 7.5 GB source once per level.
@@ -90,7 +92,7 @@ jobs:
             # directly, which avoids depending on GDAL's Python bindings.
             gdal_translate -q -of ENVI -ot Int16 "level_${w}.tif" "level_${w}.bin"
             python3 tools/encode_elevation.py "level_${w}.bin" "$w" "$h" \
-              "${outdir}/gebco2026_ice_${w}x${h}.png"
+              "${outdir}/gebco2026_ice_${w}x${h}.png" "worlds/${world}"
           done
 
           ls -l "$outdir"
@@ -98,7 +100,8 @@ jobs:
       - name: Verify the result is real global terrain
         run: |
           python3 tools/verify_elevation.py \
-            "worlds/${{ inputs.world }}/terrain/gebco2026_ice_2048x1024.png"
+            "worlds/${{ inputs.world }}/terrain/gebco2026_ice_2048x1024.png" \
+            "worlds/${{ inputs.world }}"
 
       - name: Commit the generated rasters
         if: ${{ inputs.commit }}

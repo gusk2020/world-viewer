@@ -112,9 +112,30 @@ Playwright-rendered screenshot with the camera pointed straight down at
 each pole (`/tmp/.../three-north-pole.png` during dev, not committed)
 showed a clean, seamless Antarctica with no gap or artifact.
 
-All of this lives in `js/globe3d.js` (`initGlobe3D(containerId, textureUrl)`,
-exporting `getView()`/`setView()` for V0.3's toggle to use — see below),
-called from `js/main.js`.
+### Where things live
+
+Split by role after V0.6, so that adding a body or a data source touches
+one file rather than all of one. Every file is plain ES modules loaded
+straight by the browser — still no bundler and no build step.
+
+| File | Role |
+| --- | --- |
+| `js/main.js` | Loads the world config, wires the on-screen controls, owns the 3D/2D toggle. |
+| `js/globe3d.js` | The 3D view: scene, camera, lighting, touch controls, terrain mesh, sea sphere. `initGlobe3D(containerId, worldConfig)` → `getView`/`setView`/`setSeaLevel`/`setWaterOpacity`/`setSeabedStyle`. |
+| `js/cubeSphere.js` | The mesh, and nothing else. `buildCubeSphere(segments, { radiusAt })` — pure geometry, no idea what a planet or an elevation raster is. Both the terrain and the sea surface come from it. |
+| `js/elevation.js` | The height raster: decoding, level picking, bilinear sampling. The mesh and the seabed colouring sample through the *same* function here, which is what keeps them from disagreeing about where the coastline is. |
+| `js/surface.js` | The colour texture: the load-time gamma lift and polar low-pass, plus repainting the seabed by depth. Plain pixel buffers — no three.js. |
+| `js/map2d.js` | The OpenLayers 2D map. |
+| `js/geoConvert.js` | lng/lat ↔ 3D direction, and the approximate 3D-distance ↔ 2D-zoom correspondence. |
+
+**Anything specific to the body being drawn lives in the world's
+`config.json`, not in the code** — its radius, the relief exaggeration, the
+photo's gamma, how deep the seabed ramp runs. That split exists so the Moon
+or Mars can be added as data (see "World-data structure" below); it is not
+a plugin system, and nothing should be generalised further until a second
+body actually needs it. `js/globe3d.js` throws if one of those numbers is
+missing rather than letting a `NaN` propagate into vertex positions and
+render a silent black screen.
 
 - **Library**: `three` (MIT license, free), version pinned exactly in
   `index.html`'s import map (currently `0.185.1` — check
@@ -126,8 +147,8 @@ called from `js/main.js`.
   "plain static files, no build step" hosting model. Chrome on Pixel 7a
   has supported import maps since well before this project started, so no
   polyfill is needed.
-- **The globe**: a **spherified cube** built in `js/globe3d.js`
-  (`buildTerrainGeometry`), radius 1, 6 faces × 255² quads ≈ 393k
+- **The globe**: a **spherified cube** built in `js/cubeSphere.js`
+  (`buildCubeSphere`), radius 1, 6 faces × 255² quads ≈ 393k
   vertices / 780k triangles, with a `THREE.MeshLambertMaterial` (switched
   from V0.1-V0.3's unlit `MeshBasicMaterial` in V0.4, once there was real
   geometry variation for a light to reveal — relief is only visible
@@ -173,6 +194,15 @@ called from `js/main.js`.
   JPG).
 
 ### V0.4: real elevation / terrain relief
+
+**Historical — none of this code exists any more.** V0.6 replaced the bump
+map with GEBCO metres and the UV sphere with a cube-sphere, so
+`applyElevation()`, `loadElevationSamples()`, `DISPLACEMENT_SCALE`,
+`DISPLACEMENT_BIAS`, `elevation.jpg` and the pole-ring averaging are all
+gone. Kept because the *lessons* still apply (measure rendered brightness
+rather than adjusting by feel; isolate an artifact by removing one input at
+a time) and because it records what was already tried. For how the globe
+actually works now, read "V0.6" and "Where things live".
 
 Same "one static, verified, self-hosted equirectangular image, no tiles"
 approach that fixed the pole problem for the color texture, applied again
@@ -321,6 +351,15 @@ V0.4's elevation exaggeration and per the user's own explicit direction
 this time, not an attempt to reproduce the source photo faithfully.
 
 ### V0.5: sea-level control
+
+**Historical — the calibration below is entirely retired.** With real GEBCO
+metres, sea level is exactly radius 1 and the slider reads in real metres,
+so `SEA_LEVEL_MAX_RISE_HEIGHT`, `OCEAN_AREA_FRACTION`,
+`seaLevelBaseHeightValue()` and `OCEAN_FLOOR_EXTRA_DIP` are all gone along
+with the three-wrong-constants saga that produced them. Kept for the method
+(check what the data actually encodes before modelling it; a correctly
+calibrated but invisible control is worth nothing) and because the
+land/sea two-object design it established is still exactly how this works.
 
 A slider (`#sea-level-control` in `index.html`, wired up in `js/main.js`,
 only shown in 3D mode — the 2D map has no sea-level concept yet) that
@@ -721,23 +760,25 @@ for all three ramps switchable rather than one.
   visual effect — it was measured separately from the rim fix on purpose,
   per the lesson above about two changes sharing one round's credit.
 
-**Sea level runs both ways, on an asymmetric scale** (−2000 m to +200 m).
+**Sea level runs both ways, on an asymmetric scale** (−6000 m to +200 m).
 `radiusForMetres` already handled negatives, so going below zero was a
 slider range and a readout that signs itself. The scale is the part worth
 knowing: the user asked for 2 m steps upward and 20 m steps downward, and
 an `<input type="range">` has exactly one `step`, so the slider carries
 **steps, not metres** and `seaLevelMetres()` in `main.js` multiplies by
-`SEA_LEVEL_STEP_UP_M` or `SEA_LEVEL_STEP_DOWN_M` depending on the sign.
-100 steps either way keeps the travel on screen symmetric even though the
-ranges are not. The asymmetry matches the subject: upward, every
-interesting number is close together (melting every ice sheet is about
-+65 m), while downward the shelves run to −2000 m. Measured from the
-committed raster, land as a fraction of the globe: **40.4% at −2000 m,
-33.3% at −120 m** (the last glacial maximum, exposing the Sunda shelf, the
-North Sea and the Bering land bridge), 29.1% today, 21.0% at +200 m. Note
-the descent and the repainted seabed are coupled — lowering sea level
-without one just exposes blue photograph, which is why they were built in
-that order.
+`SEA_LEVEL_STEP_UP_M` (2) or `SEA_LEVEL_STEP_DOWN_M` (20) depending on the
+sign. That is 300 steps down against 100 up, so present-day sea level sits
+three quarters of the way along the track rather than in the middle — the
+range in `index.html` has to match those two constants. The asymmetry
+matches the subject: upward, every interesting number is close together
+(melting every ice sheet is about +65 m), while downward the shelf edge is
+around −2000 m and the abyssal plains near −6000 m. Measured from the
+committed raster, land as a fraction of the globe: **99.3% at −6000 m** (only
+the trenches still hold water), 40.4% at −2000 m, **33.3% at −120 m** (the
+last glacial maximum, exposing the Sunda shelf, the North Sea and the
+Bering land bridge), 29.1% today, 21.0% at +200 m. Note the descent and the
+repainted seabed are coupled — lowering sea level without one just exposes
+blue photograph, which is why they were built in that order.
 
 **Water opacity is a user control now** (`setWaterOpacity`, second slider,
 default 40%). There is no single right value — opaque water reads better
@@ -1036,8 +1077,27 @@ Kept deliberately minimal for V0.1 — just enough seam that a second world
 means adding a new `worlds/<world-id>/` folder + config, not touching
 `js/main.js`. Don't build more of this than the current version needs.
 
-`worlds/<world-id>/config.json` currently holds only `id`, `name`,
-`globeTexture` (path to that world's equirectangular sphere texture).
+`worlds/<world-id>/config.json` holds `id`, `name`, `globeTexture` (path to
+that world's equirectangular surface image), plus three blocks added in
+V0.6:
+
+- **`body`** — facts about the world itself. Just `radiusMetres` today.
+  This is the block that exists so the Moon and Mars can be added as data:
+  it is what turns "metres of elevation" into "fraction of the radius", and
+  it is wrong for anything but Earth.
+- **`display`** — deliberate drawing choices, not facts:
+  `verticalExaggeration` (30×, applied identically to terrain and sea so
+  which coastline floods stays exact), `surfaceGamma` (0.6, tuned to *this*
+  photograph's dark forests), `seabedDeepestMetres` (8000, where the depth
+  ramp bottoms out).
+- **`terrain`** — the height raster: its `source`, its `encoding`
+  (`rg16-metres` and the `offsetMetres` the pipeline packed it with), and
+  the `levels` available. `terrain.encoding.offsetMetres` is the **single
+  source of truth** for that number: `tools/elevation_encoding.py` reads it
+  so the encoder, the verifier and the browser cannot drift apart. They
+  used to each carry their own copy, which would have silently shifted
+  every elevation by a fixed amount if one had ever been edited alone.
+
 `js/main.js` fetches one hardcoded config path
 (`worlds/kasoku-sekai/config.json`) — it doesn't know anything world-
 specific beyond that path, and doesn't know it's rendering 過速世界
@@ -1104,6 +1164,104 @@ for context on *why* the rewrite happened:
 
 Do not re-introduce MapLibre or CesiumJS without the user explicitly
 asking for it again.
+
+## The V0.6 cleanup pass (no feature changes)
+
+The user paused feature work and asked for an inspection and tidy-up with
+one hard rule: **do not lose the state that works on the Pixel 7a**. A
+restore point was pushed to GitHub first — branch **`safe-v0.6-working`**
+at commit `1a2f9b5`, the version they had just confirmed. It is still
+there; if anything below ever turns out to have broken something, that
+branch is the way back.
+
+The bar for every change was "same pixels out". The harness for that is
+`scratchpad/baseline.js`, run once before and once after: it records
+geometry counts, per-vertex radii to nine decimals, the seabed plan's
+checksum, painted colours at three fixed coordinates, sea-sphere scale at
+every slider extreme, the light-to-camera angle, rendered mean/contrast/
+blue-fraction at nine views plus a drained one, drag and wheel response,
+and both toggle directions. **All ten rendered screenshots came back
+byte-for-byte identical and every measured value matched**; only wall-clock
+timings differed. Re-run it the same way before any future refactor.
+
+What was actually wrong, and what was done:
+
+- **One 814-line file held six roles.** Split by role into `cubeSphere.js`
+  (mesh), `elevation.js` (height data), `surface.js` (colour texture) and
+  `globe3d.js` (the view), per the table in "Where things live". Pure
+  moves, no logic edits. Deliberately four files, not seven — the
+  temptation to also split out lighting, controls and the sea sphere was
+  refused because those are all one concern (drawing the globe) and
+  splitting them would have made the code harder to follow, not easier.
+- **The bilinear elevation sampler existed twice**, once for the mesh and
+  once inlined in the seabed pass, with the same maths written two
+  different ways. Now both call `sampleGridMetres`. This is the duplication
+  that mattered most: the two copies decide *where the coastline is*, and
+  had they ever drifted, the terrain and its colouring would have disagreed
+  in a way that looks like bad data rather than a bug. The plan checksum
+  proved the merge changed nothing.
+- **The elevation raster was kept as the canvas's raw RGBA.** Decoding it
+  once into an `Int16Array` of metres halves it (8.39 MB → 4.19 MB) and
+  removes the byte-unpacking from both hot loops — the 393k-vertex mesh
+  build and the 8.4M-pixel seabed pass. Measured in-page: JS heap after the
+  first seabed repaint **144.9 MB → 133.2 MB**, and startup was no slower.
+- **`OFFSET_M = 12000` was written out three times** — encoder, verifier,
+  and `config.json` — and had to agree or every elevation would silently be
+  wrong by a fixed amount. `tools/elevation_encoding.py` now reads it from
+  the world's config, which is where the browser already read it.
+- **A real time bomb in the pipeline**: `verify_elevation.py` called
+  `ndarray.ptp()`, removed in NumPy 2.0, and the workflow installs numpy
+  unpinned. The next terrain rebuild would have crashed *at the final
+  check*, after half an hour of downloading. Fixed to `np.ptp()`. Found by
+  running the tool rather than reading it — worth remembering, since CI
+  that only runs on demand can rot silently for months.
+- **Earth was hardcoded in the rendering code**: radius, exaggeration,
+  gamma, ramp depth. All four moved to `config.json` (`body` and `display`),
+  and `buildCubeSphere` now takes a `radiusAt(lng, lat)` callback instead of
+  an elevation grid, so the mesh module knows nothing about planets or
+  rasters at all. This is the groundwork the user asked for ahead of the
+  Moon and Mars — and it stops there on purpose. **No second body, no
+  registry, no abstraction over "kinds of world" was built**, because
+  exactly one world exists and inventing that structure now would be
+  guessing at requirements.
+
+Deliberately **not** changed, with reasons, so a future session doesn't
+re-open them:
+
+- **The 4096×2048 elevation PNG (10.9 MB) stays committed even though the
+  app never downloads it.** `pickElevationLevel` takes the 2048 level and
+  always will while the mesh is 255 segments, so it costs the phone
+  nothing; regenerating it costs a 30-minute CEDA download; and the
+  deferred REMA/ArcticDEM work will want it. Repo weight is the cheapest
+  thing here.
+- **Mesh resolution, light angles, ramp colours, opacity default, camera
+  near/far, `FACE_SEGMENTS`, `SEABED_RIM_PASSES`, `WATER_BLUE_RATIO`** —
+  every one of these is a number the user has already looked at on the
+  phone and accepted. Touching them is how a "tidy-up" turns into a
+  regression.
+- **`lowPassPolarRows`'s window can be one sample wider than the image on
+  the last row or two**, which double-counts a single pixel in that row's
+  average. Genuinely an off-by-one; the visible effect is nil (those rows
+  are already an average of nearly the whole width). Left alone because
+  the fix would change approved pixels for no benefit anyone can see.
+- **The 2D map, `geoConvert.js`, the OpenLayers loading arrangement, and
+  the `index.html` import map** — all small, all working, nothing to gain.
+
+Net, and stated honestly: this did **not** shrink the code. `globe3d.js`
+went from 814 lines to 291, but the four files it became total 840, and the
+project's JavaScript went from 1044 lines to 1070. Counting only actual
+statements (no blanks, no comments) it is 621 → 629 — eight lines more,
+which is the `requireNumber` guard and the config plumbing. Everything else
+that looks like growth is comments.
+
+That is the right outcome to expect from this kind of pass and worth being
+clear about, because "fewer lines" was never the goal. What changed is that
+the biggest file dropped by two thirds, the one piece of duplicated logic
+that could actually cause a visible bug is gone, and "where does the height
+data get read" and "where does the mesh get built" now have one-word
+answers. The real reductions were elsewhere: one raster buffer halved
+(8.39 → 4.19 MB), one constant that lived in three places down to one, and
+one dead file's worth of stale documentation retired.
 
 ## How this was tested (no browser on the dev side either)
 
@@ -1335,6 +1493,13 @@ frames by A/B-ing `SEABED_RIM_PASSES` between 0 and 3 in one browser run
 (numbers above). Worth reusing: anything that is a pure function of
 committed raster data can be settled in seconds offline, and the browser
 run then only has to confirm the port.
+
+For the cleanup pass, the whole method is written up under "The V0.6
+cleanup pass" above — the short version is that `scratchpad/baseline.js`
+was run once before and once after, and every rendered screenshot came back
+byte-identical. Reuse that harness for any future refactor: a tidy-up that
+cannot prove it changed nothing is not worth shipping to a user who can
+only test on one phone.
 
 Also re-verified in the same run, since the paint pass and the sea-level
 slider both changed: the cube-sphere still comes out at 393,730 vertices /

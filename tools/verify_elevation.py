@@ -7,6 +7,10 @@ turned out to encode a flat zero for the whole ocean; that class of
 mistake is only caught by actually reading the numbers back out, at known
 places, and asserting what they should say.
 
+The place-name checks below are specific to Earth/GEBCO on purpose: they
+are how this pipeline proves *this* dataset is real. A future body would
+bring its own list, not a generalised one.
+
 Called by .github/workflows/build-terrain.yml.
 """
 
@@ -15,7 +19,7 @@ import sys
 import numpy as np
 from PIL import Image
 
-OFFSET_M = 12000
+from elevation_encoding import offset_metres
 
 # lon, lat, human label, and the range the value has to fall in. Kept
 # loose: these rasters are area-averaged down to ~20 km cells, so a summit
@@ -38,9 +42,12 @@ def sample(metres, lon, lat):
 
 
 def main() -> int:
-    path = sys.argv[1]
+    if len(sys.argv) != 3:
+        print("usage: verify_elevation.py <elevation.png> <world-dir>")
+        return 2
+    path, world_dir = sys.argv[1], sys.argv[2]
     rgb = np.asarray(Image.open(path).convert("RGB")).astype(np.int32)
-    metres = (rgb[:, :, 0] * 256 + rgb[:, :, 1]) - OFFSET_M
+    metres = (rgb[:, :, 0] * 256 + rgb[:, :, 1]) - offset_metres(world_dir)
     height, width = metres.shape
     print(f"{path}: {width}x{height}, range {metres.min()}..{metres.max()} m")
 
@@ -73,8 +80,12 @@ def main() -> int:
     # Both pole rows must carry real, varying data rather than a fill value.
     for label, row in (("north", 0), ("south", height - 1)):
         values = metres[row]
-        print(f"  {label} pole row: mean {values.mean():.0f} m, spread {values.ptp()} m")
-        if values.ptp() == 0:
+        # np.ptp(), not values.ptp(): the ndarray method was removed in
+        # NumPy 2.0, and the workflow installs numpy unpinned -- so the old
+        # spelling would fail this check after a 30-minute download.
+        spread = int(np.ptp(values))
+        print(f"  {label} pole row: mean {values.mean():.0f} m, spread {spread} m")
+        if spread == 0:
             failures.append(f"{label} pole row is a constant fill value")
 
     if failures:

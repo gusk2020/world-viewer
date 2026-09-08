@@ -3,11 +3,13 @@
 // rough correspondence between the 3D camera's distance-from-center and
 // OpenLayers's zoom level.
 //
-// Longitude/latitude convention matches how the 3D globe's texture is
-// actually mapped in js/globe3d.js (THREE.SphereGeometry's default UV
-// layout, verified against the equirectangular texture used there): +Y is
-// the north pole, and longitude increases eastward starting from the
-// texture's left edge at -180.
+// Longitude/latitude convention matches how the globe's texture is actually
+// mapped: +Y is the north pole, and longitude increases eastward starting
+// from the equirectangular image's left edge at -180. js/cubeSphere.js
+// derives every vertex's UV by calling directionToLngLat below, so the two
+// cannot drift apart -- but this is still *not* a general-purpose spherical
+// coordinate utility: it encodes one specific texture orientation, and a
+// differently-oriented source image would need it re-derived.
 
 export function directionToLngLat(x, y, z) {
   const clampedY = Math.min(1, Math.max(-1, y));
