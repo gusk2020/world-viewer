@@ -180,6 +180,27 @@
         0.8
       ]
     },
-    "levels": []
+    "levels": [
+      {
+        "url": "./worlds/mars/terrain/mola463_areoid_512x256.png",
+        "width": 512,
+        "height": 256
+      },
+      {
+        "url": "./worlds/mars/terrain/mola463_areoid_1024x512.png",
+        "width": 1024,
+        "height": 512
+      },
+      {
+        "url": "./worlds/mars/terrain/mola463_areoid_2048x1024.png",
+        "width": 2048,
+        "height": 1024
+      },
+      {
+        "url": "./worlds/mars/terrain/mola463_areoid_4096x2048.png",
+        "width": 4096,
+        "height": 2048
+      }
+    ]
   }
 }
