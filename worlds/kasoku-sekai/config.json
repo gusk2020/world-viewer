@@ -87,6 +87,30 @@
       }
     ]
   },
+  "teacher": {
+    "_note": "What this world's surface really looks like, for the climate model to be scored against. Built by tools/build_teacher.py; see that file for what each class is sourced from and how far to trust it. One byte per cell: 0 sea, 1 sea ice, 2 vegetation, 3 arid, 4 land ice. Adding a past or future era means adding an entry here and a builder in that tool -- nothing else in the project knows how many eras there are.",
+    "classes": ["sea", "seaIce", "vegetation", "arid", "landIce"],
+    "labels": ["海", "海氷", "植生", "乾燥地", "雪氷"],
+    "colours": ["#183e6e", "#b0d0e2", "#608448", "#ccb68a", "#eef0f4"],
+    "default": "present",
+    "eras": [
+      {
+        "id": "present",
+        "label": "現在",
+        "map": "./worlds/kasoku-sekai/teacher/present-classes.png",
+        "width": 2048,
+        "height": 1024,
+        "summary": "./worlds/kasoku-sekai/teacher/present-summary.json",
+        "sources": {
+          "landSea": "GEBCO_2026 ice-surface grid (the same committed raster the globe's shape uses)",
+          "landIce": "Natural Earth 1:10m glaciated areas + Antarctic ice shelves (public domain)",
+          "vegetation": "Blue Marble surface photograph, by colour (G > R)",
+          "arid": "Blue Marble surface photograph, by colour (G <= R)",
+          "seaIce": "Blue Marble surface photograph: bright, colour-neutral water. The weakest layer -- a composite image, not a measured extent."
+        }
+      }
+    ]
+  },
   "terrain": {
     "source": "GEBCO_2026 Grid (ice surface elevation), 15 arc-second, via CEDA",
     "build": {

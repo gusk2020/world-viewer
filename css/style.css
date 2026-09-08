@@ -138,6 +138,17 @@ html, body {
   background: #2f7ee0;
 }
 
+/* The 地表 row carries one long label (陸地塗り分け) beside three short ones.
+   Equal widths make it wrap to two lines, which grows the whole panel -- and
+   the user has twice said the panel is too tall. Sizing these to their own
+   text keeps the row one line high. */
+#surface-mode button {
+  /* basis auto, so each starts at its own text width and the slack is shared
+     from there, instead of every button being forced to the same width. */
+  flex: 1 1 auto;
+  white-space: nowrap;
+}
+
 /* The virtual-sea caption on Mars and the Moon. Small, but it has to be
    readable on a phone in sunlight, so it stays at the panel's own contrast
    rather than being greyed out. */

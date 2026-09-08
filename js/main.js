@@ -22,6 +22,7 @@ async function main() {
   const surfaceRow = document.getElementById("surface-row");
   const climateSetRow = document.getElementById("climate-set-row");
   const climateSetButtons = document.getElementById("climate-set");
+  const teacherButton = document.getElementById("teacher-button");
   const climateTempRow = document.getElementById("climate-temp-row");
   const climateTempSlider = document.getElementById("climate-temp-slider");
   const climateTempReadout = document.getElementById("climate-temp-readout");
@@ -344,6 +345,10 @@ async function main() {
     // body drawn from a photograph; Mars and the Moon index their colours by
     // height instead. Hidden rather than dead, same as the seabed buttons.
     surfaceRow.hidden = !globe3d.supportsClimate;
+    // 教師 shows what this world's surface really looks like, so the model's
+    // colouring can be compared with it by eye on the phone. Only worlds
+    // that carry teacher data offer it.
+    teacherButton.hidden = !globe3d.hasTeacher;
     // A newly built globe always starts on its own standard surface.
     surfaceMode = "standard";
     buildClimateSetButtons();

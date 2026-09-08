@@ -96,9 +96,18 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
   // oldest context to stay under its limit, which kills the globe that was
   // still working. Loading first means a failure creates nothing at all and
   // there is nothing to clean up.
-  const [colorImage, elevationImage] = await Promise.all([
+  // The teacher map -- what this world's surface really looks like, the thing
+  // the climate model is scored against. Loaded here with the rest so that
+  // pressing 教師 is instant and, more importantly, so that a failure to
+  // fetch it fails before anything has been created. It is one paletted PNG
+  // of about 50 KB, which next to the terrain raster is nothing.
+  const teacherEra = pickTeacherEra(worldConfig.teacher);
+  const [colorImage, elevationImage, teacherImage] = await Promise.all([
     usesPhoto ? loadImage(worldConfig.globeTexture) : null,
     loadImage(pickElevationLevel(terrain.levels, USEFUL_GRID_WIDTH).url),
+    // A failed teacher fetch must not cost the user the whole world: it is a
+    // comparison layer, not the globe. The button simply does not appear.
+    teacherEra ? loadImage(teacherEra.map).catch(() => null) : null,
   ]);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -267,6 +276,21 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
   // actually applies climate to them, rather than changing two working
   // globes now.
   const supportsClimate = usesPhoto;
+  // The teacher map is a map, so it needs the same equirectangular UVs the
+  // climate colouring needs -- a world without them cannot show it either.
+  const hasTeacher = Boolean(teacherImage) && usesPhoto;
+  let teacherTexture = null;
+  if (hasTeacher) {
+    teacherTexture = new THREE.Texture(teacherImage);
+    teacherTexture.colorSpace = THREE.SRGBColorSpace;
+    // Class colours, not a photograph: interpolating between them would
+    // invent a colour that stands for no class at all.
+    teacherTexture.magFilter = THREE.NearestFilter;
+    teacherTexture.minFilter = THREE.LinearMipmapLinearFilter;
+    teacherTexture.wrapS = THREE.RepeatWrapping;
+    teacherTexture.needsUpdate = true;
+  }
+
   // A world may carry several named sets -- "現在", "寒冷", "温暖" -- each
   // saying only what it changes. One is active at a time.
   const climateSets = resolveClimateSets(worldConfig);
@@ -352,9 +376,10 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
     if (!supportsClimate) return surfaceMode;
     // Anything unrecognised means the world's own surface, not bare rock --
     // which is what an unknown name used to fall through to.
-    surfaceMode = mode === "climate" || mode === "rock" ? mode : "standard";
-    if (surfaceMode === "standard") {
-      globe.material.map = texture;
+    const known = mode === "climate" || mode === "rock" || (mode === "teacher" && hasTeacher);
+    surfaceMode = known ? mode : "standard";
+    if (surfaceMode === "standard" || surfaceMode === "teacher") {
+      globe.material.map = surfaceMode === "teacher" ? teacherTexture : texture;
       globe.material.needsUpdate = true;
       return surfaceMode;
     }
@@ -589,6 +614,7 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
     if (graticule) graticule.dispose();
     texture.dispose();
     if (climateTexture) climateTexture.dispose();
+    if (teacherTexture) teacherTexture.dispose();
     renderer.dispose();
     renderer.domElement.remove();
   }
@@ -603,6 +629,8 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
     getAxisAngle,
     setSurfaceMode,
     supportsClimate,
+    hasTeacher,
+    teacherEra: teacherEra ? { id: teacherEra.id, label: teacherEra.label } : null,
     climateSets: climateSets.sets.map((set) => ({ id: set.id, label: set.label, note: set.note })),
     getClimateSet: () => climateSetId,
     setClimateSet,
@@ -622,6 +650,13 @@ function requireNumber(value, name) {
     throw new Error(`${name} must be a number in the world's config.json`);
   }
   return value;
+}
+
+// Which era's teacher map to show. A world with no teacher block has none,
+// and the app simply does not offer the button.
+function pickTeacherEra(teacher) {
+  if (!teacher || !Array.isArray(teacher.eras) || !teacher.eras.length) return null;
+  return teacher.eras.find((era) => era.id === teacher.default) || teacher.eras[0];
 }
 
 function loadImage(url) {

@@ -1,0 +1,27 @@
+{
+  "era": "present",
+  "width": 2048,
+  "height": 1024,
+  "classes": [
+    "sea",
+    "seaIce",
+    "vegetation",
+    "arid",
+    "landIce"
+  ],
+  "areaFractions": {
+    "sea": 0.6987,
+    "seaIce": 0.01,
+    "vegetation": 0.1183,
+    "arid": 0.1397,
+    "landIce": 0.1143,
+    "landVegetation": 0.4061,
+    "landArid": 0.4796
+  },
+  "iceSourceAgreement": {
+    "mappedIceLandFraction": 0.1143,
+    "photoWhiteLandFraction": 0.1084,
+    "overlapOfUnion": 0.7307
+  },
+  "namedPlaceChecks": 17
+}

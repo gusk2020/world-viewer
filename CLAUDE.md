@@ -160,6 +160,7 @@ straight by the browser — still no bundler and no build step.
 | `js/hypsometric.js` | The height-to-colour ramp for bodies with no photograph (Mars, the Moon). |
 | `js/graticule.js` | The terrain-following latitude/longitude lines. |
 | `js/climate.js` | The climate model: parameter schema, named parameter sets, insolation, wind, moisture, and the painter. No three.js, no DOM. |
+| `tools/build_teacher.py` | Builds a world's teacher data — what its surface really looks like — from the committed rasters plus Natural Earth's ice layers. The one file in the project whose job is to make sure nothing is invented. |
 | `js/map2d.js` | The OpenLayers 2D map. |
 | `js/geoConvert.js` | lng/lat ↔ 3D direction, and the approximate 3D-distance ↔ 2D-zoom correspondence. |
 
@@ -2139,6 +2140,117 @@ points. Temperature drives ice in this model; moisture drives vegetation.
 **One thing to check with the user**: they wrote "20度プラマイ15度=5度から25度".
 20±15 is 5–35, not 5–25. They named 5–25 explicitly, so that is what shipped,
 and the arithmetic was flagged back to them in case 35 was meant.
+
+## V0.8 stage 5: the teacher data
+
+The spec: make the present-day Earth's **植生 / 乾燥地 / 雪氷 / 海氷** comparable
+against reliable global data or imagery, and leave room for past eras (the last
+glacial maximum, a warm period, any published palaeoclimate reconstruction) to
+be added as further teacher datasets.
+
+Until now the teacher was a `.bin` file in a scratch directory, produced by a
+one-off command that no longer existed. Every fitted parameter in this project
+was aimed at it, and it was the one input nobody could inspect. Stage 5 turns it
+into a committed, regenerable repo artefact with stated provenance.
+
+### What ships
+
+- **`tools/build_teacher.py`** — rebuilds it from data already in the repo plus
+  two vector layers it fetches. It refuses to write if its own named-place
+  checks fail.
+- **`worlds/kasoku-sekai/teacher/present-classes.png`** — 2048×1024, one byte
+  per cell, five values (0 sea, 1 sea ice, 2 vegetation, 3 arid, 4 land ice).
+  A paletted PNG, so it is **49 KB** and the browser can also show it directly.
+- **`worlds/kasoku-sekai/teacher/present-summary.json`** — the fractions and
+  the cross-check numbers below, so a future session can see what it holds
+  without rebuilding it.
+- **`.github/workflows/build-teacher.yml`** — because the user only has a phone,
+  anything regenerable has to be regenerable from the Actions tab.
+- **`teacher` in the world's config.json** — the class names, their labels and
+  colours, and the era list. Adding an era is an entry there plus a builder in
+  the tool; nothing else in the project knows how many eras exist.
+
+### Where each class comes from, and how far to trust it
+
+This is the part that matters, because the fit can never be better than what it
+is aimed at:
+
+| class | source | trust |
+| --- | --- | --- |
+| land/sea | GEBCO_2026, the committed raster the globe's shape already uses | exact, and it means the teacher and the model agree about the coast **by construction** |
+| 雪氷 | **Natural Earth 1:10m glaciated areas + Antarctic ice shelves** (public domain) | real mapped ice — the strongest layer here, and new this stage |
+| 植生 / 乾燥地 | the committed Blue Marble photograph, by colour (G > R is vegetated) | crude, but a real photograph of the real Earth, and it is what the app shows as 標準, so it is the user's own standard for "natural" |
+| 海氷 | the same photograph: bright, colour-neutral water | the weakest layer — a cloud-free composite shows one state of a thing that doubles every winter |
+
+**The ice layer is the one that got genuinely better**, and the two sources are
+independent, so the gap between them is worth stating rather than hiding: mapped
+ice covers **11.4%** of land, the photograph's own white **10.8%**, and their
+overlap is **73%** of their union. The disagreement is the seasonal snow the
+composite happens to have caught, and glacier margins finer than 10 km.
+
+**The concrete upgrade path for sea ice** is NSIDC's Sea Ice Index (G02135)
+monthly extents — no login needed, but unreachable from this sandbox (only
+`raw.githubusercontent.com` gets through; figshare, Zenodo, NSIDC and NASA NEO
+were all tried and all refused). Fetch it from a runner, the way GEBCO is.
+
+### One check point was wrong, and the data was right
+
+The tool refused its first run: Indochina at 105°E 15°N came out arid. It is not
+a bug — the photograph really is brown there (the Korat plateau, and the
+composite is dry-season). The old scratch teacher said exactly the same thing.
+Moving the check to Borneo is the honest fix; moving it one degree west, where
+the same map does say vegetated, would have been fitting the check to the answer.
+
+This is worth knowing alongside the user's Stage 2 report that Thailand, Vietnam
+and Cambodia look too bare: **part of that gap is in the teacher, not only in
+the model.** Any refit will only chase the model to where the photograph is, and
+the photograph is browner there than the real forest is.
+
+### What it cost the shipped parameters, measured
+
+The scorer now reads the committed artefact instead of the scratch file, which
+is the whole point — the thing scored and the thing the app shows are provably
+the same file. Against the shipped parameters:
+
+| | old scratch teacher | committed teacher |
+| --- | --- | --- |
+| pixel | 0.105913 | 0.105894 |
+| region | 0.3252 | 0.3358 |
+| total | 0.4110 | 0.4216 |
+
+So the two teachers agree almost exactly globally (0.02% on the pixel term) and
+differ by 3.3% region by region — the ice margins. **Nothing was refitted here**;
+that is Stage 7's job, and a stage that quietly retunes is not the stage it says
+it is.
+
+### Seeing it on the phone
+
+A fourth 地表 button, **教師**, draws the teacher map on the globe, so the model's
+colouring and the real thing can be compared by eye at the same view. It is the
+committed PNG shown directly — nearest-neighbour filtered, because interpolating
+between class colours invents a colour that stands for no class at all.
+
+Three things it must not do, all verified: Earth's 標準, 岩 and 陸地塗り分け are
+**byte-identical** (both painted textures hash the same, and across fourteen
+rendered frames every differing pixel is inside the 地表 row — **zero below row
+250**); the panel does not grow (**201 px in 標準**, Mars **167 px**) — which took
+a CSS fix, since four equal-width buttons made 陸地塗り分け wrap to two lines and
+added 6 px; and Mars and the Moon, which carry no teacher data, do not offer the
+button at all.
+
+**A failed teacher fetch costs the button and nothing else.** It is awaited with
+the other images (so the world-switch fix's ordering still holds) but its
+rejection is caught: the world loads, `hasTeacher` is false, the button hides,
+and 教師 falls back to 標準. Verified by aborting the request — one canvas, no
+page errors, everything else working.
+
+### What is deliberately not here
+
+**A temperature teacher.** The model's temperature field has never been scored,
+and Earth's real zonal-mean temperatures would be the obvious teacher for it —
+but no reachable host serves them, and writing the numbers down from memory
+would be inventing data in the one file that exists so that nothing is invented.
+Left as a stated gap with the same fix as sea ice: fetch a real one from a runner.
 
 ## The world-switch bug the user hit, and why it wedged the whole app
 
