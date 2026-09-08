@@ -18,6 +18,7 @@ import {
 import { decodeElevationGrid, pickElevationLevel, sampleMetres } from "./elevation.js";
 import { buildCubeSphere } from "./cubeSphere.js";
 import { buildHypsometricRamp } from "./hypsometric.js";
+import { buildGraticule } from "./graticule.js";
 import {
   SEABED_RAMPS,
   buildSeabedPlan,
@@ -42,7 +43,7 @@ const USEFUL_GRID_WIDTH = 4 * (FACE_SEGMENTS + 1) * 2;
 
 // Exports getView()/setView() for the 3D/2D toggle, plus the three controls
 // on screen: sea level, water opacity and seabed colour.
-export async function initGlobe3D(containerId, worldConfig) {
+export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
   const body = worldConfig.body;
   const display = worldConfig.display;
   const terrain = worldConfig.terrain;
@@ -141,11 +142,18 @@ export async function initGlobe3D(containerId, worldConfig) {
     };
   }
 
+  // Everything belonging to the body hangs off one group, so the axial-tilt
+  // control is a single rotation rather than something each object has to
+  // know about. The group starts at identity, which is exactly the upright
+  // globe every earlier version drew.
+  const body3d = new THREE.Group();
+  scene.add(body3d);
+
   const globe = new THREE.Mesh(
     buildCubeSphere(FACE_SEGMENTS, meshOptions),
     new THREE.MeshLambertMaterial({ map: texture })
   );
-  scene.add(globe);
+  body3d.add(globe);
 
   // Land and sea are two independent objects, per the user's own design
   // direction: raising sea level only resizes this sphere and never
@@ -176,7 +184,7 @@ export async function initGlobe3D(containerId, worldConfig) {
       depthWrite: false,
     })
   );
-  scene.add(seaSphere);
+  body3d.add(seaSphere);
 
   function setSeaLevel(metres) {
     seaSphere.scale.setScalar(radiusForMetres(metres));
@@ -227,6 +235,83 @@ export async function initGlobe3D(containerId, worldConfig) {
     paintSeabed(seabedPixels.data, seabedPlan, rampLut(stops));
     surfaceContext.putImageData(seabedPixels, 0, 0);
     texture.needsUpdate = true;
+  }
+
+  // Axial tilt. The button offers two positions -- upright, and the body's
+  // real obliquity from its config -- and "upright" has to mean upright no
+  // matter how the globe has been dragged around, so this sets an absolute
+  // rotation rather than nudging the current one.
+  //
+  // Tilting the body rather than the camera keeps OrbitControls' own up
+  // vector at +Y, so dragging, the polar clamp and the zoom limits all
+  // behave exactly as before. The cost is that lng/lat is now measured in
+  // the body's frame rather than the world's, which getView/setView below
+  // have to undo -- at zero tilt that undoing is the identity, so Earth's
+  // default view and its 2D toggle are bit-for-bit unchanged.
+  let axisTiltDegrees = 0;
+
+  // Leaned about X rather than Z on purpose. Nothing physical picks one over
+  // the other -- which way a spin axis leans relative to some arbitrary
+  // world direction is meaningless without modelling the orbit too -- but
+  // the choice decides what the user sees when they press the button. About
+  // Z, the pole leans straight at the camera from the opening view: the
+  // globe really is tilted, yet it still *looks* upright and the readout
+  // honestly says 0 degrees, so the button appears to do nothing. About X it
+  // leans across the screen, which is the familiar school-globe-on-a-stand
+  // pose and makes the readout mean something the moment it is pressed.
+  function setAxisTilt(degrees) {
+    axisTiltDegrees = degrees;
+    body3d.rotation.set((degrees * Math.PI) / 180, 0, 0);
+    body3d.updateMatrixWorld(true);
+  }
+
+  // How tilted the spin axis *looks* right now: the angle between the axis
+  // projected onto the screen and straight up, in degrees. Upright reads 0
+  // from every angle; a tilted body swings between +obliquity and
+  // -obliquity as you orbit it, which is the point of showing it live.
+  const axisWorld = new THREE.Vector3();
+  const cameraRight = new THREE.Vector3();
+  const cameraUp = new THREE.Vector3();
+
+  function getAxisScreenAngle() {
+    axisWorld.set(0, 1, 0).applyQuaternion(body3d.quaternion);
+    camera.matrixWorld.extractBasis(cameraRight, cameraUp, new THREE.Vector3());
+    const x = axisWorld.dot(cameraRight);
+    const y = axisWorld.dot(cameraUp);
+    // Looking straight down the axis leaves nothing to measure an angle
+    // against; hold the last reading rather than printing noise.
+    if (Math.hypot(x, y) < 1e-3) return null;
+    return Math.abs((Math.atan2(x, y) * 180) / Math.PI);
+  }
+
+  // Built on first use: a graticule nobody has switched on should cost
+  // nothing at startup, which also keeps Earth's load time unchanged.
+  let graticule = null;
+  let graticuleMode = "off";
+
+  function setGraticule(mode) {
+    if (mode === "off" && !graticule) {
+      graticuleMode = mode;
+      return;
+    }
+    if (!graticule) {
+      graticule = buildGraticule((lng, lat) => radiusForMetres(metresAt(lng, lat)));
+      body3d.add(graticule.group);
+    }
+    graticuleMode = mode;
+    graticule.setMode(mode, camera.position.length());
+  }
+
+  // Ground metres per screen pixel, at the point of the globe nearest the
+  // camera. A single number can only ever be approximate on a sphere -- the
+  // scale falls away towards the limb -- so this is the scale at the middle
+  // of the view, which is what a scale bar on a globe can honestly claim.
+  function getMetresPerPixel() {
+    const toSurface = Math.max(0.01, camera.position.length() - 1);
+    const worldPerPixel =
+      (2 * toSurface * Math.tan((camera.fov * Math.PI) / 360)) /
+      renderer.domElement.clientHeight;
+    return worldPerPixel * body.radiusMetres;
   }
 
   // The light follows the camera instead of sitting at a fixed point in
@@ -300,19 +385,33 @@ export async function initGlobe3D(containerId, worldConfig) {
   renderer.setAnimationLoop(() => {
     controls.update();
     updateSunLight();
+    if (graticule && graticuleMode !== "off") graticule.update(camera.position.length());
     renderer.render(scene, camera);
+    if (onFrame) onFrame();
   });
 
+  // lng/lat is a fact about the body, so it is measured in the body's own
+  // frame -- the tilt has to be taken back off on the way in and put back on
+  // on the way out. At zero tilt both conversions are the identity.
+  const viewDirection = new THREE.Vector3();
+
   function getView() {
-    const direction = camera.position.clone().normalize();
-    const { lng, lat } = directionToLngLat(direction.x, direction.y, direction.z);
+    viewDirection
+      .copy(camera.position)
+      .normalize()
+      .applyQuaternion(body3d.quaternion.clone().invert());
+    const { lng, lat } = directionToLngLat(viewDirection.x, viewDirection.y, viewDirection.z);
     return { lng, lat, zoom: distanceToZoom(camera.position.length()) };
   }
 
   function setView({ lng, lat, zoom }) {
     const distance = zoomToDistance(zoom, MIN_DISTANCE, MAX_DISTANCE);
     const direction = lngLatToDirection(lng, lat);
-    camera.position.set(direction.x * distance, direction.y * distance, direction.z * distance);
+    viewDirection
+      .set(direction.x, direction.y, direction.z)
+      .applyQuaternion(body3d.quaternion)
+      .multiplyScalar(distance);
+    camera.position.copy(viewDirection);
     controls.update();
   }
 
@@ -328,12 +427,24 @@ export async function initGlobe3D(containerId, worldConfig) {
     globe.material.dispose();
     seaSphere.geometry.dispose();
     seaSphere.material.dispose();
+    if (graticule) graticule.dispose();
     texture.dispose();
     renderer.dispose();
     renderer.domElement.remove();
   }
 
-  return { getView, setView, setSeaLevel, setWaterOpacity, setSeabedStyle, dispose };
+  return {
+    getView,
+    setView,
+    setSeaLevel,
+    setWaterOpacity,
+    setSeabedStyle,
+    setAxisTilt,
+    getAxisScreenAngle,
+    setGraticule,
+    getMetresPerPixel,
+    dispose,
+  };
 }
 
 // A missing config number would otherwise propagate as NaN into vertex

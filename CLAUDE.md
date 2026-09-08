@@ -77,6 +77,9 @@ continue.
   Moon have oceans, it is "if there were liquid up to this height, where
   would the coast be" — so the UI says so in as many words. See "V0.7:
   Mars and the Moon" below.
+- **V0.7.1 (current, done — needs the user's Pixel 7a confirmation)**: an
+  axial-tilt control and a latitude/longitude graticule with a scale bar,
+  on all three bodies. See "V0.7.1: axial tilt and the graticule" below.
 - **V0.8+**: cities, borders/territories, historical eras, and other
   過速世界-specific data. Several distinct features, not one version —
   treat each as its own sub-version. **Needs the user's own world-setting
@@ -1298,6 +1301,98 @@ visible over the 2D map since V0.5 even though `main.js` has always set
 `.hidden` on it. Fixing it would change Earth's 2D view, which this task was
 explicitly told not to do. Flagged to the user instead — it is a one-line
 change whenever they want it.
+
+## V0.7.1: axial tilt and the graticule
+
+Two controls, added to all three bodies at once, with Earth's default state
+left pixel-identical: the tilt starts upright (a zero rotation) and the
+graticule starts off and is not even built until first used. Verified the
+usual way — every measured value matched and **every screenshot was
+byte-identical below the control panel**.
+
+### The axial tilt
+
+One button with two positions: upright, and the body's real obliquity from
+its config (`body.axialTiltDegrees`: Earth 23.44°, Mars 25.19°, Moon 6.68°,
+each measured against its own orbital plane, which is the convention that
+makes Earth's figure 23.44 rather than 0). "Upright" is set as an absolute
+rotation rather than a relative nudge, so one press straightens the globe
+however it has been dragged — which is what the user asked for.
+
+**The body is tilted, not the camera.** That keeps `OrbitControls`' own up
+vector at +Y, so dragging, the polar clamp and the zoom limits all behave
+exactly as before. The cost is that lng/lat is now measured in the body's
+frame rather than the world's, so `getView`/`setView` apply the group
+quaternion and its inverse. At zero tilt both are the identity, which is why
+Earth's default view and its 2D toggle are unchanged — and the tilted round
+trip is exact, tested at three coordinates including lat 89.
+
+**Which axis it leans about was a real UX decision, not a detail.** The
+first version rotated about Z. From the opening view the camera sits on +X,
+so the pole leaned straight *at* the camera: the globe genuinely tilted
+(Antarctica swung into view) but still looked upright, and the readout
+honestly said 0° — so the button appeared to do nothing. Nothing physical
+picks one axis over the other; which way a spin axis leans relative to an
+arbitrary world direction is meaningless without modelling the orbit too.
+Rotating about X instead leans it across the screen, the familiar
+globe-on-a-stand pose, and the readout reads 23°/25°/7° the moment it is
+pressed. Caught by the test asserting the readout, not by looking.
+
+**The readout is the *apparent* angle**, i.e. the spin axis projected onto
+the screen, measured from vertical. That is the quantity the button
+controls, so the two agree: upright reads 0° from every angle, and a tilted
+body swings between +obliquity and −obliquity as it is dragged around,
+which is the point of showing it live. Looking straight down the axis leaves
+nothing to measure against, so it holds the last reading rather than
+printing noise.
+
+### The graticule
+
+Four states in a cycle, in the order asked for: off → parallels → both →
+meridians → off.
+
+**The lines follow the terrain.** Mars's relief spans radius 0.977 to 1.062
+once exaggerated, so a constant-radius graticule would hang visibly off the
+surface at the limb and sink into every mountain. Each point samples the
+same elevation data the mesh uses and is lifted by a small constant;
+measured, the lines sit 0.001481–0.001509 above the surface, i.e. they track
+the ground to within 3×10⁻⁵ radii.
+
+**Two densities, swapped by camera distance** (30° far, 10° within 2.2
+radii). One spacing cannot serve both ends of the zoom range: 30° is right
+for the whole globe and nearly empty close in, 10° the reverse. Both are a
+few thousand points, so both are built once and the swap is a visibility
+flag.
+
+**Dark lines, and that was measured rather than assumed.** The luminance
+step across a line, against the two hardest backgrounds the app draws: over
+the Sahara (the brightest ground, ~224) a white line at 0.42 opacity moves
+the pixel by only **14** — effectively invisible, because white on
+near-white has nowhere to go — while black at 0.45 moves it by **100**. Over
+deep ocean (~124) that same black line gives 35, matching what white managed
+there. So dark wins outright: seven times the contrast where white failed
+and no loss where white worked. Raising white's opacity does not fix it
+(0.7 only reaches 22 on the Sahara while glaring at 54 on the ocean) — the
+problem is the colour, not the strength.
+
+### The scale bar
+
+Shown only alongside a graticule, as asked; the two answer the same
+question. It reports ground metres per pixel at the point of the globe
+nearest the camera — a single number can only ever be approximate on a
+sphere, since the scale falls away toward the limb, so this is the scale at
+the middle of the view, which is what a scale bar on a globe can honestly
+claim.
+
+**Validated against the geometry, not by eye**: two points a known
+great-circle distance apart at the view centre are projected with the real
+camera, and the measured metres-per-pixel is compared with what the bar
+claims. Agreement is **0.0% at every zoom on all three bodies**. It also
+falls out of that test that the bar is reading each body's real size: at the
+same zoom, Earth shows 1000 km where Mars shows 500 km and the Moon 200 km.
+
+The bar is hidden in 2D mode — it is derived from the 3D camera, so it would
+be quietly wrong sitting on the OpenLayers map, which draws its own.
 
 ## The V0.6 cleanup pass (no feature changes)
 

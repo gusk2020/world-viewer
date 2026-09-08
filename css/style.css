@@ -145,3 +145,60 @@ html, body {
   line-height: 1.35;
   color: #c8d6ea;
 }
+
+/* The axial-tilt and graticule buttons. Same visual family as the segmented
+   controls, but each is a single button that cycles through its states. */
+.pill {
+  flex: 1;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.14);
+  color: #eaf2ff;
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pill.active {
+  background: #2f7ee0;
+}
+
+#axis-readout {
+  min-width: 3.2em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* The scale bar sits on the map itself, where a scale bar belongs, rather
+   than in the control panel -- and only while a graticule is shown. */
+#scale-bar {
+  position: fixed;
+  left: 14px;
+  bottom: calc(env(safe-area-inset-bottom, 0) + 76px);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(15, 23, 35, 0.7);
+  color: #eaf2ff;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 0.72rem;
+  font-weight: 600;
+  z-index: 5;
+  pointer-events: none;
+}
+
+#scale-bar[hidden] {
+  display: none;
+}
+
+#scale-bar-line {
+  height: 6px;
+  border: 1px solid #eaf2ff;
+  border-top: 0;
+}

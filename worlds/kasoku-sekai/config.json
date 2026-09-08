@@ -4,6 +4,8 @@
   "globeTexture": "./worlds/kasoku-sekai/textures/globe.jpg",
   "body": {
     "radiusMetres": 6371000,
+    "axialTiltDegrees": 23.44,
+    "axialTiltNote": "Earth's obliquity to its orbital plane (the ecliptic).",
     "datum": "GEBCO: 0 m is mean sea level."
   },
   "display": {

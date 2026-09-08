@@ -37,6 +37,15 @@
       <input type="range" id="water-opacity-slider" min="0" max="100" step="5" value="40" />
       <span id="water-opacity-readout">40%</span>
     </div>
+    <div class="control-row">
+      <label>自転軸</label>
+      <button type="button" id="axis-toggle" class="pill">垂直</button>
+      <span id="axis-readout">0°</span>
+    </div>
+    <div class="control-row">
+      <label>経緯線</label>
+      <button type="button" id="graticule-toggle" class="pill">なし</button>
+    </div>
     <div class="control-row" id="seabed-row">
       <label>海底の色</label>
       <div id="seabed-style" class="segmented">
@@ -48,6 +57,10 @@
     </div>
   </div>
   <button id="view-toggle">2Dに切替</button>
+  <div id="scale-bar" hidden>
+    <div id="scale-bar-line"></div>
+    <span id="scale-bar-label"></span>
+  </div>
 
   <script type="module" src="./js/main.js"></script>
 </body>

@@ -19,6 +19,12 @@ async function main() {
   const waterOpacitySlider = document.getElementById("water-opacity-slider");
   const waterOpacityReadout = document.getElementById("water-opacity-readout");
   const seabedRow = document.getElementById("seabed-row");
+  const axisButton = document.getElementById("axis-toggle");
+  const axisReadout = document.getElementById("axis-readout");
+  const graticuleButton = document.getElementById("graticule-toggle");
+  const scaleBar = document.getElementById("scale-bar");
+  const scaleBarLine = document.getElementById("scale-bar-line");
+  const scaleBarLabel = document.getElementById("scale-bar-label");
   const worldButtons = document.getElementById("world-switch");
   const virtualNote = document.getElementById("virtual-sea-note");
   const loading = document.getElementById("loading");
@@ -34,12 +40,33 @@ async function main() {
   let globe3d = null;
   let world = null;
 
+  // The axial-tilt button has two positions: upright, and the body's real
+  // obliquity (23.4 degrees for Earth, 25.2 for Mars, 6.7 for the Moon --
+  // each from its own config, measured against its own orbital plane).
+  // "Upright" is absolute, so one press straightens the globe however it is
+  // currently turned.
+  let axisUpright = true;
+
+  // Four states in a cycle, in the order the user asked for: press once for
+  // parallels, again to add meridians, again for meridians alone, again to
+  // clear them.
+  const GRATICULE_STATES = [
+    { mode: "off", label: "なし" },
+    { mode: "parallels", label: "緯度線" },
+    { mode: "both", label: "緯度経度線" },
+    { mode: "meridians", label: "経度線" },
+  ];
+  let graticuleIndex = 0;
+
   function applyMode() {
     appEl.hidden = mode !== "3d";
     map2dEl.hidden = mode !== "2d";
     // The sea-level and seabed controls only apply to the 3D view; the 2D
     // map has no sea-level concept.
     controlPanel.hidden = mode !== "3d";
+    // The scale bar is derived from the 3D camera, so it would be quietly
+    // wrong sitting on top of the 2D map -- which draws its own.
+    scaleBar.hidden = mode !== "3d" || GRATICULE_STATES[graticuleIndex].mode === "off";
     toggleButton.textContent = mode === "3d" ? "2Dに切替" : "3Dに切替";
   }
 
@@ -87,6 +114,57 @@ async function main() {
   seaLevelSlider.addEventListener("input", applySeaLevel);
   waterOpacitySlider.addEventListener("input", applyWaterOpacity);
 
+  function applyAxis() {
+    const tilt = axisUpright ? 0 : world.config.body.axialTiltDegrees;
+    globe3d.setAxisTilt(tilt);
+    axisButton.textContent = axisUpright ? "垂直" : `${tilt}°`;
+    axisButton.classList.toggle("active", !axisUpright);
+  }
+  axisButton.addEventListener("click", () => {
+    axisUpright = !axisUpright;
+    applyAxis();
+  });
+
+  function applyGraticule() {
+    const state = GRATICULE_STATES[graticuleIndex];
+    globe3d.setGraticule(state.mode);
+    graticuleButton.textContent = state.label;
+    graticuleButton.classList.toggle("active", state.mode !== "off");
+    // The scale is only shown alongside a graticule, as asked -- the two
+    // answer the same question, "how big is what I am looking at".
+    scaleBar.hidden = mode !== "3d" || state.mode === "off";
+  }
+  graticuleButton.addEventListener("click", () => {
+    graticuleIndex = (graticuleIndex + 1) % GRATICULE_STATES.length;
+    applyGraticule();
+  });
+
+  // Both readouts are driven from the render loop, because both answer to
+  // dragging rather than to any control. Each only touches the DOM when its
+  // displayed value actually changes -- writing text every frame would cost
+  // far more than the numbers do.
+  let shownAxis = null;
+  let shownScale = null;
+
+  function onFrame() {
+    const angle = globe3d.getAxisScreenAngle();
+    if (angle !== null) {
+      const rounded = Math.round(angle);
+      if (rounded !== shownAxis) {
+        shownAxis = rounded;
+        axisReadout.textContent = `${rounded}°`;
+      }
+    }
+    if (!scaleBar.hidden) {
+      const bar = scaleBarFor(globe3d.getMetresPerPixel());
+      if (bar.text !== shownScale) {
+        shownScale = bar.text;
+        scaleBarLine.style.width = `${bar.pixels}px`;
+        scaleBarLabel.textContent = bar.text;
+      }
+    }
+  }
+
   async function loadWorld(entry) {
     loading.classList.remove("hidden");
     loading.textContent = `${entry.label}を読み込み中…`;
@@ -101,7 +179,9 @@ async function main() {
 
     const config = await (await fetch(entry.config)).json();
     if (globe3d) globe3d.dispose();
-    globe3d = await initGlobe3D("app", config);
+    globe3d = await initGlobe3D("app", config, onFrame);
+    shownAxis = null;
+    shownScale = null;
     world = { entry, config };
 
     const sea = config.display.seaLevel;
@@ -127,6 +207,8 @@ async function main() {
 
     applySeaLevel();
     applyWaterOpacity();
+    applyAxis();
+    applyGraticule();
     applyMode();
     loading.classList.add("hidden");
   }
@@ -171,6 +253,23 @@ async function main() {
 
   const first = index.worlds.find((entry) => entry.id === index.default) || index.worlds[0];
   await loadWorld(first);
+}
+
+// Picks a round distance whose bar lands near a comfortable width on a
+// phone, then reports both the pixels to draw and the label to print.
+// 1/2/5 x 10^n is the usual ladder because those are the numbers people read
+// off a map without doing arithmetic.
+function scaleBarFor(metresPerPixel) {
+  const TARGET_PIXELS = 96;
+  const target = metresPerPixel * TARGET_PIXELS;
+  const magnitude = Math.pow(10, Math.floor(Math.log10(target)));
+  const metres = [1, 2, 5, 10].reduce((best, step) =>
+    Math.abs(step * magnitude - target) < Math.abs(best * magnitude - target) ? step : best
+  ) * magnitude;
+  return {
+    pixels: Math.round(metres / metresPerPixel),
+    text: metres >= 1000 ? `${Math.round(metres / 1000)} km` : `${Math.round(metres)} m`,
+  };
 }
 
 main().catch((err) => {

@@ -3,6 +3,8 @@
   "name": "月",
   "body": {
     "radiusMetres": 1737400,
+    "axialTiltDegrees": 6.68,
+    "axialTiltNote": "The Moon's obliquity to its orbital plane; it is 1.54 degrees to the ecliptic.",
     "datum": "LOLA LDEM: 0 m is a sphere of radius 1737400 m, the standard lunar reference."
   },
   "display": {
