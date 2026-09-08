@@ -203,7 +203,14 @@ async function main() {
     }
   }
 
+  // Which switch is the current one. A tap while another world is still
+  // loading used to let two `loadWorld` calls interleave, and whichever
+  // finished second could dispose the globe the other had just installed --
+  // leaving every control wired to a dead view.
+  let loadSequence = 0;
+
   async function loadWorld(entry) {
+    const token = ++loadSequence;
     loading.classList.remove("hidden");
     loading.textContent = `${entry.label}を読み込み中…`;
 
@@ -215,9 +222,43 @@ async function main() {
       applyMode();
     }
 
-    const config = await (await fetch(entry.config)).json();
+    // **Build the replacement before destroying what works.** This used to
+    // dispose first, so anything that went wrong afterwards -- a failed
+    // texture download, most likely on a phone -- left `globe3d` pointing at
+    // a disposed view. The panel still responded, but the animation loop was
+    // stopped, so the axis readout froze, the posture button moved a scene
+    // nobody was rendering, and the graticule's lines went into it unseen
+    // while the scale bar (plain DOM, and owned here) still appeared. Every
+    // symptom the user reported, and only a page reload cleared it.
+    let config;
+    let next;
+    try {
+      config = await (await fetch(entry.config)).json();
+      next = await initGlobe3D("app", config, onFrame);
+    } catch (err) {
+      console.error("Failed to switch world:", err);
+      // Nothing was disposed, so the globe already on screen is untouched and
+      // still running. Say what happened, then get out of the way rather than
+      // sitting on top of a working app for ever.
+      if (token === loadSequence) {
+        loading.textContent = "読み込みに失敗しました。通信状況を確認してください。";
+        setTimeout(() => {
+          if (token === loadSequence) loading.classList.add("hidden");
+        }, 2500);
+      }
+      return;
+    }
+
+    // A newer switch started while this one was loading: this globe is
+    // already obsolete, so throw it away rather than installing it over the
+    // one the user actually asked for.
+    if (token !== loadSequence) {
+      next.dispose();
+      return;
+    }
+
     if (globe3d) globe3d.dispose();
-    globe3d = await initGlobe3D("app", config, onFrame);
+    globe3d = next;
     shownAxis = null;
     shownScale = null;
     world = { entry, config };
@@ -268,10 +309,9 @@ async function main() {
       // Let the pressed state and the loading overlay paint before the mesh
       // build blocks the thread for a moment.
       requestAnimationFrame(() => {
-        loadWorld(entry).catch((err) => {
-          console.error("Failed to switch world:", err);
-          loading.textContent = "読み込みに失敗しました。通信状況を確認してください。";
-        });
+        // loadWorld handles its own failures -- it has to, because it is the
+        // only place that knows whether anything was disposed yet.
+        loadWorld(entry);
       });
     });
     worldButtons.appendChild(button);

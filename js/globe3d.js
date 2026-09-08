@@ -79,11 +79,6 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
   );
   camera.position.set(0, 0, 3);
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  document.getElementById(containerId).appendChild(renderer.domElement);
-
   // Two ways to colour a world, chosen by what data it has. Earth has a
   // satellite photograph, so it is painted with one. Mars and the Moon
   // arrive as elevation and nothing else, so they are tinted by height the
@@ -91,10 +86,25 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
   // below this point is common to both.
   const usesPhoto = Boolean(worldConfig.globeTexture);
 
+  // **The images are loaded before any WebGL context exists, and that
+  // ordering is the fix for a real bug the user hit on their phone.** The
+  // renderer used to be built and its canvas attached first, so a failed
+  // image load -- a few megabytes over a mobile connection is exactly where
+  // that happens -- threw out of here leaving a live context and a canvas
+  // attached to the page with nothing owning them and no way to dispose
+  // them. Repeat that a few times and the browser starts dropping the
+  // oldest context to stay under its limit, which kills the globe that was
+  // still working. Loading first means a failure creates nothing at all and
+  // there is nothing to clean up.
   const [colorImage, elevationImage] = await Promise.all([
     usesPhoto ? loadImage(worldConfig.globeTexture) : null,
     loadImage(pickElevationLevel(terrain.levels, USEFUL_GRID_WIDTH).url),
   ]);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  document.getElementById(containerId).appendChild(renderer.domElement);
   const elevation = decodeElevationGrid(elevationImage, terrain.encoding);
   const metresAt = (lng, lat) => sampleMetres(elevation, lng, lat);
 

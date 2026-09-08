@@ -90,8 +90,12 @@ continue.
   after the retune against the satellite photograph they confirmed the
   improvement, and named Thailand/Vietnam/Cambodia as still too bare alongside
   the two problems already known — all three to be improved in a later stage.
-- **V0.8 stage 3 (current, done — needs the user's Pixel 7a confirmation)**:
-  the first code inspection. See "V0.8 stage 3: the first code inspection".
+- **V0.8 stage 3 (done, user-confirmed on Pixel 7a)**: the first code
+  inspection. See "V0.8 stage 3: the first code inspection". The user then
+  reported a real bug from the phone — a world switch that wedged the app
+  until a reload — which was reproduced and fixed before Stage 4 began; see
+  "The world-switch bug the user hit".
+- **V0.8 stage 4 (next)**: named parameter sets.
 - **V0.9+**: cities, borders/territories, historical eras, and other
   過速世界-specific data. Several distinct features, not one version —
   treat each as its own sub-version. **Needs the user's own world-setting
@@ -2011,6 +2015,67 @@ either way.
   `surface.js`** — read through this round, nothing found worth the risk.
   `hypsometric.js`'s advancing-stop search is correct for its monotone input
   and cheap.
+
+## The world-switch bug the user hit, and why it wedged the whole app
+
+Reported after Stage 3, from the phone: switching Earth → Mars stopped
+working, **the axial-tilt readout froze at 0° and would not move**, the
+posture-reset button no longer returned the globe to its zero pose, and the
+graticule button produced only the scale bar — no parallels, no meridians. A
+page reload cleared all of it.
+
+Four symptoms, one cause, and it is worth writing down because the diagnosis
+came entirely from the symptom list before any code was read: **every one of
+those controls lives in `main.js` and talks to whatever `globe3d` currently
+refers to, while the scale bar is plain DOM that `main.js` owns outright.**
+So a `globe3d` pointing at a *disposed* view produces exactly this set —
+the scale bar (owned locally) still appears, and everything that has to reach
+the 3D scene silently does nothing. The frozen readout is the sharpest tell:
+`dispose()` calls `renderer.setAnimationLoop(null)`, and the readout only
+updates from inside that loop.
+
+Two defects, both real, and the second is the one that made it permanent:
+
+- **`loadWorld` disposed the old globe before building the new one.**
+  `if (globe3d) globe3d.dispose(); globe3d = await initGlobe3D(...)`. Anything
+  that threw in between — a dropped texture download, which on a phone is the
+  likely one — left the assignment unreached and `globe3d` holding the
+  disposed view. Now the replacement is built first and the old one is
+  disposed only once it exists, so a failure leaves the working globe exactly
+  where it was.
+- **`initGlobe3D` created its WebGL context and attached its canvas *before*
+  awaiting the images.** So a failed load threw out of it leaving a live
+  context and a canvas on the page with nothing owning them and no way to
+  dispose them. Repeat that a few times and the browser starts dropping the
+  oldest context to stay under its limit — which kills the globe that was
+  still working, and explains why the user saw the trouble spread rather than
+  stay put. The awaits now come first, so a failure creates nothing at all.
+
+Also added: a **sequence token**, because two taps while one world is still
+loading let two `loadWorld` calls interleave and whichever finished second
+could dispose the globe the other had just installed. A load whose token has
+been superseded now throws its own result away instead.
+
+### Proved by reproducing it, not by reasoning
+
+`scratchpad/switch-failure.js` aborts every request for Mars's terrain and
+then asks whether the app survives. Against the code the user was running:
+
+| | before the fix | after |
+| --- | --- | --- |
+| axis readout moves when the view moves | **no — stuck at 0°** | yes (35°) |
+| posture reset returns to the zero pose | **no** | yes (0°) |
+| loading overlay clears itself | **no** | yes |
+| canvases after a later successful switch | **2 (one leaked)** | 1 |
+
+The "before" column is the user's report, item for item, which is what makes
+this a confirmed diagnosis rather than a plausible one. **Reuse this test for
+any change to `loadWorld` or `initGlobe3D`** — a switch that cannot fail
+safely is the one bug in this app that costs the user everything on screen.
+
+Earth's 標準 and 陸地塗り分け surfaces stay byte-identical across all seven
+views each, and every model hash matches, so none of this touched what gets
+drawn.
 
 ## The V0.6 cleanup pass (no feature changes)
 
