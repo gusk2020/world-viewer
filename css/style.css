@@ -88,6 +88,13 @@ html, body {
   min-height: 36px;
 }
 
+/* A row set to display:flex outranks the browser's own
+   [hidden] { display: none }, so hiding a row from JavaScript did nothing at
+   all -- Earth's seabed buttons stayed on screen on Mars. */
+#sea-level-control [hidden] {
+  display: none;
+}
+
 #sea-level-control label {
   white-space: nowrap;
   min-width: 5em;
@@ -126,4 +133,15 @@ html, body {
 
 .segmented button.selected {
   background: #2f7ee0;
+}
+
+/* The virtual-sea caption on Mars and the Moon. Small, but it has to be
+   readable on a phone in sunlight, so it stays at the panel's own contrast
+   rather than being greyed out. */
+#virtual-sea-note {
+  margin: 0 2px 2px;
+  font-size: 0.72rem;
+  font-weight: 400;
+  line-height: 1.35;
+  color: #c8d6ea;
 }

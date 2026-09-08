@@ -22,16 +22,22 @@
   <div id="loading">読み込み中…</div>
   <div id="sea-level-control">
     <div class="control-row">
-      <label for="sea-level-slider">海面の高さ</label>
+      <label>天体</label>
+      <div id="world-switch" class="segmented"></div>
+    </div>
+    <div class="control-row">
+      <label for="sea-level-slider" id="sea-level-label">海面の高さ</label>
       <input type="range" id="sea-level-slider" min="-300" max="100" step="1" value="0" />
       <span id="sea-level-readout">±0m</span>
     </div>
+    <p id="virtual-sea-note" hidden>※実際には海はありません。「ここまで水があったら
+      どこが海になるか」を見るための仮想の海面です。</p>
     <div class="control-row">
       <label for="water-opacity-slider">海の濃さ</label>
       <input type="range" id="water-opacity-slider" min="0" max="100" step="5" value="40" />
       <span id="water-opacity-readout">40%</span>
     </div>
-    <div class="control-row">
+    <div class="control-row" id="seabed-row">
       <label>海底の色</label>
       <div id="seabed-style" class="segmented">
         <button type="button" data-style="photo" class="selected">写真</button>

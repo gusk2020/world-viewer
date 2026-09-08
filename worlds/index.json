@@ -1,0 +1,8 @@
+{
+  "default": "kasoku-sekai",
+  "worlds": [
+    { "id": "kasoku-sekai", "label": "地球", "config": "./worlds/kasoku-sekai/config.json" },
+    { "id": "mars", "label": "火星", "config": "./worlds/mars/config.json" },
+    { "id": "moon", "label": "月", "config": "./worlds/moon/config.json" }
+  ]
+}

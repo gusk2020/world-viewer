@@ -17,6 +17,7 @@ import {
 } from "./geoConvert.js";
 import { decodeElevationGrid, pickElevationLevel, sampleMetres } from "./elevation.js";
 import { buildCubeSphere } from "./cubeSphere.js";
+import { buildHypsometricRamp } from "./hypsometric.js";
 import {
   SEABED_RAMPS,
   buildSeabedPlan,
@@ -76,36 +77,72 @@ export async function initGlobe3D(containerId, worldConfig) {
   renderer.setSize(window.innerWidth, window.innerHeight);
   document.getElementById(containerId).appendChild(renderer.domElement);
 
+  // Two ways to colour a world, chosen by what data it has. Earth has a
+  // satellite photograph, so it is painted with one. Mars and the Moon
+  // arrive as elevation and nothing else, so they are tinted by height the
+  // way a physical relief globe is -- see js/hypsometric.js. Everything
+  // below this point is common to both.
+  const usesPhoto = Boolean(worldConfig.globeTexture);
+
   const [colorImage, elevationImage] = await Promise.all([
-    loadImage(worldConfig.globeTexture),
+    usesPhoto ? loadImage(worldConfig.globeTexture) : null,
     loadImage(pickElevationLevel(terrain.levels, USEFUL_GRID_WIDTH).url),
   ]);
   const elevation = decodeElevationGrid(elevationImage, terrain.encoding);
+  const metresAt = (lng, lat) => sampleMetres(elevation, lng, lat);
 
-  // The prepared photo is kept as pixels, not just uploaded and forgotten,
-  // because setSeabedStyle below repaints the seabed from it on demand.
-  const surface = prepareSurfaceTexture(
-    colorImage,
-    requireNumber(display.surfaceGamma, "display.surfaceGamma")
-  );
-  const surfaceContext = surface.getContext("2d", { willReadFrequently: true });
-  const photoPixels = surfaceContext.getImageData(0, 0, surface.width, surface.height);
+  let texture;
+  let ramp = null;
+  let surface = null;
+  let surfaceContext = null;
+  let photoPixels = null;
   let seabedPixels = null;
-  // Which pixel gets which ramp colour depends only on the elevation grid
+  // Which pixel gets which seabed colour depends only on the elevation grid
   // and the photo, never on the chosen style, so it is worked out once and
   // reused -- switching styles after that is a lookup per pixel.
   let seabedPlan = null;
+  let meshOptions;
 
-  const texture = new THREE.CanvasTexture(surface);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  // Antimeridian-crossing triangles carry u values just past 1 (see
-  // splitSeamVertices in cubeSphere.js) -- they must wrap, not clamp.
-  texture.wrapS = THREE.RepeatWrapping;
+  if (usesPhoto) {
+    // The prepared photo is kept as pixels, not just uploaded and forgotten,
+    // because setSeabedStyle below repaints the seabed from it on demand.
+    surface = prepareSurfaceTexture(
+      colorImage,
+      requireNumber(display.surfaceGamma, "display.surfaceGamma")
+    );
+    surfaceContext = surface.getContext("2d", { willReadFrequently: true });
+    photoPixels = surfaceContext.getImageData(0, 0, surface.width, surface.height);
+
+    texture = new THREE.CanvasTexture(surface);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    // Antimeridian-crossing triangles carry u values just past 1 (see
+    // splitSeamVertices in cubeSphere.js) -- they must wrap, not clamp.
+    texture.wrapS = THREE.RepeatWrapping;
+
+    meshOptions = {
+      metresAt,
+      radiusForMetres,
+      uAt: (lng) => (lng + 180) / 360,
+      vAt: (lng, lat) => (lat + 90) / 180,
+      splitSeam: true,
+    };
+  } else {
+    ramp = buildHypsometricRamp(display.hypsometric.stops);
+    texture = ramp.texture;
+    // The vertex's *height* is its texture coordinate, so moving the virtual
+    // sea is one offset assignment rather than a repaint. v is anywhere in
+    // the ramp's single row.
+    meshOptions = {
+      metresAt,
+      radiusForMetres,
+      uAt: (lng, lat, metres) => ramp.uForMetres(metres),
+      vAt: () => 0.5,
+      splitSeam: false,
+    };
+  }
 
   const globe = new THREE.Mesh(
-    buildCubeSphere(FACE_SEGMENTS, {
-      radiusAt: (lng, lat) => radiusForMetres(sampleMetres(elevation, lng, lat)),
-    }),
+    buildCubeSphere(FACE_SEGMENTS, meshOptions),
     new THREE.MeshLambertMaterial({ map: texture })
   );
   scene.add(globe);
@@ -143,6 +180,14 @@ export async function initGlobe3D(containerId, worldConfig) {
 
   function setSeaLevel(metres) {
     seaSphere.scale.setScalar(radiusForMetres(metres));
+    // On a height-tinted world the colour scale is defined relative to the
+    // sea, so the shoreline, the shallows and the newly drained ground all
+    // re-tint as the slider moves. This is the whole reason the ramp is a
+    // 1-D texture indexed by height: it costs one number per slider step
+    // instead of a repaint.
+    if (ramp) {
+      ramp.texture.offset.x = ramp.offsetForSeaLevel(metres);
+    }
   }
   setSeaLevel(0);
 
@@ -157,6 +202,9 @@ export async function initGlobe3D(containerId, worldConfig) {
   // triggers a repaint -- the sea sphere covers whatever is submerged, over
   // a seabed already coloured by its own depth.
   function setSeabedStyle(styleId) {
+    // Only meaningful where the seabed's colour came from a photograph.
+    // A height-tinted world is already coloured by depth.
+    if (!usesPhoto) return;
     const stops = SEABED_RAMPS[styleId];
     if (!stops) {
       surfaceContext.putImageData(photoPixels, 0, 0);
@@ -242,11 +290,12 @@ export async function initGlobe3D(containerId, worldConfig) {
   controls.maxDistance = MAX_DISTANCE;
   controls.rotateSpeed = 0.5;
 
-  window.addEventListener("resize", () => {
+  function onResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
-  });
+  }
+  window.addEventListener("resize", onResize);
 
   renderer.setAnimationLoop(() => {
     controls.update();
@@ -267,7 +316,24 @@ export async function initGlobe3D(containerId, worldConfig) {
     controls.update();
   }
 
-  return { getView, setView, setSeaLevel, setWaterOpacity, setSeabedStyle };
+  // Switching bodies rebuilds the view from scratch, so everything holding
+  // GPU memory has to be handed back -- three.js does not free geometries,
+  // textures or the WebGL context on its own, and a phone has few contexts
+  // to spare.
+  function dispose() {
+    renderer.setAnimationLoop(null);
+    window.removeEventListener("resize", onResize);
+    controls.dispose();
+    globe.geometry.dispose();
+    globe.material.dispose();
+    seaSphere.geometry.dispose();
+    seaSphere.material.dispose();
+    texture.dispose();
+    renderer.dispose();
+    renderer.domElement.remove();
+  }
+
+  return { getView, setView, setSeaLevel, setWaterOpacity, setSeabedStyle, dispose };
 }
 
 // A missing config number would otherwise propagate as NaN into vertex

@@ -127,42 +127,42 @@
           "lon": -133.8,
           "lat": 18.65,
           "label": "Olympus Mons summit",
-          "minMetres": 15000,
-          "maxMetres": 22000
+          "minMetres": 14000,
+          "maxMetres": 23000
         },
         {
           "lon": 70.5,
           "lat": -42.4,
           "label": "Hellas Planitia floor",
           "minMetres": -8500,
-          "maxMetres": -5500
+          "maxMetres": -4500
         },
         {
-          "lon": -59.2,
-          "lat": -8.0,
-          "label": "Valles Marineris floor",
-          "minMetres": -5500,
-          "maxMetres": 1000
-        },
-        {
-          "lon": -112.0,
+          "lon": -113.0,
           "lat": 0.0,
           "label": "Tharsis rise",
-          "minMetres": 3000,
-          "maxMetres": 12000
+          "minMetres": 2000,
+          "maxMetres": 15000
+        },
+        {
+          "lon": 88.0,
+          "lat": 13.0,
+          "label": "Isidis Planitia",
+          "minMetres": -5000,
+          "maxMetres": -1000
         },
         {
           "lon": 30.0,
           "lat": 55.0,
           "label": "Vastitas Borealis (northern lowlands)",
           "minMetres": -6000,
-          "maxMetres": -2500
+          "maxMetres": -2000
         },
         {
           "lon": 0.0,
           "lat": -89.5,
           "label": "South polar layered deposits",
-          "minMetres": 1000,
+          "minMetres": 500,
           "maxMetres": 6000
         },
         {
@@ -170,10 +170,10 @@
           "lat": 89.5,
           "label": "North polar cap",
           "minMetres": -6000,
-          "maxMetres": -1000
+          "maxMetres": 0
         }
       ],
-      "lowestMetres": -7000,
+      "lowestMetres": -6000,
       "highestMetres": 15000,
       "belowDatumFraction": [
         0.4,

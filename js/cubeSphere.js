@@ -45,14 +45,24 @@ function warpAxis(t) {
 // the middle of a quad instead, so every vertex has a well-defined
 // longitude.
 //
-// With `radiusAt` the result is displaced terrain carrying equirectangular
-// UVs; without it, a plain unit sphere, which needs neither UVs nor the
-// per-vertex trigonometry they require.
-export function buildCubeSphere(segments, { radiusAt = null } = {}) {
+// Options:
+//   metresAt(lng, lat)          height at a point; omit for a plain unit
+//                               sphere (that is the sea surface)
+//   radiusForMetres(metres)     how that height becomes a radius -- the
+//                               body's own scale, which this file otherwise
+//                               knows nothing about
+//   uAt(lng, lat, metres)       together with vAt, gives the mesh a UV
+//   vAt(lng, lat, metres)       attribute; omit both for no UVs
+//   splitSeam                   only for UVs that wrap the body in
+//                               longitude, i.e. a photograph
+export function buildCubeSphere(
+  segments,
+  { metresAt = null, radiusForMetres = null, uAt = null, vAt = null, splitSeam = false } = {}
+) {
   const perFace = (segments + 1) * (segments + 1);
   const vertexCount = perFace * CUBE_FACES.length;
   const positions = new Float32Array(vertexCount * 3);
-  const uvs = radiusAt ? new Float32Array(vertexCount * 2) : null;
+  const uvs = uAt && vAt ? new Float32Array(vertexCount * 2) : null;
   const indices = new Uint32Array(segments * segments * 6 * CUBE_FACES.length);
 
   let vi = 0;
@@ -75,14 +85,17 @@ export function buildCubeSphere(segments, { radiusAt = null } = {}) {
         y *= inv;
         z *= inv;
 
-        if (radiusAt) {
+        if (metresAt) {
           const { lng, lat } = directionToLngLat(x, y, z);
-          const radius = radiusAt(lng, lat);
+          const metres = metresAt(lng, lat);
+          const radius = radiusForMetres(metres);
           positions[vi * 3] = x * radius;
           positions[vi * 3 + 1] = y * radius;
           positions[vi * 3 + 2] = z * radius;
-          uvs[vi * 2] = (lng + 180) / 360;
-          uvs[vi * 2 + 1] = (lat + 90) / 180;
+          if (uvs) {
+            uvs[vi * 2] = uAt(lng, lat, metres);
+            uvs[vi * 2 + 1] = vAt(lng, lat, metres);
+          }
         } else {
           positions[vi * 3] = x;
           positions[vi * 3 + 1] = y;
@@ -119,7 +132,12 @@ export function buildCubeSphere(segments, { radiusAt = null } = {}) {
   // original and the antimeridian shows no lighting discontinuity.
   geometry.computeVertexNormals();
 
-  if (uvs) {
+  // Only imagery wrapped around the body in longitude can tear at the
+  // antimeridian. A UV that encodes height instead has no seam to split --
+  // and no polar oversampling either, which is why a body coloured by
+  // height sidesteps both of the problems an equirectangular photograph
+  // causes at the poles.
+  if (uvs && splitSeam) {
     splitSeamVertices(geometry);
   }
   geometry.computeBoundingSphere();
