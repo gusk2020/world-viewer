@@ -1,0 +1,61 @@
+{
+  "id": "moon",
+  "name": "月",
+  "body": {
+    "radiusMetres": 1737400,
+    "datum": "LOLA LDEM: 0 m is a sphere of radius 1737400 m, the standard lunar reference."
+  },
+  "display": {
+    "verticalExaggeration": 10,
+    "seaLevel": {
+      "label": "仮想海面",
+      "downToMetres": -9000,
+      "downStepMetres": 100,
+      "upToMetres": 5000,
+      "upStepMetres": 100
+    },
+    "hypsometric": {
+      "stops": [
+        [-9000, [10, 26, 66]],
+        [-4000, [26, 74, 140]],
+        [-1200, [72, 140, 200]],
+        [-80, [140, 195, 225]],
+        [0, [206, 214, 160]],
+        [400, [150, 178, 96]],
+        [2500, [120, 152, 78]],
+        [5000, [178, 152, 84]],
+        [7500, [140, 104, 66]],
+        [9500, [160, 158, 152]],
+        [11000, [248, 248, 248]]
+      ]
+    }
+  },
+  "terrain": {
+    "source": "LRO LOLA global LDEM, 118 m/px, March 2014 (USGS Astrogeology)",
+    "build": {
+      "url": "https://planetarymaps.usgs.gov/mosaic/Lunar_LRO_LOLA_Global_LDEM_118m_Mar2014.tif",
+      "filePrefix": "lola118_ldem",
+      "unscale": true,
+      "baseWidth": 4096,
+      "baseHeight": 2048
+    },
+    "encoding": {
+      "type": "rg16-metres",
+      "offsetMetres": 12000
+    },
+    "verify": {
+      "checkWidth": 2048,
+      "landmarks": [
+        { "lon": -17.0, "lat": 33.0, "label": "Mare Imbrium", "minMetres": -5500, "maxMetres": 500 },
+        { "lon": -57.0, "lat": 20.0, "label": "Oceanus Procellarum", "minMetres": -5500, "maxMetres": 1000 },
+        { "lon": -23.0, "lat": 13.0, "label": "Mare Vaporum / central nearside", "minMetres": -5500, "maxMetres": 1500 },
+        { "lon": 180.0, "lat": -55.0, "label": "South Pole-Aitken basin interior", "minMetres": -9500, "maxMetres": -500 },
+        { "lon": 160.0, "lat": 25.0, "label": "far-side highlands", "minMetres": -500, "maxMetres": 9000 }
+      ],
+      "lowestMetres": -7000,
+      "highestMetres": 7000,
+      "belowDatumFraction": [0.30, 0.80]
+    },
+    "levels": []
+  }
+}
