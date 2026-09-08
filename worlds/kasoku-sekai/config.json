@@ -20,6 +20,24 @@
       "upStepMetres": 2
     }
   },
+  "climate": {
+    "_note": "Overrides for js/climate.js, which holds the schema (default, physical/empirical, range, meaning). Missing entries take the default; unknown ones are ignored. These values were fitted by scratchpad/fit-stage1.js against zonal land-cover fractions plus 14 named places -- a program searching, not a hand-tuned guess.",
+    "insolationSensitivityC": 63.293,
+    "polarExtraC": 12,
+    "oceanModeration": 0.963,
+    "coastalMoisture": 0.828,
+    "moistureDecayKm": 4728,
+    "subtropicalDryLatitudeDeg": 27.521,
+    "subtropicalDryWidthDeg": 23.139,
+    "subtropicalDryStrength": 0.839,
+    "vegetationWarmthC": -4.768,
+    "vegetationWarmthWidthC": 6.87,
+    "vegetationMoistureHalf": 0.255,
+    "vegetationMoistureWidth": 0.365,
+    "permanentSnowOffsetC": -5.157,
+    "snowBlendC": 1.645,
+    "seaIceBlendC": 5.7
+  },
   "terrain": {
     "source": "GEBCO_2026 Grid (ice surface elevation), 15 arc-second, via CEDA",
     "build": {

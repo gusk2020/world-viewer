@@ -20,6 +20,12 @@ import { buildCubeSphere } from "./cubeSphere.js";
 import { buildHypsometricRamp } from "./hypsometric.js";
 import { buildGraticule } from "./graticule.js";
 import {
+  paintBareRock,
+  paintClimate,
+  computeClimate,
+  resolveClimateParams,
+} from "./climate.js";
+import {
   SEABED_RAMPS,
   buildSeabedPlan,
   paintSeabed,
@@ -186,7 +192,10 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
   );
   body3d.add(seaSphere);
 
+  let seaLevelMetres = 0;
+
   function setSeaLevel(metres) {
+    seaLevelMetres = metres;
     seaSphere.scale.setScalar(radiusForMetres(metres));
     // On a height-tinted world the colour scale is defined relative to the
     // sea, so the shoreline, the shallows and the newly drained ground all
@@ -235,6 +244,79 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
     paintSeabed(seabedPixels.data, seabedPlan, rampLut(stops));
     surfaceContext.putImageData(seabedPixels, 0, 0);
     texture.needsUpdate = true;
+  }
+
+  // ---------------------------------------------------------------------
+  // Surface mode: the photograph (or height ramp) a world already had, bare
+  // rock, or the climate model's colouring.
+  //
+  // Only offered where the mesh carries equirectangular UVs, which today
+  // means the body that has a photograph. Mars and the Moon index their
+  // texture by *height* instead (see hypsometric.js), so painting a map onto
+  // them needs a second UV set -- deliberately left for the stage that
+  // actually applies climate to them, rather than changing two working
+  // globes now.
+  const supportsClimate = usesPhoto;
+  const climate = resolveClimateParams(worldConfig.climate || {});
+  if (climate.ignored.length) {
+    // Not an error: a parameter set saved before a term was renamed or
+    // retired must still load, so unknown names are reported and skipped.
+    console.info(`climate: ignoring unknown parameter(s) ${climate.ignored.join(", ")}`);
+  }
+
+  let surfaceMode = "standard";
+  let climateCanvas = null;
+  let climateContext = null;
+  let climatePixels = null;
+  let climateTexture = null;
+  let climateFields = null;
+
+  function ensureClimateTexture() {
+    if (climateTexture) return;
+    climateCanvas = document.createElement("canvas");
+    climateCanvas.width = elevation.width;
+    climateCanvas.height = elevation.height;
+    climateContext = climateCanvas.getContext("2d", { willReadFrequently: true });
+    climatePixels = climateContext.createImageData(elevation.width, elevation.height);
+    climateTexture = new THREE.CanvasTexture(climateCanvas);
+    climateTexture.colorSpace = THREE.SRGBColorSpace;
+    // The seam split hands antimeridian triangles u just past 1.
+    climateTexture.wrapS = THREE.RepeatWrapping;
+  }
+
+  // `climate` recomputes the model at the sea level in force when it is
+  // called -- that is the "陸地塗り分け" press. Moving the sea slider
+  // afterwards still floods the globe, because the water is its own sphere;
+  // it just does not re-derive the climate until asked again.
+  function setSurfaceMode(mode) {
+    if (!supportsClimate) return surfaceMode;
+    surfaceMode = mode;
+    if (mode === "standard") {
+      globe.material.map = texture;
+      globe.material.needsUpdate = true;
+      return surfaceMode;
+    }
+    ensureClimateTexture();
+    if (mode === "climate") {
+      climateFields = computeClimate({
+        elevation,
+        seaLevelMetres,
+        axialTiltDegrees: requireNumber(body.axialTiltDegrees, "body.axialTiltDegrees"),
+        radiusMetres: body.radiusMetres,
+        params: climate.values,
+      });
+      paintClimate(
+        climatePixels.data, elevation, climateFields, seaLevelMetres,
+        climate.values, climate.palette
+      );
+    } else {
+      paintBareRock(climatePixels.data, elevation, seaLevelMetres, climate.palette);
+    }
+    climateContext.putImageData(climatePixels, 0, 0);
+    climateTexture.needsUpdate = true;
+    globe.material.map = climateTexture;
+    globe.material.needsUpdate = true;
+    return surfaceMode;
   }
 
   // Axial tilt. The button offers two positions -- upright, and the body's
@@ -436,6 +518,7 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
     seaSphere.material.dispose();
     if (graticule) graticule.dispose();
     texture.dispose();
+    if (climateTexture) climateTexture.dispose();
     renderer.dispose();
     renderer.domElement.remove();
   }
@@ -448,6 +531,8 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
     setSeabedStyle,
     setAxisTilt,
     getAxisAngle,
+    setSurfaceMode,
+    supportsClimate,
     setGraticule,
     getMetresPerPixel,
     dispose,

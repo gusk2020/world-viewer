@@ -80,7 +80,12 @@ continue.
 - **V0.7.1 (current, done — needs the user's Pixel 7a confirmation)**: an
   axial-tilt control and a latitude/longitude graticule with a scale bar,
   on all three bodies. See "V0.7.1: axial tilt and the graticule" below.
-- **V0.8+**: cities, borders/territories, historical eras, and other
+- **V0.8 stage 1 (current, done — needs the user's Pixel 7a confirmation)**:
+  a small climate model that paints a plausible-looking surface from a few
+  conditions. Nine stages were specified; this is stage 1 only, and the
+  user asked for a report and a pause at each. See "V0.8: the climate
+  colouring" below.
+- **V0.9+**: cities, borders/territories, historical eras, and other
   過速世界-specific data. Several distinct features, not one version —
   treat each as its own sub-version. **Needs the user's own world-setting
   data first** (city names/locations, territory/border shapes, era
@@ -1466,6 +1471,115 @@ same zoom, Earth shows 1000 km where Mars shows 500 km and the Moon 200 km.
 
 The bar is hidden in 2D mode — it is derived from the 3D camera, so it would
 be quietly wrong sitting on the OpenLayers map, which draws its own.
+
+## V0.8: the climate colouring (stage 1 of nine)
+
+The goal is explicitly **not** a climate model: "科学的に厳密な気候
+シミュレーションを目的としていません ... 見た人が自然だと感じる リアルっぽい
+惑星表面を作る". Real physics and frank fudge factors are allowed to sit side
+by side — and `js/climate.js` makes every parameter say which it is, because
+the moment that distinction is lost, a number invented to make a picture look
+right starts being cited as if it meant something.
+
+Stage 1 uses only what the user listed: global mean temperature, latitude,
+altitude, axial tilt, land-or-sea, and distance from the sea. Wind, rotation
+and rain shadow are stage 2 and are deliberately absent.
+
+### Where the parameters live, and why not in the config
+
+`CLIMATE_PARAMETERS` in `js/climate.js` holds the schema — default, `kind`
+(`physical` / `empirical`), min, max and what the term means. A world's
+`config.json` carries only **overrides by name**. Both compatibility rules
+the user asked for then fall out for free: a saved set missing a newer
+parameter takes its default, and one still carrying a retired parameter is
+reported and skipped rather than throwing. A leading underscore marks a human
+note so a set can describe itself. Non-numeric values are rejected rather
+than propagated. All four behaviours are asserted in the test.
+
+### Two structural faults the first run exposed
+
+Both were model errors, not tuning errors, and neither would have been fixed
+by moving numbers:
+
+- **The Sahara came out grey.** Bare ground was blended toward rock by how
+  *dry* it was, so the driest places on Earth were painted stone. What
+  actually decides the look of bare ground is how *warm* it is: a hot desert
+  is sand, a cold one is rock and gravel. Keyed off warmth instead.
+- **Siberia came out solid white.** The snow line sat at the physical
+  freezing point, and Siberia's annual mean genuinely is about −5 °C. An
+  annual-mean model cannot know that summer melts it, so
+  `permanentSnowOffsetC` (empirical, ≈ −5) stands in for the seasonal cycle.
+  `freezeTemperatureC` stays 0 °C because that is a fact about water.
+
+### Fitting, done by a program
+
+Per the user's explicit instruction not to burn model inference on parameter
+search, `scratchpad/fit-stage1.js` does it: 1600 candidates evaluated and
+scored **in the browser in ~17 seconds**, importing the real `js/climate.js`
+so the thing being optimised is the thing that ships. Score 2.51 → 0.22.
+
+Two rounds of the search failing *usefully* are worth recording, because both
+were the objective's fault rather than the search's:
+
+1. **Zonal land-cover fractions alone let it cheat.** The first fit pushed
+   `moistureDecayKm` to its bound, switching continentality off entirely, and
+   still scored well — because a band average cannot tell "dry because it is
+   inland" from "dry because of its latitude". Fixed by adding 14 named
+   places to the objective; the Gobi and the Taklamakan are dry at 39–43°N,
+   well outside the subtropical belt, for no reason but distance from the sea.
+2. **It then collapsed the gradients.** `vegetationMoistureWidth` went to
+   0.01 — a hard desert/forest edge, which fits the numbers and directly
+   contradicts "境界はできるだけ自然なグラデーションに". Bounds are part of a
+   parameter's meaning, so the widths are now floored well above zero, and
+   `polarExtraC` is held to ±12 so the search cannot turn a correction into a
+   second contrast term fighting the first.
+
+The result is a *worse* score than run 2 (0.22 vs 0.11) from a *better*
+model. Worth stating plainly: a search will always find the degenerate
+solution if the objective permits one, and the fix belongs in the objective.
+
+**One independent corroboration.** The fitted `insolationSensitivityC` came
+out at **63.3**, against **67** obtained separately by least-squares from
+Earth's real zonal-mean temperatures. Two unrelated routes to the same
+number is the closest thing to validation this stage has.
+
+### The model itself
+
+- **Insolation is integrated, not approximated.** The annual-mean daily
+  insolation is computed numerically per latitude rather than via the usual
+  second-Legendre fit. It costs a few thousand evaluations — nothing — and it
+  means one piece of code covers Earth's 23.4°, Mars's 25.2°, the Moon's 6.7°
+  and a world tilted 80° with no second formula.
+- **Distance to the sea is a weighted chamfer transform**, weighted because a
+  step in longitude is a different distance on the ground at every latitude;
+  treating the grid as square would make polar continents look far wider than
+  they are. Longitude wraps, so the sweeps run twice — one pass cannot carry
+  a distance the whole way round.
+- **Smooth fields coarse, sharp fields fine.** Distance-to-sea and the
+  latitude temperature profile are computed on a 512×256 grid because they
+  genuinely are smooth; altitude and the land/sea line are read at the
+  elevation raster's full resolution because both are sharp and both matter
+  to the eye. Painting is a single pass with no full-resolution intermediate
+  arrays — holding a temperature and a moisture field beside the image would
+  cost 17 MB for numbers each used once. Measured: **~270 ms** for the whole
+  globe, comparable to the seabed repaint the user already accepts.
+- **`classifyPoint` is shared by the painter and the scorer** on purpose. A
+  search that optimised one formula while the globe drew another would be
+  worse than no search at all.
+
+### Scope: Earth only, and deliberately
+
+The climate texture is a map, so it needs equirectangular UVs — which today
+means the body drawn from a photograph. Mars and the Moon index their colours
+by *height* (see `hypsometric.js`), so painting a map onto them needs a second
+UV set. That is left for the stage that actually applies climate to them
+rather than changing two working globes now; `supportsClimate` is false for
+them, the 地表 row hides itself, and `setSurfaceMode` is a no-op that returns
+"standard". Verified: Mars and the Moon are untouched, their panel stays at
+19% of the screen, and Earth returns to 標準 after a world round trip.
+
+Earth's own default (標準) is byte-identical to before across all ten
+regression views.
 
 ## The V0.6 cleanup pass (no feature changes)
 

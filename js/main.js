@@ -19,6 +19,7 @@ async function main() {
   const waterOpacitySlider = document.getElementById("water-opacity-slider");
   const waterOpacityReadout = document.getElementById("water-opacity-readout");
   const seabedRow = document.getElementById("seabed-row");
+  const surfaceRow = document.getElementById("surface-row");
   const axisButton = document.getElementById("axis-toggle");
   const axisReadout = document.getElementById("axis-readout");
   const graticuleButton = document.getElementById("graticule-toggle");
@@ -107,6 +108,23 @@ async function main() {
     const percent = Number(waterOpacitySlider.value);
     globe3d.setWaterOpacity(percent / 100);
     waterOpacityReadout.textContent = `${percent}%`;
+  }
+
+  // Painting the surface -- bare rock or the climate model -- runs over every
+  // pixel of the elevation raster, so let the pressed state paint first,
+  // exactly as the seabed buttons do.
+  const surfaceButtons = document.querySelectorAll("#surface-mode button");
+  let surfaceMode = "standard";
+  surfaceButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      surfaceMode = button.dataset.surface;
+      applySurfaceButtons();
+      requestAnimationFrame(() => globe3d.setSurfaceMode(surfaceMode));
+    });
+  });
+
+  function applySurfaceButtons() {
+    surfaceButtons.forEach((b) => b.classList.toggle("selected", b.dataset.surface === surfaceMode));
   }
 
   // Repainting the seabed takes a fraction of a second, so let the pressed
@@ -214,6 +232,13 @@ async function main() {
     // Moon have no photograph -- they are already coloured by height -- so
     // the control would do nothing and is hidden rather than left dead.
     const hasPhoto = Boolean(config.globeTexture);
+    // The climate colouring needs a map-shaped texture, which today means the
+    // body drawn from a photograph; Mars and the Moon index their colours by
+    // height instead. Hidden rather than dead, same as the seabed buttons.
+    surfaceRow.hidden = !globe3d.supportsClimate;
+    // A newly built globe always starts on its own standard surface.
+    surfaceMode = "standard";
+    applySurfaceButtons();
     seabedRow.hidden = !hasPhoto;
     toggleButton.hidden = !hasPhoto;
     // Say plainly that these oceans are not real. The point of the slider on
