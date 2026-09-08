@@ -70,7 +70,14 @@ continue.
   Also: never make the user download/convert multi-GB files — they only
   have a Pixel 7a — so the data pipeline runs on GitHub Actions. See
   "V0.6: GEBCO_2026 terrain on a cube-sphere" below.
-- **V0.7+**: cities, borders/territories, historical eras, and other
+- **V0.7 (current, done — needs the user's Pixel 7a confirmation)**: Mars
+  and the Moon alongside Earth, switchable in-app. Real global DEMs (MOLA
+  and LOLA), height-based colouring instead of imagery, and a **virtual**
+  sea on each. The user's framing: this is not a claim that Mars or the
+  Moon have oceans, it is "if there were liquid up to this height, where
+  would the coast be" — so the UI says so in as many words. See "V0.7:
+  Mars and the Moon" below.
+- **V0.8+**: cities, borders/territories, historical eras, and other
   過速世界-specific data. Several distinct features, not one version —
   treat each as its own sub-version. **Needs the user's own world-setting
   data first** (city names/locations, territory/border shapes, era
@@ -1165,6 +1172,133 @@ for context on *why* the rewrite happened:
 Do not re-introduce MapLibre or CesiumJS without the user explicitly
 asking for it again.
 
+## V0.7: Mars and the Moon
+
+Added without touching how Earth renders. The proof of that is in "How this
+was tested": every one of the ten Earth regression screenshots came back
+with **zero differing pixels below the control panel**, and every measured
+value — geometry, per-vertex radii, seabed plan checksum, sea-sphere scale,
+light angle, rendered brightness and contrast — matched exactly. The only
+pixels that changed anywhere on Earth are the new 天体 row in the overlay.
+
+Two safe restore points exist on GitHub and must not be deleted or moved:
+**`safe-v0.6-working`** (before the cleanup pass) and
+**`safe-earth-v0.6-before-planets`** (`70c80bf`, the Earth-only version the
+user confirmed on their phone before this work).
+
+### The data, and what the probe run established
+
+The sandbox cannot reach any planetary-data host, so a throwaway
+`planet-probe.yml` ran `curl -I` and `gdalinfo /vsicurl/...` from a GitHub
+runner — the same trick that established the GEBCO/CEDA layout in V0.6.
+Deleted once the real workflow existed. What it found:
+
+| | Mars | Moon |
+| --- | --- | --- |
+| Product | Mars MGS MOLA DEM global mosaic | LRO LOLA global LDEM, Mar 2014 |
+| Source | USGS Astrogeology `planetarymaps.usgs.gov/mosaic/` | same |
+| Grid | 46080×23040, 463 m/px, ~2.1 GB | 92160×46080, 118 m/px, **8.49 GB** |
+| Datum | the **areoid** — 0 m is Mars's equipotential surface | a **sphere of radius 1737400 m** |
+| Encoding | plain Int16 metres | Int16 with **`Scale: 0.5`** |
+
+**The lunar scale factor is the detail that would have gone unnoticed.**
+LOLA stores half-metres. Without `gdal_translate -unscale` every lunar
+height would be exactly doubled — terrain that still looks completely
+plausible, since nobody carries the Moon's relief range in their head. It
+is caught in the committed raster's range: **−8819..10567 m**, which matches
+LOLA's published extent; un-unscaled it would have read about ±2× that.
+`terrain.build.unscale` in the world config drives it.
+
+Mars's own numbers came back right first time: Olympus Mons **19858 m**,
+Hellas **−6063 m**, Vastitas Borealis −3848 m, south polar deposits 3910 m.
+
+### The pipeline is now one workflow for any body
+
+`build-terrain.yml` takes a world id and reads everything else from that
+world's `config.json`: `terrain.build` (source URL, whether to unscale, the
+base size) and `terrain.verify` (that body's own landmarks and the range
+each must fall in). Earth's checks moved out of `verify_elevation.py`
+unchanged and still pass. `tools/update_levels.py` writes `terrain.levels`
+from the PNGs that actually got built, so config and disk cannot disagree.
+
+**The verifier earned its keep immediately, in the way that matters** — it
+failed the first Mars build, and the failure was *mine*, not the data's:
+the Tharsis ceiling was below the rise's real height, and the Valles
+Marineris sample point sits on plateau between the chasmata once cells are
+averaged to ~10 km. The lesson is the one this project keeps relearning:
+write the check, then believe the data over the check until you have looked.
+Landmark ranges are deliberately wide — they prove the raster is that body,
+they do not measure it.
+
+### Colouring by height, and why the ramp is a 1-D texture
+
+Mars and the Moon arrive as elevation and nothing else, so `js/hypsometric.js`
+tints them the way a physical relief globe is tinted: deep water dark blue,
+shallow light blue, coast, lowland, upland, bare rock, snow. The stops live
+in each world's `display.hypsometric.stops`, in metres **relative to the
+virtual sea**, because Earth's numbers are meaningless on a body whose
+relief spans nearly 30 km.
+
+The design point worth keeping: **the ramp is a 1-D texture and each
+vertex's height is its `u` coordinate.** Since the scale is defined
+relative to the sea, moving the sea is a pure shift along `u` — one
+`texture.offset.x` assignment per slider step. Recolouring 8 million
+texture pixels, or 400k vertex colours, on every frame of a slider drag
+would be hopeless on a phone; this costs nothing, so ground turns green the
+instant it drains instead of staying blue. That is the same complaint the
+Earth version needed a whole round of work to fix, avoided here by
+construction.
+
+It has a second consequence that matters more than it looks: because `u`
+carries height rather than longitude, **these worlds need neither the
+antimeridian seam split nor the polar low-pass** an equirectangular
+photograph forces on Earth. There is no wrapped image to tear and none to
+oversample at the poles. Rendered pole close-ups with the sea fully drained
+and the water hidden come back clean on both bodies — no streaks, no
+pinwheel, no hole — and the antimeridian shows no stripe.
+
+### Per-body settings, all of them data
+
+`body.radiusMetres` is the real radius (Earth 6371000, Mars 3389500, Moon
+1737400) and only ever converts metres into a fraction of the globe. **Every
+body still draws at radius 1**, so the Moon is exactly as easy to handle on
+screen as Earth — the user's "don't let the Moon end up too small to use"
+requirement needed no code, only this separation.
+
+`display.verticalExaggeration` is per body and is *not* Earth's 30: Mars and
+the Moon have far more relief relative to their size (Mars spans ~29 km on a
+3390 km radius), so both use 10. `display.seaLevel` carries each body's own
+range and step, Earth's −6000..+200 among them.
+
+### UI
+
+One `天体` row of buttons at the top of the existing panel, and
+`worlds/index.json` lists what exists. Earth opens first, as before.
+Switching disposes the whole three.js view and rebuilds it —
+`initGlobe3D` now returns `dispose()`, and it has to, because three.js frees
+neither geometries nor WebGL contexts on its own and a phone has very few
+contexts to spare. Verified by switching through all three bodies twice and
+confirming exactly one canvas each time, with identical rendering per body
+on both rounds.
+
+Controls that only make sense on Earth hide themselves: the seabed-colour
+buttons (they repaint a photograph, and these worlds have none) and the 2D
+toggle (OpenStreetMap is a map of Earth). Switching away from Earth while
+in 2D forces the view back to 3D, so nobody is stranded looking at
+OpenStreetMap while the panel says 火星.
+
+**A CSS bug this uncovered**: a `.control-row` set to `display: flex`
+outranks the browser's own `[hidden] { display: none }`, so hiding a row
+from JavaScript silently did nothing. Fixed with
+`#sea-level-control [hidden] { display: none }`.
+
+**A pre-existing instance of the same bug, deliberately left alone**:
+`#sea-level-control` itself is `display: flex`, so the panel has been
+visible over the 2D map since V0.5 even though `main.js` has always set
+`.hidden` on it. Fixing it would change Earth's 2D view, which this task was
+explicitly told not to do. Flagged to the user instead — it is a one-line
+change whenever they want it.
+
 ## The V0.6 cleanup pass (no feature changes)
 
 The user paused feature work and asked for an inspection and tidy-up with
@@ -1493,6 +1627,34 @@ frames by A/B-ing `SEABED_RIM_PASSES` between 0 and 3 in one browser run
 (numbers above). Worth reusing: anything that is a pure function of
 committed raster data can be settled in seconds offline, and the browser
 run then only has to confirm the port.
+
+For V0.7 (Mars and the Moon), the headline test was that **Earth did not
+move**. The same `scratchpad/baseline.js` was run before and after: every
+measured value matched exactly, and although all ten screenshots differ as
+files, a pixel-level diff showed every differing pixel sits inside the
+control panel (first differing row 26, **zero differing pixels below row
+260**) — i.e. the new 天体 row, not the globe.
+
+For the new bodies, the pole and seam test is run with the sea slider at its
+minimum *and the water opacity at zero*, so nothing hides the mesh: a
+half-transparent blue sphere over a flooded pole would have concealed
+exactly the defect being looked for. Alongside the screenshots, a numeric
+check bins the frame into 72 wedges around the screen centre at a fixed
+radius and reports the spread between them — radial streaking is a
+*directional* pattern, so it shows up there in a way mean brightness cannot
+see. Mars came back at 3.0-8.9, the Moon at 17.9-41.5 where the imagery
+confirms genuine crater relief rather than an artefact.
+
+Switching was tested by cycling all three bodies twice and asserting
+**exactly one canvas** after each switch (a leaked WebGL context is how this
+would fail on a phone) plus identical rendered statistics per body on both
+rounds. Two harness traps worth remembering, both of which produced
+convincing false failures: the loading overlay is raised inside a
+`requestAnimationFrame`, so waiting on it can return before the switch has
+even started — wait for the world id to change instead; and OpenLayers keeps
+retrying tile loads this sandbox blocks, which leaves Playwright's real
+mouse click waiting forever for the element to become "stable", so the 2D
+toggle has to be driven in-page.
 
 For the cleanup pass, the whole method is written up under "The V0.6
 cleanup pass" above — the short version is that `scratchpad/baseline.js`
