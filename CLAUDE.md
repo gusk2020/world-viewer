@@ -95,7 +95,8 @@ continue.
   reported a real bug from the phone — a world switch that wedged the app
   until a reload — which was reproduced and fixed before Stage 4 began; see
   "The world-switch bug the user hit".
-- **V0.8 stage 4 (next)**: named parameter sets.
+- **V0.8 stage 4 (current, done — needs the user's Pixel 7a confirmation)**:
+  named parameter sets. See "V0.8 stage 4: named parameter sets".
 - **V0.9+**: cities, borders/territories, historical eras, and other
   過速世界-specific data. Several distinct features, not one version —
   treat each as its own sub-version. **Needs the user's own world-setting
@@ -153,7 +154,7 @@ straight by the browser — still no bundler and no build step.
 | `js/surface.js` | The colour texture: the load-time gamma lift and polar low-pass, plus repainting the seabed by depth. Plain pixel buffers — no three.js. |
 | `js/hypsometric.js` | The height-to-colour ramp for bodies with no photograph (Mars, the Moon). |
 | `js/graticule.js` | The terrain-following latitude/longitude lines. |
-| `js/climate.js` | The climate model: parameter schema, insolation, wind, moisture, and the painter. No three.js, no DOM. |
+| `js/climate.js` | The climate model: parameter schema, named parameter sets, insolation, wind, moisture, and the painter. No three.js, no DOM. |
 | `js/map2d.js` | The OpenLayers 2D map. |
 | `js/geoConvert.js` | lng/lat ↔ 3D direction, and the approximate 3D-distance ↔ 2D-zoom correspondence. |
 
@@ -2015,6 +2016,77 @@ either way.
   `surface.js`** — read through this round, nothing found worth the risk.
   `hypsometric.js`'s advancing-stop search is correct for its monotone input
   and cheap.
+
+## V0.8 stage 4: named parameter sets
+
+A world can now carry several named climate sets and the user picks one on
+the phone. Three ship for Earth — **現在 / 寒冷 / 温暖** — and the mean
+temperature is the only thing they differ by, because it is the one term in
+this model with a plain physical meaning and it is what the whole app is
+ultimately for.
+
+### The sets layer, which is the whole design
+
+A set states only what it changes from the world's `climate` block, which in
+turn states only what it changes from the schema defaults in `js/climate.js`.
+So the twenty fitted numbers are written down **exactly once**, and 寒冷 is
+literally `{ "meanTemperatureC": 10 }`. `resolveClimateSets` walks that
+layering and hands back one fully-resolved set per entry.
+
+Two consequences worth having:
+
+- **The compatibility rules the user asked for in Stage 1 finally have a real
+  job.** They are resolved *per set*, so a set saved before a parameter
+  existed takes the default through the base, one still naming a retired
+  parameter is reported and skipped, and neither can spoil the others. Before
+  this there was only one set, so the rules were only ever exercised by a test.
+- **A world with no `climateSets` block still works**, getting exactly one set
+  built from its `climate` block. Mars and the Moon go through this path
+  unchanged and report one set each.
+
+This is also the shape Stage 8 wants: when the automatic search keeps a spread
+of diverse candidates, each becomes a named set the user can flip between on
+the phone rather than a number in a file they cannot read.
+
+### The row appears only when it is useful
+
+The user has twice said the panel is too tall, so the 気候 row is `hidden`
+unless the climate colouring is actually on screen *and* the world has more
+than one set. Measured: Earth's panel is **201 px in 標準 and 233 px only
+while 陸地塗り分け is showing**, and **Mars stays at 167 px** with no row at
+all. Switching back to 標準 puts it away again.
+
+### What must not change, and the proof
+
+現在 is the picture the user already approved, so it has to be
+bit-for-bit what it was. Checked three ways: the default set's resolved values
+and palette are identical to what `resolveClimateParams(config.climate)`
+returned before this feature existed; the rendered globe at the same view is
+**identical below the panel** (first differing row 182, **zero differing
+pixels below row 250** — the new row and nothing else, the same proof used for
+the 天体 row in V0.7); and switching away to 寒冷 and back to 現在 returns a
+**byte-identical** frame, so the sets do not accumulate state. 標準 is
+byte-identical across all seven views and every model hash matches.
+
+### What the sets actually show, and one honest limitation
+
+寒冷 changes **21%** of an Africa-centred frame and far more at high latitudes:
+the Canadian Arctic and Greenland grow a much larger ice cap, Tibet whitens,
+and sea ice spreads. 温暖 does the reverse and changes only **4%** of that same
+Africa frame.
+
+That asymmetry is not a bug but it is worth knowing, because it says something
+true about the model: **mean temperature drives snow, ice and the rock/sand
+split, while vegetation is driven almost entirely by moisture** — and the two
+barely interact, since `vegetationWarmthC` sits at −12 °C where the warmth term
+is already satisfied nearly everywhere. So a warmer world in this model mostly
+means *less ice*, not *more forest*. Making temperature move vegetation too
+would need the moisture side to respond to warmth (more evaporation from
+warmer seas — which is exactly the term Stage 3 found inert), and that belongs
+in the tuning stage, not here.
+
+A repaint costs about the same as pressing 陸地塗り分け, ~1.2 s in the
+software renderer, since it is the same full pass over every pixel.
 
 ## The world-switch bug the user hit, and why it wedged the whole app
 

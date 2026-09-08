@@ -304,6 +304,38 @@ export function resolveClimateParams(overrides = {}) {
   return { values, palette, ignored };
 }
 
+// A world can carry several **named parameter sets** rather than one. Each set
+// says only what differs from the world's own base overrides, which are
+// themselves only what differs from the schema defaults -- so a set that
+// changes one number is one line, and the twenty fitted values stay written
+// down in exactly one place.
+//
+// That layering is also what makes the two compatibility rules useful rather
+// than theoretical: a set saved before a parameter existed takes the default
+// through the base, and one still naming a retired parameter is reported and
+// skipped. Both are resolved per set, so one bad set cannot spoil the others.
+export function resolveClimateSets(worldConfig = {}) {
+  const base = worldConfig.climate || {};
+  const spec = worldConfig.climateSets || {};
+  const list = Array.isArray(spec.list) && spec.list.length
+    ? spec.list
+    : [{ id: "default", label: "標準" }];
+
+  const sets = list.map((entry, index) => {
+    const id = typeof entry.id === "string" && entry.id ? entry.id : `set${index}`;
+    const resolved = resolveClimateParams({ ...base, ...(entry.params || {}) });
+    return {
+      id,
+      label: typeof entry.label === "string" && entry.label ? entry.label : id,
+      note: typeof entry.note === "string" ? entry.note : "",
+      ...resolved,
+    };
+  });
+
+  const defaultId = sets.some((set) => set.id === spec.default) ? spec.default : sets[0].id;
+  return { sets, defaultId };
+}
+
 // ---------------------------------------------------------------------------
 // The model
 // ---------------------------------------------------------------------------

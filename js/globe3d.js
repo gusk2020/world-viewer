@@ -23,7 +23,7 @@ import {
   paintBareRock,
   paintClimate,
   computeClimate,
-  resolveClimateParams,
+  resolveClimateSets,
 } from "./climate.js";
 import {
   SEABED_RAMPS,
@@ -267,14 +267,19 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
   // actually applies climate to them, rather than changing two working
   // globes now.
   const supportsClimate = usesPhoto;
-  const climate = resolveClimateParams(worldConfig.climate || {});
-  if (climate.ignored.length) {
+  // A world may carry several named sets -- "現在", "寒冷", "温暖" -- each
+  // saying only what it changes. One is active at a time.
+  const climateSets = resolveClimateSets(worldConfig);
+  let climate = climateSets.sets.find((set) => set.id === climateSets.defaultId);
+  for (const set of climateSets.sets) {
+    if (!set.ignored.length) continue;
     // Not an error: a parameter set saved before a term was renamed or
     // retired must still load, so unknown names are reported and skipped.
-    console.info(`climate: ignoring unknown parameter(s) ${climate.ignored.join(", ")}`);
+    console.info(`climate set "${set.id}": ignoring unknown parameter(s) ${set.ignored.join(", ")}`);
   }
 
   let surfaceMode = "standard";
+  let climateSetId = climate.id;
   let climateCanvas = null;
   let climateContext = null;
   let climatePixels = null;
@@ -297,6 +302,19 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
   // called -- that is the "陸地塗り分け" press. Moving the sea slider
   // afterwards still floods the globe, because the water is its own sphere;
   // it just does not re-derive the climate until asked again.
+  // Choosing a set repaints straight away if the climate colouring is what is
+  // on screen, and otherwise just waits -- pressing 陸地塗り分け later picks
+  // up whatever is selected.
+  function setClimateSet(id) {
+    if (!supportsClimate) return climateSetId;
+    const set = climateSets.sets.find((entry) => entry.id === id);
+    if (!set || set.id === climateSetId) return climateSetId;
+    climate = set;
+    climateSetId = set.id;
+    if (surfaceMode === "climate") setSurfaceMode("climate");
+    return climateSetId;
+  }
+
   function setSurfaceMode(mode) {
     if (!supportsClimate) return surfaceMode;
     // Anything unrecognised means the world's own surface, not bare rock --
@@ -551,6 +569,9 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
     getAxisAngle,
     setSurfaceMode,
     supportsClimate,
+    climateSets: climateSets.sets.map((set) => ({ id: set.id, label: set.label, note: set.note })),
+    getClimateSet: () => climateSetId,
+    setClimateSet,
     setGraticule,
     getMetresPerPixel,
     dispose,

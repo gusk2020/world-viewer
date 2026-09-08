@@ -75,6 +75,34 @@
       ]
     }
   },
+  "climateSets": {
+    "_note": "Named climate sets. Each one lists only what it changes from the `climate` block above, which in turn lists only what it changes from the schema defaults in js/climate.js -- so the twenty fitted numbers are written down exactly once and a set that moves one number is one line. Resolved separately, so a set naming a retired parameter is reported and skipped without spoiling the others. These three are illustrative: the mean temperature is the one term with a plain physical meaning, and it is what the whole app is ultimately about.",
+    "default": "current",
+    "list": [
+      {
+        "id": "current",
+        "label": "現在",
+        "note": "いまの地球。この設定で写真と見比べて調整しました。",
+        "params": {}
+      },
+      {
+        "id": "cold",
+        "label": "寒冷",
+        "note": "世界平均で約4℃低い、氷期に近い状態。海面スライダーを−120mに合わせると当時の姿に近づきます。",
+        "params": {
+          "meanTemperatureC": 10
+        }
+      },
+      {
+        "id": "warm",
+        "label": "温暖",
+        "note": "世界平均で約4℃高い状態。海面を上げると水没する範囲が見えます。",
+        "params": {
+          "meanTemperatureC": 18
+        }
+      }
+    ]
+  },
   "terrain": {
     "source": "GEBCO_2026 Grid (ice surface elevation), 15 arc-second, via CEDA",
     "build": {

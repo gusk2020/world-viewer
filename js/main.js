@@ -20,6 +20,8 @@ async function main() {
   const waterOpacityReadout = document.getElementById("water-opacity-readout");
   const seabedRow = document.getElementById("seabed-row");
   const surfaceRow = document.getElementById("surface-row");
+  const climateSetRow = document.getElementById("climate-set-row");
+  const climateSetButtons = document.getElementById("climate-set");
   const axisButton = document.getElementById("axis-toggle");
   const axisReadout = document.getElementById("axis-readout");
   const graticuleButton = document.getElementById("graticule-toggle");
@@ -125,6 +127,40 @@ async function main() {
 
   function applySurfaceButtons() {
     surfaceButtons.forEach((b) => b.classList.toggle("selected", b.dataset.surface === surfaceMode));
+    // The climate sets only mean anything while the climate colouring is what
+    // is on screen, so the row appears with it and goes away again. The user
+    // has twice said the panel is too tall; a row that is only there when it
+    // is useful costs nothing the rest of the time.
+    const sets = globe3d && globe3d.supportsClimate ? globe3d.climateSets : [];
+    climateSetRow.hidden = surfaceMode !== "climate" || sets.length < 2;
+  }
+
+  // Rebuilt per world, because each one carries its own sets.
+  function buildClimateSetButtons() {
+    climateSetButtons.textContent = "";
+    if (!globe3d.supportsClimate) return;
+    globe3d.climateSets.forEach((set) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = set.label;
+      button.dataset.set = set.id;
+      if (set.note) button.title = set.note;
+      button.addEventListener("click", () => {
+        if (globe3d.getClimateSet() === set.id) return;
+        applyClimateSetButtons(set.id);
+        // Same as the other repaint buttons: let the pressed state paint
+        // before the pass over every pixel blocks the thread.
+        requestAnimationFrame(() => globe3d.setClimateSet(set.id));
+      });
+      climateSetButtons.appendChild(button);
+    });
+    applyClimateSetButtons(globe3d.getClimateSet());
+  }
+
+  function applyClimateSetButtons(id) {
+    climateSetButtons.querySelectorAll("button").forEach((b) => {
+      b.classList.toggle("selected", b.dataset.set === id);
+    });
   }
 
   // Repainting the seabed takes a fraction of a second, so let the pressed
@@ -279,6 +315,7 @@ async function main() {
     surfaceRow.hidden = !globe3d.supportsClimate;
     // A newly built globe always starts on its own standard surface.
     surfaceMode = "standard";
+    buildClimateSetButtons();
     applySurfaceButtons();
     seabedRow.hidden = !hasPhoto;
     toggleButton.hidden = !hasPhoto;
