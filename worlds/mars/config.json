@@ -1,0 +1,185 @@
+{
+  "id": "mars",
+  "name": "火星",
+  "body": {
+    "radiusMetres": 3389500,
+    "datum": "MOLA areoid: 0 m is Mars's equipotential surface, the standard Mars vertical datum."
+  },
+  "display": {
+    "verticalExaggeration": 10,
+    "seaLevel": {
+      "label": "仮想海面",
+      "downToMetres": -9000,
+      "downStepMetres": 100,
+      "upToMetres": 6000,
+      "upStepMetres": 100
+    },
+    "hypsometric": {
+      "stops": [
+        [
+          -8000,
+          [
+            10,
+            26,
+            66
+          ]
+        ],
+        [
+          -3000,
+          [
+            26,
+            74,
+            140
+          ]
+        ],
+        [
+          -800,
+          [
+            72,
+            140,
+            200
+          ]
+        ],
+        [
+          -50,
+          [
+            140,
+            195,
+            225
+          ]
+        ],
+        [
+          0,
+          [
+            206,
+            214,
+            160
+          ]
+        ],
+        [
+          300,
+          [
+            150,
+            178,
+            96
+          ]
+        ],
+        [
+          2000,
+          [
+            120,
+            152,
+            78
+          ]
+        ],
+        [
+          5000,
+          [
+            178,
+            152,
+            84
+          ]
+        ],
+        [
+          9000,
+          [
+            140,
+            104,
+            66
+          ]
+        ],
+        [
+          14000,
+          [
+            160,
+            158,
+            152
+          ]
+        ],
+        [
+          21500,
+          [
+            248,
+            248,
+            248
+          ]
+        ]
+      ]
+    }
+  },
+  "terrain": {
+    "source": "Mars MGS MOLA DEM global mosaic, 463 m/px (USGS Astrogeology)",
+    "build": {
+      "url": "https://planetarymaps.usgs.gov/mosaic/Mars_MGS_MOLA_DEM_mosaic_global_463m.tif",
+      "filePrefix": "mola463_areoid",
+      "unscale": false,
+      "baseWidth": 4096,
+      "baseHeight": 2048
+    },
+    "encoding": {
+      "type": "rg16-metres",
+      "offsetMetres": 12000
+    },
+    "verify": {
+      "checkWidth": 2048,
+      "landmarks": [
+        {
+          "lon": -133.8,
+          "lat": 18.65,
+          "label": "Olympus Mons summit",
+          "minMetres": 15000,
+          "maxMetres": 22000
+        },
+        {
+          "lon": 70.5,
+          "lat": -42.4,
+          "label": "Hellas Planitia floor",
+          "minMetres": -8500,
+          "maxMetres": -5500
+        },
+        {
+          "lon": -59.2,
+          "lat": -8.0,
+          "label": "Valles Marineris floor",
+          "minMetres": -5500,
+          "maxMetres": 1000
+        },
+        {
+          "lon": -112.0,
+          "lat": 0.0,
+          "label": "Tharsis rise",
+          "minMetres": 3000,
+          "maxMetres": 12000
+        },
+        {
+          "lon": 30.0,
+          "lat": 55.0,
+          "label": "Vastitas Borealis (northern lowlands)",
+          "minMetres": -6000,
+          "maxMetres": -2500
+        },
+        {
+          "lon": 0.0,
+          "lat": -89.5,
+          "label": "South polar layered deposits",
+          "minMetres": 1000,
+          "maxMetres": 6000
+        },
+        {
+          "lon": 0.0,
+          "lat": 89.5,
+          "label": "North polar cap",
+          "minMetres": -6000,
+          "maxMetres": -1000
+        }
+      ],
+      "lowestMetres": -7000,
+      "highestMetres": 15000,
+      "belowDatumFraction": [
+        0.4,
+        0.8
+      ]
+    },
+    "levels": []
+  }
+}

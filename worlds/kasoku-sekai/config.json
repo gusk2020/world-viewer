@@ -3,18 +3,86 @@
   "name": "過速世界",
   "globeTexture": "./worlds/kasoku-sekai/textures/globe.jpg",
   "body": {
-    "radiusMetres": 6371000
+    "radiusMetres": 6371000,
+    "datum": "GEBCO: 0 m is mean sea level."
   },
   "display": {
     "verticalExaggeration": 30,
     "surfaceGamma": 0.6,
-    "seabedDeepestMetres": 8000
+    "seabedDeepestMetres": 8000,
+    "seaLevel": {
+      "label": "海面の高さ",
+      "downToMetres": -6000,
+      "downStepMetres": 20,
+      "upToMetres": 200,
+      "upStepMetres": 2
+    }
   },
   "terrain": {
     "source": "GEBCO_2026 Grid (ice surface elevation), 15 arc-second, via CEDA",
+    "build": {
+      "url": "https://dap.ceda.ac.uk/bodc/gebco/global/gebco_2026/ice_surface_elevation/netcdf/GEBCO_2026.nc",
+      "filePrefix": "gebco2026_ice",
+      "unscale": false,
+      "baseWidth": 4096,
+      "baseHeight": 2048
+    },
     "encoding": {
       "type": "rg16-metres",
       "offsetMetres": 12000
+    },
+    "verify": {
+      "checkWidth": 2048,
+      "landmarks": [
+        {
+          "lon": 86.925,
+          "lat": 27.988,
+          "label": "Himalaya (Everest area)",
+          "minMetres": 2500,
+          "maxMetres": 9000
+        },
+        {
+          "lon": 142.2,
+          "lat": 11.35,
+          "label": "Mariana Trench",
+          "minMetres": -11500,
+          "maxMetres": -4000
+        },
+        {
+          "lon": -160.0,
+          "lat": 0.0,
+          "label": "mid-Pacific abyssal plain",
+          "minMetres": -6500,
+          "maxMetres": -3000
+        },
+        {
+          "lon": 10.0,
+          "lat": 23.0,
+          "label": "Sahara",
+          "minMetres": 100,
+          "maxMetres": 1200
+        },
+        {
+          "lon": 0.0,
+          "lat": -89.5,
+          "label": "South Pole (ice surface)",
+          "minMetres": 1500,
+          "maxMetres": 4500
+        },
+        {
+          "lon": 0.0,
+          "lat": 89.5,
+          "label": "North Pole (Arctic Ocean)",
+          "minMetres": -5000,
+          "maxMetres": 0
+        }
+      ],
+      "lowestMetres": -8000,
+      "highestMetres": 4000,
+      "belowDatumFraction": [
+        0.55,
+        0.8
+      ]
     },
     "levels": [
       {

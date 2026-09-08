@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
-"""Check that an encoded elevation PNG really is global land+seafloor terrain.
+"""Check that an encoded elevation PNG really is that body's global terrain.
 
 This exists so the pipeline fails loudly instead of committing a raster
-that merely looks plausible. Every past terrain source in this project
-turned out to encode a flat zero for the whole ocean; that class of
-mistake is only caught by actually reading the numbers back out, at known
-places, and asserting what they should say.
+that merely looks plausible. Every early terrain source this project tried
+turned out to encode a flat zero for the whole ocean; that class of mistake
+is only caught by actually reading the numbers back out, at known places,
+and asserting what they should say.
 
-The place-name checks below are specific to Earth/GEBCO on purpose: they
-are how this pipeline proves *this* dataset is real. A future body would
-bring its own list, not a generalised one.
+The places and the numbers are **data**, not code: each world's config.json
+carries a `terrain.verify` block naming landmarks on that body and the range
+each one's elevation has to fall in. Earth's checks are meaningless on Mars,
+so generalising the checks themselves would have been the wrong move --
+what generalises is the act of checking.
 
 Called by .github/workflows/build-terrain.yml.
 """
@@ -19,19 +21,7 @@ import sys
 import numpy as np
 from PIL import Image
 
-from elevation_encoding import offset_metres
-
-# lon, lat, human label, and the range the value has to fall in. Kept
-# loose: these rasters are area-averaged down to ~20 km cells, so a summit
-# or a trench axis is flattened considerably against its true figure.
-CHECKS = [
-    (86.925, 27.988, "Himalaya (Everest area)", 2500, 9000),
-    (142.20, 11.350, "Mariana Trench", -11500, -4000),
-    (-160.0, 0.0, "mid-Pacific abyssal plain", -6500, -3000),
-    (10.0, 23.0, "Sahara", 100, 1200),
-    (0.0, -89.5, "South Pole (ice surface)", 1500, 4500),
-    (0.0, 89.5, "North Pole (Arctic Ocean)", -5000, 0),
-]
+from elevation_encoding import offset_metres, world_config
 
 
 def sample(metres, lon, lat):
@@ -42,10 +32,21 @@ def sample(metres, lon, lat):
 
 
 def main() -> int:
-    if len(sys.argv) != 3:
-        print("usage: verify_elevation.py <elevation.png> <world-dir>")
+    if len(sys.argv) != 2:
+        print("usage: verify_elevation.py <world-dir>")
         return 2
-    path, world_dir = sys.argv[1], sys.argv[2]
+    world_dir = sys.argv[1]
+    config = world_config(world_dir)
+    verify = config["terrain"].get("verify")
+    if not verify:
+        print(f"ERROR: {world_dir}/config.json has no terrain.verify block")
+        return 1
+
+    # Check the level the app will actually load, not the widest one built.
+    levels = sorted(config["terrain"]["levels"], key=lambda level: level["width"])
+    level = next((lv for lv in levels if lv["width"] == verify["checkWidth"]), levels[-1])
+    path = level["url"].lstrip("./")
+
     rgb = np.asarray(Image.open(path).convert("RGB")).astype(np.int32)
     metres = (rgb[:, :, 0] * 256 + rgb[:, :, 1]) - offset_metres(world_dir)
     height, width = metres.shape
@@ -53,40 +54,46 @@ def main() -> int:
 
     failures = []
 
-    for lon, lat, label, low, high in CHECKS:
-        value = sample(metres, lon, lat)
+    for check in verify["landmarks"]:
+        value = sample(metres, check["lon"], check["lat"])
+        low, high = check["minMetres"], check["maxMetres"]
         ok = low <= value <= high
-        print(f"  {'ok ' if ok else 'BAD'} {label}: {value} m (expected {low}..{high})")
+        print(f"  {'ok ' if ok else 'BAD'} {check['label']}: {value} m "
+              f"(expected {low}..{high})")
         if not ok:
-            failures.append(label)
+            failures.append(check["label"])
 
-    # Real bathymetry, not a flat ocean floor: every previous source this
-    # project tried failed exactly here.
-    ocean_fraction = float(np.count_nonzero(metres < 0)) / metres.size
-    print(f"  below sea level: {ocean_fraction * 100:.1f}% of the grid")
-    if not 0.55 <= ocean_fraction <= 0.80:
-        failures.append("ocean fraction is not Earth-like")
+    # Real relief across the whole body, not a flat fill with a few features.
+    low, high = verify["lowestMetres"], verify["highestMetres"]
+    if metres.min() > low:
+        failures.append(f"nothing lower than {low} m -- the low ground looks flat")
+    if metres.max() < high:
+        failures.append(f"nothing higher than {high} m -- the high ground looks flat")
 
-    deep = int(np.count_nonzero(metres < -6000))
-    print(f"  deeper than 6000 m: {deep} cells")
-    if deep < 100:
-        failures.append("no real deep ocean -- the seafloor looks flat")
-
-    if metres.min() > -8000:
-        failures.append("no trenches deeper than 8000 m")
-    if metres.max() < 4000:
-        failures.append("no mountains above 4000 m")
+    if "belowDatumFraction" in verify:
+        fraction = float(np.count_nonzero(metres < 0)) / metres.size
+        expect_low, expect_high = verify["belowDatumFraction"]
+        print(f"  below the datum: {fraction * 100:.1f}% of the grid "
+              f"(expected {expect_low * 100:.0f}-{expect_high * 100:.0f}%)")
+        if not expect_low <= fraction <= expect_high:
+            failures.append("the fraction below the datum is not what this body should show")
 
     # Both pole rows must carry real, varying data rather than a fill value.
+    # np.ptp(), not values.ptp(): the ndarray method was removed in NumPy 2.0
+    # and this workflow installs numpy unpinned, so the old spelling would
+    # fail here after a long download.
     for label, row in (("north", 0), ("south", height - 1)):
         values = metres[row]
-        # np.ptp(), not values.ptp(): the ndarray method was removed in
-        # NumPy 2.0, and the workflow installs numpy unpinned -- so the old
-        # spelling would fail this check after a 30-minute download.
         spread = int(np.ptp(values))
         print(f"  {label} pole row: mean {values.mean():.0f} m, spread {spread} m")
         if spread == 0:
             failures.append(f"{label} pole row is a constant fill value")
+
+    # A no-data fill (-32768 on every source this project uses) survives the
+    # encoding as a wildly out-of-range value, so it would show up as terrain
+    # kilometres out of place rather than as an obvious hole.
+    if metres.min() < -20000 or metres.max() > 30000:
+        failures.append("values outside any plausible relief -- no-data fill left in?")
 
     if failures:
         print("\nFAILED: " + "; ".join(failures))

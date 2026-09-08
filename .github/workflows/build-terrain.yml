@@ -1,22 +1,27 @@
-# Builds the globe's terrain data from GEBCO_2026, entirely on GitHub's
-# runners. The point is that nobody has to touch the source grid by hand:
-# it is 7.5 GB, and the only machine this project's owner has is a phone.
+# Builds a world's terrain rasters from its official source DEM, entirely on
+# GitHub's runners. The point is that nobody has to touch the source grid by
+# hand: they run to several GB each, and the only machine this project's
+# owner has is a phone.
 #
-# In:  GEBCO_2026 ice-surface grid (86400 x 43200, Int16 metres) from CEDA.
-# Out: a handful of small PNGs committed under worlds/<world>/terrain/.
-#      The 7.5 GB source is never committed and never reaches the web app.
+# In:  the DEM named by that world's config.json (terrain.build.url) --
+#      GEBCO_2026 for Earth, MOLA for Mars, LOLA for the Moon.
+# Out: a handful of small PNGs committed under worlds/<world>/terrain/, and
+#      the matching terrain.levels list written back into config.json.
+#      The multi-GB source is never committed and never reaches the web app.
 #
-# Run it from the Actions tab ("Run workflow"). It takes roughly half an
-# hour, almost all of it waiting on CEDA (~5 MB/s observed).
+# Run it from the Actions tab ("Run workflow") and pick the world. It takes
+# roughly half an hour, almost all of it waiting on the download.
 
-name: Build terrain from GEBCO
+name: Build terrain
 
 on:
   workflow_dispatch:
     inputs:
       world:
-        description: World id under worlds/
-        default: kasoku-sekai
+        description: World id under worlds/ (kasoku-sekai = Earth)
+        type: choice
+        options: [mars, moon, kasoku-sekai]
+        default: mars
       commit:
         description: Commit the generated rasters back to the branch
         type: boolean
@@ -28,16 +33,11 @@ permissions:
 env:
   # tools/*.py import elevation_encoding.py from beside them.
   PYTHONPATH: tools
-  SOURCE_URL: https://dap.ceda.ac.uk/bodc/gebco/global/gebco_2026/ice_surface_elevation/netcdf/GEBCO_2026.nc
-  # Widest level built. Every smaller level is averaged down from this one
-  # instead of re-reading the 7.5 GB source once per level.
-  BASE_WIDTH: 4096
-  BASE_HEIGHT: 2048
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 240
     steps:
       - uses: actions/checkout@v4
         with:
@@ -50,26 +50,58 @@ jobs:
           python3 -m pip install --quiet --break-system-packages numpy pillow
           gdalinfo --version
 
-      - name: Download the GEBCO_2026 ice-surface grid
+      - name: Read the build settings out of the world's config
         run: |
-          # CEDA gives roughly 5 MB/s on a single connection, so pull it
-          # over several in parallel; fall back to curl if aria2 is unhappy.
+          python3 - <<'PY' >> "$GITHUB_ENV"
+          import json, os
+          world = os.environ["WORLD"]
+          build = json.load(open(f"worlds/{world}/config.json"))["terrain"]["build"]
+          for key, value in {
+              "SOURCE_URL": build["url"],
+              "FILE_PREFIX": build["filePrefix"],
+              "BASE_WIDTH": build["baseWidth"],
+              "BASE_HEIGHT": build["baseHeight"],
+              # LOLA stores half-metres (Scale: 0.5 in its header). Applying
+              # the file's own scale/offset is the difference between real
+              # lunar relief and relief that is silently doubled.
+              "UNSCALE": "-unscale" if build.get("unscale") else "",
+          }.items():
+              print(f"{key}={value}")
+          PY
+        env:
+          WORLD: ${{ inputs.world }}
+
+      - name: Make room for the source grid
+        run: |
+          # LOLA at 118 m/px is 8.5 GB, which does not fit beside a default
+          # runner image. These are the big preinstalled toolchains this job
+          # has no use for.
+          df -h / | tail -1
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost /usr/share/swift || true
+          df -h / | tail -1
+
+      - name: Download the source DEM
+        run: |
+          # Several parallel connections: these servers give only a few MB/s
+          # each. Fall back to curl if aria2 is unhappy with the host.
           aria2c -x 12 -s 12 -k 4M --file-allocation=none --console-log-level=warn \
-                 -o GEBCO_2026.nc "$SOURCE_URL" \
-            || curl -sSL --retry 3 -o GEBCO_2026.nc "$SOURCE_URL"
-          ls -l GEBCO_2026.nc
-          gdalinfo GEBCO_2026.nc | head -12
+                 -o source.dem "$SOURCE_URL" \
+            || curl -sSL --retry 3 -o source.dem "$SOURCE_URL"
+          ls -l source.dem
+          gdalinfo source.dem | head -20
 
       - name: Downsample to the base level (area-average, not point sampling)
         run: |
           # -r average matters: decimating a heightmap by picking every Nth
-          # cell would drop peaks and trenches entirely. Averaging keeps each
+          # cell would drop peaks and craters entirely. Averaging keeps each
           # output cell representative of the ground it covers.
-          gdal_translate -q -of GTiff -ot Int16 -r average \
+          #
+          # $UNSCALE applies the source's own scale/offset where it has one.
+          gdal_translate -q -of GTiff -ot Int16 -r average $UNSCALE \
             -outsize "$BASE_WIDTH" "$BASE_HEIGHT" \
-            -a_srs EPSG:4326 \
-            GEBCO_2026.nc base.tif
-          rm -f GEBCO_2026.nc
+            source.dem base.tif
+          rm -f source.dem
           gdalinfo -stats base.tif | egrep 'Size is|Minimum=|STATISTICS_(MIN|MAX|MEAN)'
 
       - name: Encode the pyramid as PNG elevation rasters
@@ -77,11 +109,12 @@ jobs:
           set -e
           world="${{ inputs.world }}"
           outdir="worlds/${world}/terrain"
+          rm -rf "$outdir"
           mkdir -p "$outdir"
 
-          for size in "4096 2048" "2048 1024" "1024 512" "512 256"; do
-            set -- $size
-            w=$1; h=$2
+          w=$BASE_WIDTH
+          h=$BASE_HEIGHT
+          while [ "$w" -ge 512 ]; do
             if [ "$w" = "$BASE_WIDTH" ]; then
               cp base.tif "level_${w}.tif"
             else
@@ -92,16 +125,20 @@ jobs:
             # directly, which avoids depending on GDAL's Python bindings.
             gdal_translate -q -of ENVI -ot Int16 "level_${w}.tif" "level_${w}.bin"
             python3 tools/encode_elevation.py "level_${w}.bin" "$w" "$h" \
-              "${outdir}/gebco2026_ice_${w}x${h}.png" "worlds/${world}"
+              "${outdir}/${FILE_PREFIX}_${w}x${h}.png" "worlds/${world}"
+            rm -f "level_${w}.tif" "level_${w}.bin" "level_${w}.hdr"
+            w=$((w / 2)); h=$((h / 2))
           done
 
           ls -l "$outdir"
 
+      - name: Write the level list back into the world's config
+        run: |
+          python3 tools/update_levels.py "worlds/${{ inputs.world }}"
+
       - name: Verify the result is real global terrain
         run: |
-          python3 tools/verify_elevation.py \
-            "worlds/${{ inputs.world }}/terrain/gebco2026_ice_2048x1024.png" \
-            "worlds/${{ inputs.world }}"
+          python3 tools/verify_elevation.py "worlds/${{ inputs.world }}"
 
       - name: Commit the generated rasters
         if: ${{ inputs.commit }}
@@ -109,12 +146,13 @@ jobs:
           world="${{ inputs.world }}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add "worlds/${world}/terrain"
+          git add "worlds/${world}/terrain" "worlds/${world}/config.json"
           if git diff --cached --quiet; then
             echo "terrain rasters unchanged"
             exit 0
           fi
           git commit \
-            -m "Rebuild ${world} terrain from GEBCO_2026 ice-surface grid" \
-            -m "Generated by .github/workflows/build-terrain.yml. The 7.5GB source grid was downloaded, area-averaged and encoded on the runner; only the small PNG levels are committed."
+            -m "Rebuild ${world} terrain from its source DEM" \
+            -m "Generated by .github/workflows/build-terrain.yml. The multi-GB source grid was downloaded, area-averaged and encoded on the runner; only the small PNG levels are committed."
+          git pull --rebase origin "${{ github.ref_name }}"
           git push origin HEAD:"${{ github.ref_name }}"
