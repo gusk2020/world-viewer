@@ -80,11 +80,13 @@ continue.
 - **V0.7.1 (current, done — needs the user's Pixel 7a confirmation)**: an
   axial-tilt control and a latitude/longitude graticule with a scale bar,
   on all three bodies. See "V0.7.1: axial tilt and the graticule" below.
-- **V0.8 stage 1 (current, done — needs the user's Pixel 7a confirmation)**:
-  a small climate model that paints a plausible-looking surface from a few
-  conditions. Nine stages were specified; this is stage 1 only, and the
-  user asked for a report and a pause at each. See "V0.8: the climate
-  colouring" below.
+- **V0.8 stage 1 (done, user-confirmed on Pixel 7a)**: a small climate model
+  that paints a plausible-looking surface from a few conditions. Nine stages
+  were specified, and the user asked for a report and a pause at each.
+  See "V0.8: the climate colouring" below.
+- **V0.8 stage 2 (current, done — needs the user's Pixel 7a confirmation)**:
+  rotation, wind and moisture advection. See "V0.8 stage 2: rotation, wind
+  and moisture" below.
 - **V0.9+**: cities, borders/territories, historical eras, and other
   過速世界-specific data. Several distinct features, not one version —
   treat each as its own sub-version. **Needs the user's own world-setting
@@ -140,6 +142,9 @@ straight by the browser — still no bundler and no build step.
 | `js/cubeSphere.js` | The mesh, and nothing else. `buildCubeSphere(segments, { radiusAt })` — pure geometry, no idea what a planet or an elevation raster is. Both the terrain and the sea surface come from it. |
 | `js/elevation.js` | The height raster: decoding, level picking, bilinear sampling. The mesh and the seabed colouring sample through the *same* function here, which is what keeps them from disagreeing about where the coastline is. |
 | `js/surface.js` | The colour texture: the load-time gamma lift and polar low-pass, plus repainting the seabed by depth. Plain pixel buffers — no three.js. |
+| `js/hypsometric.js` | The height-to-colour ramp for bodies with no photograph (Mars, the Moon). |
+| `js/graticule.js` | The terrain-following latitude/longitude lines. |
+| `js/climate.js` | The climate model: parameter schema, insolation, wind, moisture, and the painter. No three.js, no DOM. |
 | `js/map2d.js` | The OpenLayers 2D map. |
 | `js/geoConvert.js` | lng/lat ↔ 3D direction, and the approximate 3D-distance ↔ 2D-zoom correspondence. |
 
@@ -1481,9 +1486,12 @@ by side — and `js/climate.js` makes every parameter say which it is, because
 the moment that distinction is lost, a number invented to make a picture look
 right starts being cited as if it meant something.
 
-Stage 1 uses only what the user listed: global mean temperature, latitude,
+Stage 1 used only what the user listed: global mean temperature, latitude,
 altitude, axial tilt, land-or-sea, and distance from the sea. Wind, rotation
-and rain shadow are stage 2 and are deliberately absent.
+and rain shadow are stage 2 — see "V0.8 stage 2" below, which replaced the
+hand-placed dry belt and the fitted parameter set recorded here. Read this
+section for the *lessons* and for what was already tried; the shipped model is
+stage 2's.
 
 ### Where the parameters live, and why not in the config
 
@@ -1580,6 +1588,168 @@ them, the 地表 row hides itself, and `setSurfaceMode` is a no-op that returns
 
 Earth's own default (標準) is byte-identical to before across all ten
 regression views.
+
+## V0.8 stage 2: rotation, wind and moisture
+
+Everything the user listed for this stage — rotation direction and speed, the
+strength and sense of the Coriolis deflection, the trades, the westerlies and
+the polar easterlies, a prevailing wind, and moisture carried from the sea and
+lost inland so that a windward slope is wet and its lee dry — comes out of two
+short functions in `js/climate.js` rather than being painted on belt by belt.
+Earth's `標準` surface is byte-identical across all seven regression views, and
+Mars and the Moon are untouched (neither supports climate yet).
+
+**Two new facts per body, in `config.json` and not in the code**:
+`body.dayLengthHours` (Earth 23.9345, Mars 24.6229, Moon 655.72 — sidereal, not
+solar, because the deflection depends on the spin against the stars) and
+`body.rotationDirection` (+1 prograde on all three). `REFERENCE_DAY_HOURS` is
+Earth's own sidereal day, so Earth's spin factor is exactly 1 and nothing needs
+special-casing for it.
+
+### The wind: one formula, three belts
+
+`windField` gives, per latitude row, a north-south flow from the overturning
+cells and a sideways turn from the spin:
+
+    flow = -sin(pi * lat / cellEdge)
+    turn = (pi/2) * tanh(coriolisStrength * spin * sin(lat))
+    east =  flow * sin(turn)
+    north = flow * cos(turn)
+
+Measured in the running app on Earth: **east −0.92 at 15°N, +0.87 at 45°N,
+−0.62 at 75°N** — easterly trades, westerlies, polar easterlies, none of them
+written down anywhere. `convergence = cos(pi * lat / cellEdge)` rises at the
+equator and the polar front and sinks over the subtropics and the poles, so
+the Sahara/Arabia/Australia dry belt that Stage 1 placed by hand at a *fitted
+latitude* now falls out of the cell structure and moves on its own when the
+spin changes.
+
+**Turning the flow rather than adding a sideways component to it was a real
+correction, not a stylistic one.** The first version used
+`east = k * spin * sin(lat) * north`, which makes the zonal part vanish
+faster than the flow near the equator: the trades came out blowing almost due
+equatorward, so air reaching the Amazon arrived overland from Brazil's
+interior instead of off the Atlantic, and the Amazon painted as scrub. A
+rotation is bounded by construction (a quarter turn is flow entirely along the
+parallels) and it keeps a real easterly at 10-15°.
+
+`coriolisStrength` is **set to 4 and deliberately left out of the search**: 4
+reproduces the observed direction of Earth's trades (about 70° off meridional
+at 15°). Given the freedom, the search drives it straight to its lower bound
+and switches the trades and westerlies off altogether — because a land-cover
+objective cannot see which way the wind blows. That is a genuine limit of the
+teacher data, not of the model.
+
+### Moisture: an iteration, not a formula in the distance to the sea
+
+The sea holds the field at 1; every land cell takes what its *upwind*
+neighbour has, minus the along-flow decay (`advectionRangeKm`) and minus what
+any climb out of that neighbour costs (`orographicRiseM`). Sweeping that to
+convergence is what produces a wet windward coast and a dry lee — the lee sits
+below the crest, so it inherits what the crest already stripped out.
+
+- **It is cheap because the wind depends only on latitude.** The upwind offset,
+  its bilinear weights and the decay are constant across a row, and the climb
+  never changes at all, so everything collapses into one per-cell transmission
+  factor computed once; each sweep is then four reads and three multiplies.
+  The whole 陸地塗り分け press measures **673 ms** in-page (Stage 1 was ~270 ms).
+- **48 sweeps is the measured convergence point**, against a 128-sweep
+  reference: 32 sweeps still differ by up to 0.018, 48 are identical to five
+  decimals. `ADVECTION_SWEEPS` is 64, i.e. that with a margin.
+- **The coarse elevation grid is now area-averaged, not point-sampled.** A
+  point sample of a 20 km raster at 512×256 can land in a valley and miss a
+  mountain range outright — and a range that is not in the coarse grid casts no
+  rain shadow, which is most of what this stage is for.
+- **`stillAirMoisture` is the moisture that gets inland without the wind.** Not
+  a fudge for its own sake: one annual-mean wind cannot represent a monsoon
+  reversal, a storm track, or plain diffusion, and with it at 0 the lee of
+  every continent goes to bare rock. At 1 the model falls back to Stage 1.
+
+### The rotation-reversal requirement, measured
+
+Reversing `rotationDirection` reverses the zonal wind exactly (+0.874 →
+−0.874 at 45°N). Downstream of that, mean moisture over coastal land, 35-55°N:
+**North America's west coast 0.702 vs east 0.654 prograde, and 0.642 vs 0.783
+retrograde — the wet side changes sides.** South America at 35-50°S narrows
+from a 0.37 advantage for the west coast to 0.01 rather than crossing over,
+and Australia at 20-35°S sits almost exactly on a cell boundary where the wind
+is nil, so it says nothing either way. The signal is muted because the fitted
+`stillAirMoisture` is high (0.644); that is the tension between this stage's
+mechanism and the plains the objective insists must be green, and it is worth
+knowing before anyone tunes further.
+
+Rotation *rate* also moves the cells: the fitted `cellRotationExponent` (0.126)
+widens the first cell boundary from 26.9° on Earth to 40.8° on a 655-hour day
+and narrows it to 22.6° on a 6-hour one.
+
+### The fit, and three degenerate solutions it found first
+
+Same discipline as Stage 1 — a program searches, nothing asks a model — but it
+now runs in **node rather than a browser**, importing the same `js/climate.js`
+the globe draws with. The elevation raster is decoded once by Python into raw
+Int16 metres for it. That is far faster to iterate on, and it made a four-way
+parallel search on a four-core box trivial. About 40,000 trials in all.
+Only the geography (the land mask and the distance transform) is hoisted out
+of the trial loop — `computeGeography` exists for exactly that.
+
+Each of the three failures was the objective's fault, not the search's, which
+is the same lesson Stage 1 recorded and worth counting as three for three:
+
+1. **It turned the new mechanisms off.** Given free bounds it set
+   `orographicRiseM` to its maximum and `stillAirMoisture` to zero, leaned on a
+   very long advection range, and accepted losing both lee-side places. Fixed
+   by flooring the parameters that express a required effect — subsidence
+   drying, the ascent bonus, the gradient widths — because a term that exists
+   to express a mechanism may come out weak but may not come out absent.
+2. **It used the vegetation threshold as a colour control.** Bare ground was
+   tinted rock-to-sand by the same `warmth` that decided where vegetation
+   stops, so the search pushed that threshold to its cold bound to free up the
+   moisture term and painted every polar gravel field as sand. Split out into
+   `sandTemperatureC`/`sandWidthC`, which are **not searched** — nothing in the
+   objective can see a colour.
+3. **It made the US interior a desert.** Caught only by rendering Stage 1 and
+   Stage 2 side by side at the same views, which is worth doing after any refit:
+   the score had improved while Iowa turned to sand. The objective had no
+   teacher point in a mid-latitude continental grassland, so two were added
+   (US Midwest, Ukrainian steppe) and it was refitted.
+
+`insolationSensitivityC` is bounded to 55-85 for the same reason: it has an
+independent determination (least squares against Earth's real zonal-mean
+temperatures gives 67), and given a wider range the search parks it near 30,
+where the equator-to-pole contrast is far too flat and the ice is put back by
+other terms compensating.
+
+### What is still wrong, honestly
+
+- **The US Great Plains and Texas still come out too arid** (the US Midwest
+  place scores 0.47, right on the line). The model's only moisture path into
+  them is the isotropic still-air term, because the westerlies arrive dry over
+  the Rockies; in reality it is the Gulf of Mexico in summer. **The concrete
+  next idea**: make the still-air term start from a warm-sea evaporation value
+  rather than a constant, i.e. run the same relaxation isotropically with the
+  source weighted by sea-surface temperature. That would help the Gulf-fed
+  plains without helping the cold seas around Patagonia, which is exactly the
+  discrimination missing. Left for a later stage rather than smuggled into
+  this one.
+- **Patagonia's steppe is still wet.** It is dry in reality for one reason —
+  the Andes — and it has a cold ocean 500 km to its east that the isotropic
+  term treats as generously as a warm one. Same fix as above.
+- **Tibet is still white**, as in Stage 1, though less solidly: the rock/sand
+  split now shows the plateau's flanks as rock rather than one white blob. An
+  annual-mean model puts 5000 m at -8 °C and cannot know the summer melts it.
+
+### Two harness traps, both of which produced convincing false results
+
+- **`globe3d.setView` takes `{lng, lat, zoom}`, not `{lng, lat, distance}`.**
+  Passing `distance` makes the camera position `NaN`, the globe vanishes, and
+  every screenshot comes back black — including the "before" ones, so a
+  regression diff reported all views **identical** while comparing two black
+  frames. A diff that proves nothing looks exactly like a diff that proves
+  everything: check the images have content before believing they match.
+- **The loading overlay hides inside a `requestAnimationFrame`**, so waiting on
+  it can return before the first frame is drawn. Wait for the axis readout to
+  stop reading `NaN°` instead — that only happens once the animation loop has
+  actually run.
 
 ## The V0.6 cleanup pass (no feature changes)
 

@@ -5,7 +5,11 @@
     "radiusMetres": 1737400,
     "axialTiltDegrees": 6.68,
     "axialTiltNote": "The Moon's obliquity to its orbital plane; it is 1.54 degrees to the ecliptic.",
-    "datum": "LOLA LDEM: 0 m is a sphere of radius 1737400 m, the standard lunar reference."
+    "datum": "LOLA LDEM: 0 m is a sphere of radius 1737400 m, the standard lunar reference.",
+    "dayLengthHours": 655.72,
+    "dayLengthNote": "The Moon's sidereal rotation period -- it turns once per orbit, so a lunar day is 27.3 Earth days. Slow enough that its circulation would be one cell per hemisphere.",
+    "rotationDirection": 1,
+    "rotationDirectionNote": "Prograde."
   },
   "display": {
     "verticalExaggeration": 10,

@@ -11,9 +11,16 @@
 // to move it anywhere in its range. Keeping the distinction visible is what
 // stops the second kind from quietly being mistaken for the first.
 //
-// Stage 1 uses only: global mean temperature, latitude, altitude, axial tilt,
-// land-or-sea, and distance from the sea. Wind, rotation and orographic
-// rain shadow are Stage 2 and are deliberately absent.
+// Stage 1 used only: global mean temperature, latitude, altitude, axial tilt,
+// land-or-sea, and distance from the sea.
+//
+// Stage 2 adds the body's spin. Rotation rate and direction set the Coriolis
+// deflection, which turns the overturning cells' equatorward and poleward flow
+// into the trades, the westerlies and the polar easterlies; the same cells put
+// rising air over the equator and the polar front and sinking air over the
+// subtropics and the poles, which is where the deserts come from; and moisture
+// is carried inland *by that wind*, losing water wherever the ground rises
+// under it, which is what makes a windward coast wet and its lee dry.
 
 // ---------------------------------------------------------------------------
 // Parameters
@@ -25,6 +32,14 @@
 // a newer parameter gets the default, and a set still carrying a retired one
 // is ignored rather than being an error.
 // ---------------------------------------------------------------------------
+// A note on the bounds, because several of them are doing real work. A search
+// will always find the degenerate solution if its bounds permit one, and this
+// one has now twice tried to satisfy the numbers by switching off the very
+// mechanism it was given: first by turning continentality off, then by
+// zeroing the subsidence belts and flattening every gradient into a step. A
+// parameter that exists to express a required effect may come out weak, but
+// it may not come out absent, so those are floored. That is not rigging the
+// answer -- it is saying what the parameter means.
 export const CLIMATE_PARAMETERS = {
   meanTemperatureC: {
     value: 14, kind: "physical", min: -60, max: 60,
@@ -44,7 +59,7 @@ export const CLIMATE_PARAMETERS = {
   },
 
   insolationSensitivityC: {
-    value: 65, kind: "empirical", min: 0, max: 160,
+    value: 65, kind: "empirical", min: 55, max: 85,
     note:
       "Degrees of equator-to-pole contrast per unit of normalised annual " +
       "insolation. Fitted by least squares against Earth's real zonal-mean " +
@@ -55,7 +70,8 @@ export const CLIMATE_PARAMETERS = {
     value: 0, kind: "empirical", min: -12, max: 12,
     note:
       "Extra cooling (negative) or warming toward the poles, on top of " +
-      "insolation. Kept to a narrow range on purpose: given a wide one the " +
+      "insolation. Kept to a narrow range on purpose, like the term above: " +
+      "given a wide one the " +
       "search turns it into a second contrast term fighting the first, which " +
       "fits the numbers while meaning nothing.",
   },
@@ -73,30 +89,97 @@ export const CLIMATE_PARAMETERS = {
   },
   moistureDecayKm: {
     value: 900, kind: "empirical", min: 50, max: 6000,
-    note: "How far inland moisture carries, as an e-folding distance.",
-  },
-  subtropicalDryLatitudeDeg: {
-    value: 25, kind: "empirical", min: 0, max: 60,
     note:
-      "Centre of the dry belt that makes the Sahara, Arabia and Australia dry. " +
-      "Stage 2's Hadley-cell and trade-wind model should replace this with " +
-      "something mechanistic; until then it is a latitude band and nothing more.",
+      "How far moisture reaches inland without help from the wind, as an " +
+      "e-folding distance. Since Stage 2 this is only the still-air part; " +
+      "`stillAirMoisture` says how much of the total it is allowed to be.",
   },
-  subtropicalDryWidthDeg: {
-    value: 13, kind: "empirical", min: 2, max: 40,
-    note: "Half-width of that dry belt.",
+  stillAirMoisture: {
+    value: 0.35, kind: "empirical", min: 0, max: 1,
+    note:
+      "How much moisture reaches inland with no help from the prevailing " +
+      "wind. Not a fudge for its own sake: a single annual-mean wind cannot " +
+      "represent monsoon reversals, storm tracks or ordinary diffusion, and " +
+      "with this at 0 the lee of every continent goes to bare rock. At 1 the " +
+      "model falls back to Stage 1's behaviour.",
+  },
+
+  coriolisStrength: {
+    value: 4, kind: "empirical", min: 1, max: 12,
+    note:
+      "How far the spin turns the cells' north-south flow toward the " +
+      "east-west. It enters as an angle -- the flow is rotated right in the " +
+      "northern hemisphere and left in the southern, by up to a quarter turn " +
+      "-- which is the part that is real: the turn grows with the rotation " +
+      "rate and with latitude, and it reverses when the rotation direction " +
+      "does. The constant in front is a fudge, because this model has no " +
+      "momentum budget to derive one from. Turning the flow rather than " +
+      "adding a sideways component to it matters more than it looks: at low " +
+      "latitudes a proportional term leaves the trades blowing almost due " +
+      "equatorward, which starves the Amazon of the Atlantic moisture that " +
+      "in fact reaches it from the east. Set once from the observed direction " +
+      "of Earth's trades -- about 70 degrees off meridional at 15 degrees " +
+      "latitude, which is what 4 gives -- and then left out of the automatic " +
+      "search, because a land-cover objective cannot see which way the wind " +
+      "blows and, given the freedom, drives this straight to its lower bound " +
+      "and turns the trades and the westerlies off altogether.",
+  },
+  circulationCellEdgeDeg: {
+    value: 30, kind: "empirical", min: 10, max: 90,
+    note:
+      "Latitude of the first cell boundary on a body spinning once per " +
+      "reference day. Earth's Hadley cell ends near 30 degrees, which puts " +
+      "the subtropical deserts there and the polar front near 60.",
+  },
+  cellRotationExponent: {
+    value: 0.33, kind: "empirical", min: 0, max: 1,
+    note:
+      "How much a slower spin widens the cells. At 0 the cell structure is " +
+      "fixed whatever the day length; positive, and a slow rotator collapses " +
+      "to a single cell per hemisphere, which is what Venus and Titan " +
+      "actually do.",
+  },
+  advectionRangeKm: {
+    value: 2500, kind: "empirical", min: 100, max: 8000,
+    note:
+      "How far moisture rides the wind before rain takes it out, as an " +
+      "e-folding distance along the flow.",
+  },
+  orographicRiseM: {
+    value: 900, kind: "empirical", min: 100, max: 2500,
+    note:
+      "Height of ascent that removes about 63% of an air mass's moisture. " +
+      "This is the windward-wet / lee-dry mechanism: the climb strips the " +
+      "water out on the way up and the lee inherits what is left.",
   },
   subtropicalDryStrength: {
-    value: 0.85, kind: "empirical", min: 0, max: 1,
-    note: "How completely the dry belt removes moisture at its centre.",
+    value: 0.85, kind: "empirical", min: 0.25, max: 1,
+    note:
+      "How completely sinking air dries the ground beneath it. Where the " +
+      "cells descend -- the subtropics, and the poles -- this is what makes " +
+      "the Sahara, Arabia and Australia. Stage 1 placed that belt by hand at " +
+      "a fitted latitude; it now comes out of the cell structure, so it moves " +
+      "on its own when the spin changes.",
+  },
+  convergenceWetBonus: {
+    value: 0.4, kind: "empirical", min: 0.1, max: 2,
+    note:
+      "Extra moisture where the cells make air rise: the equatorial belt and " +
+      "the polar front. Without it the ITCZ is only as wet as the wind that " +
+      "reaches it, and at the equator that wind is by construction nearly nil.",
   },
 
   vegetationWarmthC: {
-    value: 3, kind: "empirical", min: -30, max: 40,
-    note: "Temperature at which plant cover is half of what moisture allows.",
+    value: 3, kind: "empirical", min: -12, max: 25,
+    note:
+      "Temperature at which plant cover is half of what moisture allows. " +
+      "Bounded to a range a plant could mean something in: given a wider one " +
+      "the search parks it below -25 C, where the term is always satisfied " +
+      "and stops discriminating at all -- and since bare ground is coloured " +
+      "by this same warmth, that also paints the Arctic's gravel as sand.",
   },
   vegetationWarmthWidthC: {
-    value: 8, kind: "empirical", min: 3, max: 30,
+    value: 8, kind: "empirical", min: 3, max: 15,
     note: "How gradually plant cover fades out as it gets colder.",
   },
   vegetationMoistureHalf: {
@@ -104,11 +187,28 @@ export const CLIMATE_PARAMETERS = {
     note: "Moisture at which plant cover is half of what warmth allows.",
   },
   vegetationMoistureWidth: {
-    value: 0.22, kind: "empirical", min: 0.08, max: 1,
+    value: 0.22, kind: "empirical", min: 0.15, max: 1,
     note:
       "How gradually plant cover fades out as it gets drier. Floored well " +
       "above zero because the user asked for natural gradients and the search " +
-      "will otherwise collapse this into a hard desert/forest edge.",
+      "will otherwise collapse this into a hard desert/forest edge -- it goes " +
+      "straight to the floor every time, so where the floor sits is where the " +
+      "gradient ends up.",
+  },
+
+  sandTemperatureC: {
+    value: 10, kind: "empirical", min: -20, max: 40,
+    note:
+      "Temperature at which bare ground is half sand, half rock. A hot desert " +
+      "is sand; a cold one is rock and gravel. This used to be read off the " +
+      "vegetation threshold, which coupled a colour to a land-cover boundary: " +
+      "the search then pushed that threshold to its cold bound to free up the " +
+      "moisture term, and every polar gravel field turned to sand. Nothing in " +
+      "the objective can see a colour, so this is deliberately not searched.",
+  },
+  sandWidthC: {
+    value: 10, kind: "empirical", min: 2, max: 25,
+    note: "How gradually bare ground turns from rock to sand as it warms.",
   },
 
   permanentSnowOffsetC: {
@@ -272,35 +372,260 @@ function distanceToSeaKm(isSea, width, height, radiusMetres) {
 
 const COARSE_WIDTH = 512;
 
+// Earth's sidereal day. Every spin in this model is measured against it, so
+// Earth comes out at exactly 1 and nothing has to be special-cased for it.
+export const REFERENCE_DAY_HOURS = 23.9345;
+
+// How many times the moisture field is swept. Each sweep carries moisture at
+// least one grid step along the wind, and because the sweeps alternate
+// direction in place they usually carry it much further. Measured against a
+// certainly-converged 128-sweep run over Earth: 32 sweeps still differ by up
+// to 0.018, 48 are identical to five decimals, and 64 costs 16 ms more than 48
+// out of about 700. So this is 48's answer with a margin, for a world whose
+// geography needs longer. Not a parameter: a convergence setting, not a
+// property of any world.
+const ADVECTION_SWEEPS = 64;
+
+// A parcel is never sampled more than this many cells away in longitude, which
+// only ever bites within a degree or two of a pole, where a grid step east is
+// a few hundred metres on the ground and the offset would otherwise run right
+// around the world.
+const MAX_OFFSET_CELLS = 6;
+
 function smoothstep(edge0, edge1, x) {
   if (edge1 === edge0) return x < edge0 ? 0 : 1;
   const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)));
   return t * t * (3 - 2 * t);
 }
 
-// The fields that vary smoothly -- how far inland a point is, and the
-// sea-level temperature at its latitude -- are worked out on a coarse grid,
-// because computing them per texture pixel would be sixteen times the work for
-// a result that is genuinely smooth. Altitude and the land/sea line are read
-// at full resolution instead, since both are sharp and both matter to the eye.
-export function computeClimate({ elevation, seaLevelMetres, axialTiltDegrees, radiusMetres, params }) {
+// The prevailing wind, per latitude row. Three things come out of the same
+// two lines, which is the reason for doing it this way rather than painting
+// wind belts on by hand:
+//
+//   * The overturning cells give a north-south flow that is equatorward in the
+//     tropics, poleward in mid-latitudes and equatorward again near the poles.
+//   * Coriolis turns that flow sideways -- right in the northern hemisphere,
+//     left in the southern -- by an angle that grows with latitude and with
+//     the spin, up to a quarter turn. So it is nearly nil at the equator and
+//     nearly complete in mid-latitudes, and it *reverses* when the rotation
+//     direction does, which is exactly what the user asked for. On Earth it
+//     produces easterly trades, westerlies and polar easterlies without any
+//     of the three being written down.
+//   * Where the flow converges the air rises and it rains; where it diverges
+//     the air sinks and the ground dries. The subtropical deserts and the
+//     polar deserts are the same fact seen twice.
+//
+// The cells also widen as the spin slows, by a fitted exponent: far enough and
+// a hemisphere ends up with a single cell reaching the pole, as Venus and
+// Titan do.
+export function windField(rows, dayLengthHours, rotationDirection, params) {
+  const direction = rotationDirection >= 0 ? 1 : -1;
+  const spin = (direction * REFERENCE_DAY_HOURS) / Math.max(Math.abs(dayLengthHours), 1e-3);
+  const cellEdgeDeg = Math.min(
+    90,
+    params.circulationCellEdgeDeg / Math.max(Math.abs(spin), 1e-3) ** params.cellRotationExponent
+  );
+
+  const east = new Float64Array(rows);
+  const north = new Float64Array(rows);
+  const convergence = new Float64Array(rows);
+  for (let y = 0; y < rows; y++) {
+    const latDeg = (0.5 - (y + 0.5) / rows) * 180;
+    const latRad = (latDeg * Math.PI) / 180;
+    const phase = (Math.PI * latDeg) / cellEdgeDeg;
+    const flow = -Math.sin(phase);
+    // The cells' flow, turned by the spin. A quarter turn is the limit: that
+    // is flow entirely along the parallels, which is what a fast rotator's
+    // mid-latitudes really do. tanh keeps it inside that limit and makes the
+    // turn grow smoothly with latitude and with the rotation rate.
+    const turn = (Math.PI / 2) * Math.tanh(params.coriolisStrength * spin * Math.sin(latRad));
+    east[y] = flow * Math.sin(turn);
+    north[y] = flow * Math.cos(turn);
+    convergence[y] = Math.cos(phase);
+  }
+  return { rows, spin, cellEdgeDeg, east, north, convergence };
+}
+
+// Moisture carried inland by that wind.
+//
+// The sea holds the field at 1; every land cell takes what its *upwind*
+// neighbour has, minus what the journey costs and minus what any climb takes
+// out of it. Sweeping that rule to convergence is what produces the wet
+// windward coast and the dry lee, and it is why this is an iteration rather
+// than a formula in the distance to the sea.
+//
+// It is cheap because the wind depends only on latitude: the upwind offset,
+// its bilinear weights and the along-flow decay are all constant across a row,
+// and the climb out of the upwind cell never changes at all. So everything is
+// worked out once into a per-cell transmission factor and each sweep is four
+// reads and three multiplies.
+function moistureField({
+  isSea, landHeight, distanceKm, width, height, radiusMetres, wind, params,
+}) {
+  const stepYKm = (Math.PI * radiusMetres) / height / 1000;
+  const decay = Math.exp(-stepYKm / params.advectionRangeKm);
+
+  const rowA = new Int32Array(height);
+  const rowB = new Int32Array(height);
+  const offX = new Int32Array(height);
+  const fx = new Float64Array(height);
+  const fy = new Float64Array(height);
+  const moving = new Uint8Array(height);
+
+  for (let y = 0; y < height; y++) {
+    const latRad = (0.5 - (y + 0.5) / height) * Math.PI;
+    const stepXKm =
+      ((2 * Math.PI * radiusMetres) / width / 1000) * Math.max(Math.cos(latRad), 1e-3);
+    const speed = Math.hypot(wind.east[y], wind.north[y]);
+    if (!(speed > 1e-6)) {
+      // Dead calm -- at the equator, at a cell boundary, or on a body with no
+      // spin worth the name. Nothing is carried; the still-air term below is
+      // all such a row gets.
+      moving[y] = 0;
+      rowA[y] = y * width;
+      rowB[y] = y * width;
+      continue;
+    }
+    moving[y] = 1;
+    // Upwind is one meridional grid step *against* the flow.
+    let dx = (-(wind.east[y] / speed) * stepYKm) / stepXKm;
+    dx = Math.min(MAX_OFFSET_CELLS, Math.max(-MAX_OFFSET_CELLS, dx));
+    const dy = wind.north[y] / speed; // y grows southward, so poleward flow reads back equatorward
+    const ix = Math.floor(dx);
+    const iy = Math.floor(dy);
+    offX[y] = ix;
+    fx[y] = dx - ix;
+    fy[y] = dy - iy;
+    rowA[y] = Math.min(height - 1, Math.max(0, y + iy)) * width;
+    rowB[y] = Math.min(height - 1, Math.max(0, y + iy + 1)) * width;
+  }
+
+  const sampleAt = (field, y, x) => {
+    const a = rowA[y];
+    const b = rowB[y];
+    const xa = (((x + offX[y]) % width) + width) % width;
+    const xb = (xa + 1) % width;
+    const tx = fx[y];
+    const ty = fy[y];
+    const top = field[a + xa] * (1 - tx) + field[a + xb] * tx;
+    const bottom = field[b + xa] * (1 - tx) + field[b + xb] * tx;
+    return top * (1 - ty) + bottom * ty;
+  };
+
+  // What survives one step: the along-flow decay, times the cost of any climb
+  // out of the upwind cell. Heights are measured above sea level and clamped
+  // there, so arriving from open water is not read as a several-kilometre
+  // ascent out of the seabed.
+  const transmission = new Float32Array(width * height);
+  for (let y = 0; y < height; y++) {
+    if (!moving[y]) continue;
+    const row = y * width;
+    for (let x = 0; x < width; x++) {
+      const rise = Math.max(0, landHeight[row + x] - sampleAt(landHeight, y, x));
+      transmission[row + x] = decay * Math.exp(-rise / params.orographicRiseM);
+    }
+  }
+
+  const moisture = new Float32Array(width * height);
+  for (let i = 0; i < moisture.length; i++) moisture[i] = isSea[i] ? 1 : 0;
+
+  // In place, alternating direction, so each sweep propagates a long way with
+  // the flow instead of only one cell.
+  for (let sweep = 0; sweep < ADVECTION_SWEEPS; sweep++) {
+    const back = sweep % 2 === 1;
+    for (let k = 0; k < height; k++) {
+      const y = back ? height - 1 - k : k;
+      const row = y * width;
+      for (let j = 0; j < width; j++) {
+        const x = back ? width - 1 - j : j;
+        const i = row + x;
+        if (isSea[i]) continue;
+        const carried = transmission[i] * sampleAt(moisture, y, x);
+        if (carried > moisture[i]) moisture[i] = Math.min(1, carried);
+      }
+    }
+  }
+
+  // Then the two things the wind alone cannot deliver: the moisture that gets
+  // inland without it, and the cells' own rising and sinking air.
+  for (let y = 0; y < height; y++) {
+    const row = y * width;
+    const convergence = wind.convergence[Math.min(wind.rows - 1, Math.floor((y * wind.rows) / height))];
+    const belt =
+      (1 - params.subtropicalDryStrength * Math.max(0, -convergence)) *
+      (1 + params.convergenceWetBonus * Math.max(0, convergence));
+    for (let x = 0; x < width; x++) {
+      const i = row + x;
+      const still = params.coastalMoisture * Math.exp(-distanceKm[i] / params.moistureDecayKm);
+      const wind_ = moisture[i];
+      const total = wind_ + params.stillAirMoisture * still * (1 - wind_);
+      moisture[i] = Math.min(1, Math.max(0, total * belt));
+    }
+  }
+  return moisture;
+}
+
+// Everything about a world that the search cannot change: where the land is,
+// how high it stands above the sea in force, and how far each point is from
+// open water. Split out because a parameter fit runs the model thousands of
+// times over one fixed geography, and the distance transform is by far the
+// most expensive thing here.
+export function computeGeography({ elevation, seaLevelMetres, radiusMetres }) {
   const width = COARSE_WIDTH;
   const height = width / 2;
 
   const isSea = new Uint8Array(width * height);
-  const xScale = elevation.width / width;
-  const yScale = elevation.height / height;
+  const landHeight = new Float32Array(width * height);
+  const xScale = Math.max(1, Math.round(elevation.width / width));
+  const yScale = Math.max(1, Math.round(elevation.height / height));
   for (let y = 0; y < height; y++) {
-    const sourceRow = Math.min(elevation.height - 1, Math.floor((y + 0.5) * yScale)) * elevation.width;
     for (let x = 0; x < width; x++) {
-      const sourceX = Math.min(elevation.width - 1, Math.floor((x + 0.5) * xScale));
-      isSea[y * width + x] = elevation.metres[sourceRow + sourceX] < seaLevelMetres ? 1 : 0;
+      // Averaged over the block this cell covers rather than sampled at its
+      // centre. A point sample of a 20 km raster can land in a valley and miss
+      // a whole mountain range, and a range that is not in the coarse grid
+      // casts no rain shadow -- which is most of what Stage 2 is for.
+      let total = 0;
+      let count = 0;
+      for (let sy = 0; sy < yScale; sy++) {
+        const row = Math.min(elevation.height - 1, y * yScale + sy) * elevation.width;
+        for (let sx = 0; sx < xScale; sx++) {
+          total += elevation.metres[row + Math.min(elevation.width - 1, x * xScale + sx)];
+          count++;
+        }
+      }
+      const metres = total / count;
+      isSea[y * width + x] = metres < seaLevelMetres ? 1 : 0;
+      landHeight[y * width + x] = Math.max(0, metres - seaLevelMetres);
     }
   }
 
-  const distanceKm = distanceToSeaKm(isSea, width, height, radiusMetres);
+  return {
+    width, height, isSea, landHeight, radiusMetres,
+    distanceKm: distanceToSeaKm(isSea, width, height, radiusMetres),
+  };
+}
 
-  return { width, height, distanceKm, ...temperatureProfile(axialTiltDegrees, params) };
+// The fields that vary smoothly -- the wind, how far inland a point is, how
+// much moisture reaches it -- are worked out on a coarse grid, because
+// computing them per texture pixel would be sixteen times the work for a
+// result that is genuinely smooth. Altitude and the land/sea line are read at
+// full resolution instead, since both are sharp and both matter to the eye.
+export function computeClimate({
+  elevation, seaLevelMetres, axialTiltDegrees, radiusMetres,
+  dayLengthHours, rotationDirection, params, geography,
+}) {
+  const geo = geography || computeGeography({ elevation, seaLevelMetres, radiusMetres });
+  const wind = windField(geo.height, dayLengthHours, rotationDirection, params);
+  const moisture = moistureField({
+    isSea: geo.isSea, landHeight: geo.landHeight, distanceKm: geo.distanceKm,
+    width: geo.width, height: geo.height, radiusMetres: geo.radiusMetres,
+    wind, params,
+  });
+
+  return {
+    width: geo.width, height: geo.height, distanceKm: geo.distanceKm, moisture, wind,
+    ...temperatureProfile(axialTiltDegrees, params),
+  };
 }
 
 // Sea-level temperature per latitude, as a function only of insolation. Kept
@@ -347,20 +672,20 @@ function bilinearCoarse(field, width, height, fx, fy) {
 }
 
 // One point's climate, written into `out` as
-// [vegetation, snow, seaIce, warmth, isSea]. Extracted so that the painter
+// [vegetation, snow, seaIce, sand, isSea]. Extracted so that the painter
 // and the scorer cannot drift apart: a search that optimises one formula
 // while the globe draws another would be worse than no search at all.
 export const SURFACE_VEGETATION = 0;
 export const SURFACE_SNOW = 1;
 export const SURFACE_SEA_ICE = 2;
-export const SURFACE_WARMTH = 3;
+export const SURFACE_SAND = 3;
 export const SURFACE_IS_SEA = 4;
 
-export function classifyPoint(out, metres, seaLevelMetres, seaLevelC, dryBelt, distanceKm, params) {
+export function classifyPoint(out, metres, seaLevelMetres, seaLevelC, moisture, params) {
   out[SURFACE_VEGETATION] = 0;
   out[SURFACE_SNOW] = 0;
   out[SURFACE_SEA_ICE] = 0;
-  out[SURFACE_WARMTH] = 0;
+  out[SURFACE_SAND] = 0;
 
   if (metres < seaLevelMetres) {
     out[SURFACE_IS_SEA] = 1;
@@ -376,8 +701,6 @@ export function classifyPoint(out, metres, seaLevelMetres, seaLevelC, dryBelt, d
 
   out[SURFACE_IS_SEA] = 0;
   const temperature = seaLevelC - params.lapseRateCPerKm * ((metres - seaLevelMetres) / 1000);
-  const moisture =
-    params.coastalMoisture * Math.exp(-distanceKm / params.moistureDecayKm) * (1 - dryBelt);
 
   const warmth = smoothstep(
     params.vegetationWarmthC - params.vegetationWarmthWidthC,
@@ -389,7 +712,11 @@ export function classifyPoint(out, metres, seaLevelMetres, seaLevelC, dryBelt, d
     params.vegetationMoistureHalf + params.vegetationMoistureWidth,
     moisture
   );
-  out[SURFACE_WARMTH] = warmth;
+  out[SURFACE_SAND] = smoothstep(
+    params.sandTemperatureC - params.sandWidthC,
+    params.sandTemperatureC + params.sandWidthC,
+    temperature
+  );
   out[SURFACE_VEGETATION] = warmth * wet;
 
   const snowLine = params.freezeTemperatureC + params.permanentSnowOffsetC;
@@ -397,17 +724,6 @@ export function classifyPoint(out, metres, seaLevelMetres, seaLevelC, dryBelt, d
     snowLine - params.snowBlendC, snowLine + params.snowBlendC, temperature
   );
   return out;
-}
-
-// The dry belt is a function of latitude alone, so callers evaluate it once
-// per row rather than per pixel.
-export function dryBeltAt(latDeg, params) {
-  return (
-    params.subtropicalDryStrength *
-    Math.exp(
-      -(((Math.abs(latDeg) - params.subtropicalDryLatitudeDeg) / params.subtropicalDryWidthDeg) ** 2)
-    )
-  );
 }
 
 function mix(out, a, b, t) {
@@ -432,20 +748,18 @@ export function paintClimate(data, elevation, climate, seaLevelMetres, params, p
   const surface = new Float64Array(5);
 
   for (let y = 0; y < height; y++) {
-    const latDeg = 90 - ((y + 0.5) / height) * 180;
     const seaLevelC = climate.seaLevelC[Math.min(climate.profileRows - 1, Math.floor(y * rowScale))];
-    const dryBelt = dryBeltAt(latDeg, params);
     const fy = (y + 0.5) * coarseY - 0.5;
     let i = y * width;
     let out = i * 4;
 
     for (let x = 0; x < width; x++, i++, out += 4) {
       const metres = elevation.metres[i];
-      const distanceKm = bilinearCoarse(
-        climate.distanceKm, climate.width, climate.height,
+      const moisture = bilinearCoarse(
+        climate.moisture, climate.width, climate.height,
         (x + 0.5) * coarseX - 0.5, fy
       );
-      classifyPoint(surface, metres, seaLevelMetres, seaLevelC, dryBelt, distanceKm, params);
+      classifyPoint(surface, metres, seaLevelMetres, seaLevelC, moisture, params);
 
       if (surface[SURFACE_IS_SEA]) {
         mix(colour, palette.shallowSea, palette.deepSea,
@@ -455,7 +769,7 @@ export function paintClimate(data, elevation, climate, seaLevelMetres, params, p
         // What bare ground looks like depends on how warm it is, not on how
         // dry it is: a hot desert is sand, a cold one is bare rock and gravel.
         // Keying this off moisture instead painted the Sahara grey.
-        mix(bare, palette.rock, palette.sand, surface[SURFACE_WARMTH]);
+        mix(bare, palette.rock, palette.sand, surface[SURFACE_SAND]);
         const vegetation = surface[SURFACE_VEGETATION];
         if (vegetation < 0.5) {
           mix(ground, bare, palette.dryGrass, vegetation * 2);

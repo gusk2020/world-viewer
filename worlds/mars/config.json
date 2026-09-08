@@ -5,7 +5,11 @@
     "radiusMetres": 3389500,
     "axialTiltDegrees": 25.19,
     "axialTiltNote": "Mars's obliquity to its orbital plane.",
-    "datum": "MOLA areoid: 0 m is Mars's equipotential surface, the standard Mars vertical datum."
+    "datum": "MOLA areoid: 0 m is Mars's equipotential surface, the standard Mars vertical datum.",
+    "dayLengthHours": 24.6229,
+    "dayLengthNote": "Mars's sidereal day.",
+    "rotationDirection": 1,
+    "rotationDirectionNote": "Prograde, like Earth's."
   },
   "display": {
     "verticalExaggeration": 10,

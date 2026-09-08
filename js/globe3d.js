@@ -303,6 +303,8 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
         seaLevelMetres,
         axialTiltDegrees: requireNumber(body.axialTiltDegrees, "body.axialTiltDegrees"),
         radiusMetres: body.radiusMetres,
+        dayLengthHours: requireNumber(body.dayLengthHours, "body.dayLengthHours"),
+        rotationDirection: requireNumber(body.rotationDirection, "body.rotationDirection"),
         params: climate.values,
       });
       paintClimate(
