@@ -95,8 +95,13 @@ continue.
   reported a real bug from the phone — a world switch that wedged the app
   until a reload — which was reproduced and fixed before Stage 4 began; see
   "The world-switch bug the user hit".
-- **V0.8 stage 4 (current, done — needs the user's Pixel 7a confirmation)**:
-  named parameter sets. See "V0.8 stage 4: named parameter sets".
+- **V0.8 stage 4 (done, user-confirmed on Pixel 7a)**: named parameter sets.
+  See "V0.8 stage 4: named parameter sets". The user then asked for the mean
+  temperature to be a **5–25 °C slider**, which replaced the three named sets
+  it shipped with — same section, "The mean temperature became a slider".
+- **V0.8 stage 5 (current, done — needs the user's Pixel 7a confirmation)**:
+  Earth's teacher data as a committed, regenerable repo artefact. See
+  "V0.8 stage 5: the teacher data".
 - **V0.9+**: cities, borders/territories, historical eras, and other
   過速世界-specific data. Several distinct features, not one version —
   treat each as its own sub-version. **Needs the user's own world-setting
@@ -2087,6 +2092,53 @@ in the tuning stage, not here.
 
 A repaint costs about the same as pressing 陸地塗り分け, ~1.2 s in the
 software renderer, since it is the same full pass over every pixel.
+
+### The mean temperature became a slider, and the three sets went with it
+
+The user asked for it directly: 平均気温 as a slider, **5–25 °C**, 1 °C steps
+if that was workable. It is, so it is 1 °C.
+
+**The three named sets that shipped with Stage 4 are gone from the config.**
+寒冷 and 温暖 were nothing but a different `meanTemperatureC`, so the slider
+reaches both and more; keeping the buttons would have been the same control
+twice on a panel the user has already twice said is too tall. The `climateSets`
+mechanism itself stays — Earth carries one set, `現在`, the 気候 row hides
+itself below two sets, and Stage 8's diverse candidates are what it is for.
+
+**The slider layers over the active set rather than replacing its value.**
+`meanTemperatureOverrideC` starts null, meaning "whatever the set says", so
+selecting a set that carries its own temperature is not silently overridden by
+a slider nobody touched; choosing a set clears the override and the slider
+follows it. While the override is null the painter passes the set's own values
+object, unchanged — which is why the approved picture is reproduced by exactly
+the code path it always used, and not merely by an equal-looking copy.
+
+**A 1 °C step is only usable because the repaint waits for the finger.** The
+readout follows `input`, the model re-runs on `change`. Dragging across the
+range otherwise means twenty full passes over two million pixels.
+
+Measured, in the app: 14 °C paints a **byte-identical** texture to the version
+before the slider existed (FNV hash `f28ab2b0`; the 岩 surface likewise
+`6dbc6304`), 15 °C differs, and 22 → 6 → 14 returns to `f28ab2b0`, so nothing
+accumulates. The panel is unchanged at **201 px in 標準, 233 px in 陸地塗り分け**,
+and Mars still has no row at 167 px.
+
+What the range actually does, over the whole globe (area-weighted, from the
+same model the globe paints with):
+
+| 平均気温 | 陸の緑 | 陸の雪 | 海氷 |
+| --- | --- | --- | --- |
+| 5 °C | 35.9% | 24.0% | 14.9% |
+| 14 °C | 44.5% | 12.4% | 1.7% |
+| 25 °C | 48.0% | 6.0% | 0.0% |
+
+Which restates Stage 4's honest limitation in one table: across the whole
+20-degree range the ice more than halves twice over while vegetation moves 12
+points. Temperature drives ice in this model; moisture drives vegetation.
+
+**One thing to check with the user**: they wrote "20度プラマイ15度=5度から25度".
+20±15 is 5–35, not 5–25. They named 5–25 explicitly, so that is what shipped,
+and the arithmetic was flagged back to them in case 35 was meant.
 
 ## The world-switch bug the user hit, and why it wedged the whole app
 

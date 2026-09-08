@@ -280,6 +280,12 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
 
   let surfaceMode = "standard";
   let climateSetId = climate.id;
+  // The mean temperature is a slider rather than one of the numbers buried in
+  // the set, because it is the one term with a plain physical meaning and it
+  // is what the whole app is ultimately for. It layers *over* whichever set is
+  // active: null means "whatever the set itself says", so a set that carries
+  // its own temperature is not silently overridden by a slider nobody moved.
+  let meanTemperatureOverrideC = null;
   let climateCanvas = null;
   let climateContext = null;
   let climatePixels = null;
@@ -311,8 +317,35 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
     if (!set || set.id === climateSetId) return climateSetId;
     climate = set;
     climateSetId = set.id;
+    // A new set states its own temperature; keeping the old slider position on
+    // top of it would hide that. The caller re-reads getMeanTemperature().
+    meanTemperatureOverrideC = null;
     if (surfaceMode === "climate") setSurfaceMode("climate");
     return climateSetId;
+  }
+
+  // The values actually painted with. Identical to the set's own object while
+  // the slider has not been moved, so the approved picture is reproduced by
+  // the same code path it always used.
+  function climateValues() {
+    if (meanTemperatureOverrideC === null) return climate.values;
+    return { ...climate.values, meanTemperatureC: meanTemperatureOverrideC };
+  }
+
+  function getMeanTemperature() {
+    return meanTemperatureOverrideC === null
+      ? climate.values.meanTemperatureC
+      : meanTemperatureOverrideC;
+  }
+
+  function setMeanTemperature(celsius) {
+    if (!supportsClimate) return getMeanTemperature();
+    if (!Number.isFinite(celsius)) return getMeanTemperature();
+    if (celsius === getMeanTemperature()) return celsius;
+    meanTemperatureOverrideC = celsius;
+    // Only the climate colouring reads it; 標準 and 岩 do not depend on it.
+    if (surfaceMode === "climate") setSurfaceMode("climate");
+    return celsius;
   }
 
   function setSurfaceMode(mode) {
@@ -330,6 +363,7 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
       // A local, not a field: the coarse grids are about a megabyte and are
       // read once, on the next line. Holding them for the life of the globe
       // bought nothing.
+      const values = climateValues();
       const fields = computeClimate({
         elevation,
         seaLevelMetres,
@@ -337,15 +371,15 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
         radiusMetres: body.radiusMetres,
         dayLengthHours: requireNumber(body.dayLengthHours, "body.dayLengthHours"),
         rotationDirection: requireNumber(body.rotationDirection, "body.rotationDirection"),
-        params: climate.values,
+        params: values,
       });
       paintClimate(
         climatePixels.data, elevation, fields, seaLevelMetres,
-        climate.values, climate.palette
+        values, climate.palette
       );
     } else {
       paintBareRock(
-        climatePixels.data, elevation, seaLevelMetres, climate.values, climate.palette
+        climatePixels.data, elevation, seaLevelMetres, climateValues(), climate.palette
       );
     }
     climateContext.putImageData(climatePixels, 0, 0);
@@ -572,6 +606,8 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
     climateSets: climateSets.sets.map((set) => ({ id: set.id, label: set.label, note: set.note })),
     getClimateSet: () => climateSetId,
     setClimateSet,
+    getMeanTemperature,
+    setMeanTemperature,
     setGraticule,
     getMetresPerPixel,
     dispose,

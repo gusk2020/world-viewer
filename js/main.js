@@ -22,6 +22,9 @@ async function main() {
   const surfaceRow = document.getElementById("surface-row");
   const climateSetRow = document.getElementById("climate-set-row");
   const climateSetButtons = document.getElementById("climate-set");
+  const climateTempRow = document.getElementById("climate-temp-row");
+  const climateTempSlider = document.getElementById("climate-temp-slider");
+  const climateTempReadout = document.getElementById("climate-temp-readout");
   const axisButton = document.getElementById("axis-toggle");
   const axisReadout = document.getElementById("axis-readout");
   const graticuleButton = document.getElementById("graticule-toggle");
@@ -132,8 +135,25 @@ async function main() {
     // has twice said the panel is too tall; a row that is only there when it
     // is useful costs nothing the rest of the time.
     const sets = globe3d && globe3d.supportsClimate ? globe3d.climateSets : [];
-    climateSetRow.hidden = surfaceMode !== "climate" || sets.length < 2;
+    const showsClimate = surfaceMode === "climate" && Boolean(globe3d && globe3d.supportsClimate);
+    climateSetRow.hidden = !showsClimate || sets.length < 2;
+    climateTempRow.hidden = !showsClimate;
   }
+
+  // Mean temperature. The readout follows the finger, but a repaint is a pass
+  // over every pixel of the raster -- roughly a second on a phone -- so the
+  // model is only re-run when the finger lifts ("change"), which is what makes
+  // a 1-degree step usable rather than 20 repaints per drag.
+  function applyClimateTempReadout() {
+    climateTempReadout.textContent = `${Number(climateTempSlider.value)}℃`;
+  }
+
+  climateTempSlider.addEventListener("input", applyClimateTempReadout);
+  climateTempSlider.addEventListener("change", () => {
+    applyClimateTempReadout();
+    const celsius = Number(climateTempSlider.value);
+    requestAnimationFrame(() => globe3d.setMeanTemperature(celsius));
+  });
 
   // Rebuilt per world, because each one carries its own sets.
   function buildClimateSetButtons() {
@@ -150,11 +170,22 @@ async function main() {
         applyClimateSetButtons(set.id);
         // Same as the other repaint buttons: let the pressed state paint
         // before the pass over every pixel blocks the thread.
-        requestAnimationFrame(() => globe3d.setClimateSet(set.id));
+        requestAnimationFrame(() => {
+          globe3d.setClimateSet(set.id);
+          syncClimateTemp();
+        });
       });
       climateSetButtons.appendChild(button);
     });
     applyClimateSetButtons(globe3d.getClimateSet());
+    syncClimateTemp();
+  }
+
+  // The slider shows whatever the active set says until the user moves it.
+  function syncClimateTemp() {
+    if (!globe3d.supportsClimate) return;
+    climateTempSlider.value = String(Math.round(globe3d.getMeanTemperature()));
+    applyClimateTempReadout();
   }
 
   function applyClimateSetButtons(id) {
