@@ -724,7 +724,28 @@ function moistureField({
   monsoon = 0, seasonWeight = null,
 }) {
   const stepYKm = (Math.PI * radiusMetres) / height / 1000;
-  const decay = Math.exp(-stepYKm / params.advectionRangeKm);
+
+  // Stage 7.5-B. How far moisture rides the wind, per row and per season.
+  //
+  // **This is attached to the wind-carried moisture on purpose, and the first
+  // version had it on the isotropic term instead -- which was the whole
+  // difficulty.** Measured then: every setting that lifted Indochina from 30%
+  // vegetated toward the teacher's 78% lifted the Sahara from 11% to 88% with
+  // it, because an isotropic term reaches a desert exactly as readily as a
+  // monsoon coast and latitude alone cannot tell the two apart. What tells
+  // them apart is *where the sea is relative to the seasonal wind*, and only
+  // the advection sweep knows that. So the warm season's converging air
+  // carries moisture further inland and the cold season's subsiding air
+  // carries it less far, and a coast whose summer wind comes off a warm sea
+  // gets the benefit while a desert whose summer wind comes off a continent
+  // does not.
+  const rowDecay = new Float64Array(height);
+  for (let y = 0; y < height; y++) {
+    const reach = seasonWeight
+      ? Math.max(0.05, 1 + params.monsoonStrength * monsoon * seasonWeight[y])
+      : 1;
+    rowDecay[y] = Math.exp(-stepYKm / (params.advectionRangeKm * reach));
+  }
 
   const rowA = new Int32Array(height);
   const rowB = new Int32Array(height);
@@ -788,7 +809,7 @@ function moistureField({
     const a = rowA[y], b = rowB[y], ox = offX[y], tx = fx[y], ty = fy[y];
     for (let x = 0; x < width; x++) {
       const rise = Math.max(0, landHeight[row + x] - sampleRow(landHeight, a, b, ox, tx, ty, x));
-      transmission[row + x] = decay * Math.exp(-rise / params.orographicRiseM);
+      transmission[row + x] = rowDecay[y] * Math.exp(-rise / params.orographicRiseM);
     }
   }
 
@@ -889,14 +910,11 @@ function moistureField({
     // season, and it scales the inflow that reaches inland -- so a coast at a
     // strongly seasonal latitude is far wetter in its summer than its winter,
     // and a coast at the equator, or on a world with no tilt, is neither.
-    const inflow = seasonWeight
-      ? Math.max(0, 1 + params.monsoonStrength * monsoon * seasonWeight[y])
-      : 1;
     for (let x = 0; x < width; x++) {
       const i = row + x;
       const wind_ = moisture[i];
       const total =
-        wind_ + params.stillAirMoisture * params.coastalMoisture * still[i] * inflow * (1 - wind_);
+        wind_ + params.stillAirMoisture * params.coastalMoisture * still[i] * (1 - wind_);
       moisture[i] = Math.min(1, Math.max(0, total * belt * relief[i]));
     }
   }
