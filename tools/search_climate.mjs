@@ -21,6 +21,10 @@
 //     --out FILE     checkpoint path (default ./search-<world>.json)
 //     --resume       continue from that checkpoint instead of starting over
 //     --screen       measure each parameter's influence and stop (see below)
+//     --pin NAME=V   hold a parameter at V and search the rest. For asking
+//                    what a mechanism costs when the search is not allowed to
+//                    switch it off -- which is the only way to tell "this does
+//                    not help" from "the objective cannot see it".
 //     --merge A B .. combine finished checkpoints and print the top sets
 //
 // The algorithm is a (mu + lambda) evolutionary search with per-parameter step
@@ -72,13 +76,14 @@ function makeRandom(seed) {
 function parseArgs(argv) {
   const out = {
     world: "worlds/kasoku-sekai", trials: 10000, hours: 6, patience: 500,
-    step: 2, seed: 1, keep: 20, out: null, resume: false, screen: false, merge: [],
+    step: 2, seed: 1, keep: 20, out: null, resume: false, screen: false, merge: [], pin: {},
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--resume") out.resume = true;
     else if (a === "--screen") out.screen = true;
     else if (a === "--merge") { while (i + 1 < argv.length && !argv[i + 1].startsWith("--")) out.merge.push(argv[++i]); }
+    else if (a === "--pin") { const [k, v] = argv[++i].split("="); out.pin[k] = Number(v); }
     else if (a === "--trials") out.trials = Number(argv[++i]);
     else if (a === "--hours") out.hours = Number(argv[++i]);
     else if (a === "--patience") out.patience = Number(argv[++i]);
@@ -121,7 +126,7 @@ function loadWorld(worldDir) {
 // One evaluation. Everything the search does goes through here, so the thing
 // being optimised is provably the thing the app draws and the phone reports.
 // ---------------------------------------------------------------------------
-function makeEvaluator(world, step) {
+function makeEvaluator(world, step, pinnedValues = {}) {
   const { config, elevation, teacher, geography } = world;
   const base = resolveClimateSets(config).sets[0];
   const body = config.body;
@@ -131,7 +136,7 @@ function makeEvaluator(world, step) {
     get count() { return count; },
     run(overrides) {
       count++;
-      const params = { ...base.values, ...overrides };
+      const params = { ...base.values, ...overrides, ...pinnedValues };
       const climate = computeClimate({
         elevation, seaLevelMetres: 0,
         axialTiltDegrees: body.axialTiltDegrees, radiusMetres: body.radiusMetres,
@@ -190,7 +195,11 @@ function screen(world, evaluate) {
 // The search itself.
 // ---------------------------------------------------------------------------
 function search(world, evaluate, args) {
-  const params = searchableParameters();
+  const pinned = args.pin || {};
+  const params = searchableParameters().filter((p) => !(p.name in pinned));
+  if (Object.keys(pinned).length) {
+    console.log(`pinned: ${Object.entries(pinned).map(([k, v]) => `${k}=${v}`).join(", ")}`);
+  }
   const random = makeRandom(args.seed);
   const outPath = args.out || path.join(process.cwd(), `search-${world.config.id}.json`);
 
@@ -429,7 +438,7 @@ function main() {
   if (args.merge.length) { merge(args.merge, args.keep); return; }
 
   const world = loadWorld(path.join(REPO, args.world));
-  const evaluate = makeEvaluator(world, args.step);
+  const evaluate = makeEvaluator(world, args.step, args.pin);
   if (args.screen) { screen(world, evaluate); return; }
   search(world, evaluate, args);
 }
