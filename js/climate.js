@@ -141,6 +141,56 @@ export const CLIMATE_PARAMETERS = {
       "it is nil at the equator, nil on a world with no tilt, and nil if the " +
       "sea and the land respond alike.",
   },
+  // ---- Longitude-dependent ITCZ (this experiment) -------------------------
+  //
+  // Everything above this point makes the atmosphere a function of latitude
+  // alone: at a given latitude the whole planet gets the same cell structure,
+  // the same wind and the same rain belt. The diagnosis after Stage 7.5
+  // measured what that costs -- a table that memorises the teacher by
+  // latitude alone scores 62.86% where the whole model scores 63.37%, and
+  // 70.6% of what the teacher varies by within one latitude band is variation
+  // this model cannot express at all.
+  //
+  // These four give the rain belt a longitude, from one general principle and
+  // no geography: **the belt is drawn toward the warmer surface, and land
+  // changes temperature with the seasons far more than sea does.** So a
+  // longitude backed by a lot of seasonally-swinging land pulls the belt into
+  // its own summer hemisphere and pushes it away in winter; a longitude that
+  // is all ocean does neither and keeps the zonal answer. Longitude itself is
+  // never an input -- only what happens to be at that longitude.
+  itczLandPullDeg: {
+    value: 0, kind: "empirical", min: 0, max: 30,
+    note:
+      "How far, in degrees of latitude, a longitude entirely backed by " +
+      "seasonally swinging land pulls the rain belt toward its own summer " +
+      "hemisphere. 0 switches the whole mechanism off and reproduces the " +
+      "purely zonal model exactly, which is the default so that every set " +
+      "saved before this existed keeps drawing what it always drew.",
+  },
+  itczPullRangeDeg: {
+    value: 30, kind: "empirical", min: 5, max: 60,
+    note:
+      "How far from the belt's zonal position land is still felt, as the " +
+      "half-width of a Gaussian window in degrees of latitude. Wide enough " +
+      "and a whole continent counts; narrow enough and only the coast does.",
+  },
+  itczSmoothDeg: {
+    value: 20, kind: "empirical", min: 2, max: 60,
+    note:
+      "How far the belt's displacement is smoothed along longitude. The " +
+      "atmosphere cannot put a step in the rain belt at a coastline, and a " +
+      "raw land count does exactly that, so this is a physical smoothing " +
+      "rather than a cosmetic one. Wraps at the antimeridian.",
+  },
+  itczElevationPullM: {
+    value: 6000, kind: "empirical", min: 1000, max: 40000,
+    note:
+      "How much high ground adds to that pull, as the height at which land " +
+      "counts double. Thin air over a plateau heats and cools faster than " +
+      "the lowland beside it, so a high continent swings the belt further. " +
+      "At the top of its range this is effectively off.",
+  },
+
   growingSeasonWeight: {
     value: 0.7, kind: "empirical", min: 0, max: 1,
     note:
@@ -586,6 +636,11 @@ export function windField(rows, dayLengthHours, rotationDirection, params, subso
   const east = new Float64Array(rows);
   const north = new Float64Array(rows);
   const convergence = new Float64Array(rows);
+  // How far this row sits from the belt's own zonal position, in degrees.
+  // Carried out so the longitude term can displace it per column without
+  // having to re-derive the sub-solar latitude, and so that a displacement of
+  // zero reproduces this function's own numbers exactly.
+  const offsetDeg = new Float64Array(rows);
   for (let y = 0; y < rows; y++) {
     const latDeg = (0.5 - (y + 0.5) / rows) * 180;
     const latRad = (latDeg * Math.PI) / 180;
@@ -595,6 +650,7 @@ export function windField(rows, dayLengthHours, rotationDirection, params, subso
     // summer therefore has its rain belt further poleward than the annual
     // mean ever puts it -- which is the largest single reason an annual-mean
     // model cannot make a monsoon. Zero reproduces the annual field exactly.
+    offsetDeg[y] = latDeg - subsolarDeg;
     const phase = (Math.PI * (latDeg - subsolarDeg)) / cellEdgeDeg;
     const flow = -Math.sin(phase);
     // The cells' flow, turned by the spin. A quarter turn is the limit: that
@@ -606,7 +662,112 @@ export function windField(rows, dayLengthHours, rotationDirection, params, subso
     north[y] = flow * Math.cos(turn);
     convergence[y] = Math.cos(phase);
   }
-  return { rows, spin, cellEdgeDeg, east, north, convergence };
+  return { rows, spin, cellEdgeDeg, east, north, convergence, offsetDeg };
+}
+
+// A circular Gaussian blur along longitude. Separate because the belt's
+// displacement has to be continuous across the antimeridian -- the globe has
+// no edge there, and a filter that treated the array as a line would leave a
+// seam down the Pacific exactly like the texture one the cube-sphere had to
+// fix.
+function smoothCircular(values, width, sigmaColumns) {
+  const sigma = Math.max(0.5, sigmaColumns);
+  const radius = Math.min(Math.floor(width / 2), Math.ceil(sigma * 3));
+  const kernel = new Float64Array(radius * 2 + 1);
+  let total = 0;
+  for (let k = -radius; k <= radius; k++) {
+    const w = Math.exp(-(k * k) / (2 * sigma * sigma));
+    kernel[k + radius] = w;
+    total += w;
+  }
+  const out = new Float64Array(width);
+  for (let x = 0; x < width; x++) {
+    let sum = 0;
+    for (let k = -radius; k <= radius; k++) {
+      sum += kernel[k + radius] * values[(((x + k) % width) + width) % width];
+    }
+    out[x] = sum / total;
+  }
+  return out;
+}
+
+// The seasonal swing this mechanism is measured against, in degrees. It is a
+// unit, not a fitted number: the displacement is expressed as a fraction of
+// "a thoroughly seasonal surface", and this says how large that is. Same role
+// REFERENCE_DAY_HOURS plays for the spin, and picked the same way -- from a
+// real mid-latitude land swing, so Earth lands in the middle of the curve
+// rather than at either end of it.
+const ITCZ_SEASON_REFERENCE_C = 20;
+
+/**
+ * How far the rain belt is displaced from its zonal position, per longitude.
+ *
+ * One principle, applied without any knowledge of where anything is: **the
+ * belt is drawn toward the warmer surface, and only land changes temperature
+ * with the seasons.** So for each column, weigh the land near the belt --
+ * more heavily the closer it is, the more that latitude's own temperature
+ * swings through the year, and the higher it stands -- and pull the belt that
+ * many degrees into whichever hemisphere is having its summer.
+ *
+ * Three properties fall out of writing it this way rather than as a table:
+ *
+ *   * A longitude with no land does not move at all, so an ocean world, and
+ *     the mid-Pacific, keep the zonal answer.
+ *   * A world with no axial tilt has no seasonal swing anywhere, so the whole
+ *     term is zero and the model reduces exactly to what it was.
+ *   * Nothing here reads a longitude, a coordinate range or a place. Move the
+ *     continents and the belt moves with them.
+ */
+export function itczShiftByColumn({
+  isSea, landHeight, width, height, lat0Deg, seasonSign, seasonWeight, maxSwingC, params,
+}) {
+  const out = new Float64Array(width);
+  const amplitude = params.itczLandPullDeg;
+  if (!(amplitude > 0)) return out; // switched off: exactly the zonal model
+
+  // How seasonal this world is at all, saturating -- a world that swings 40 C
+  // is not twice the monsoon of one that swings 20.
+  const season = Math.tanh(Math.max(0, maxSwingC) / ITCZ_SEASON_REFERENCE_C);
+  if (!(season > 0)) return out;
+
+  const range = Math.max(1, params.itczPullRangeDeg);
+  const rowWeight = new Float64Array(height);
+  let norm = 0;
+  for (let y = 0; y < height; y++) {
+    const latDeg = (0.5 - (y + 0.5) / height) * 180;
+    const d = (latDeg - lat0Deg) / range;
+    if (Math.abs(d) > 3) continue; // outside the window the weight is under 1e-4
+    const near = Math.exp(-d * d);
+    // Multiplied by this row's own share of the seasonal swing, so tropical
+    // land -- which barely has a season -- pulls far less than the
+    // mid-latitude interior that actually drives a monsoon. The same weight
+    // is what the total is divided by, so what comes out is the *land
+    // fraction* of the window that can actually heat and cool: 1 for a
+    // longitude backed entirely by seasonal land, 0 for open ocean. How
+    // seasonal the world is at all is already carried by `season` above, and
+    // counting it twice is what made the first version of this term far too
+    // weak to measure.
+    rowWeight[y] = near * (seasonWeight ? seasonWeight[y] : 0);
+    norm += rowWeight[y];
+  }
+  if (!(norm > 0)) return out;
+
+  const raw = new Float64Array(width);
+  for (let y = 0; y < height; y++) {
+    const w = rowWeight[y];
+    if (!(w > 0)) continue;
+    const row = y * width;
+    for (let x = 0; x < width; x++) {
+      if (isSea[row + x]) continue;
+      raw[x] += w * (1 + landHeight[row + x] / params.itczElevationPullM);
+    }
+  }
+  for (let x = 0; x < width; x++) raw[x] = Math.min(2, raw[x] / norm);
+
+  const smooth = smoothCircular(raw, width, (params.itczSmoothDeg * width) / 360);
+  const scale = amplitude * season * (seasonSign >= 0 ? 1 : -1);
+  for (let x = 0; x < width; x++) out[x] = scale * smooth[x];
+  return out;
 }
 
 // How much moisture a sea gives up, per latitude row. A sea's temperature is
@@ -721,7 +882,7 @@ const RAIN_SHADOW_STEPS = 8;
 
 function moistureField({
   isSea, landHeight, width, height, radiusMetres, wind, evaporation, still, params,
-  monsoon = 0, seasonWeight = null,
+  monsoon = 0, seasonWeight = null, shift = null,
 }) {
   const stepYKm = (Math.PI * radiusMetres) / height / 1000;
 
@@ -757,33 +918,102 @@ function moistureField({
   // walk several cells against the wind instead of only sampling one.
   const stepRowY = new Int32Array(height);
 
-  for (let y = 0; y < height; y++) {
+  // One row's upwind step, from a wind vector. Written once and called for
+  // both the row's own direction and its reverse, because a longitude-shifted
+  // belt puts some columns of a row on the other side of it -- which is the
+  // wind reversing, and is most of what a monsoon is.
+  const fillDirection = (set, y, eastV, northV) => {
     const latRad = (0.5 - (y + 0.5) / height) * Math.PI;
     const stepXKm =
       ((2 * Math.PI * radiusMetres) / width / 1000) * Math.max(Math.cos(latRad), 1e-3);
-    const speed = Math.hypot(wind.east[y], wind.north[y]);
+    const speed = Math.hypot(eastV, northV);
     if (!(speed > 1e-6)) {
       // Dead calm -- at the equator, at a cell boundary, or on a body with no
       // spin worth the name. Nothing is carried; the still-air term below is
       // all such a row gets.
-      moving[y] = 0;
-      rowA[y] = y * width;
-      rowB[y] = y * width;
-      continue;
+      set.moving[y] = 0;
+      set.rowA[y] = y * width;
+      set.rowB[y] = y * width;
+      return;
     }
-    moving[y] = 1;
+    set.moving[y] = 1;
     // Upwind is one meridional grid step *against* the flow.
-    let dx = (-(wind.east[y] / speed) * stepYKm) / stepXKm;
+    let dx = (-(eastV / speed) * stepYKm) / stepXKm;
     dx = Math.min(MAX_OFFSET_CELLS, Math.max(-MAX_OFFSET_CELLS, dx));
-    const dy = wind.north[y] / speed; // y grows southward, so poleward flow reads back equatorward
+    const dy = northV / speed; // y grows southward, so poleward flow reads back equatorward
     const ix = Math.floor(dx);
     const iy = Math.floor(dy);
-    offX[y] = ix;
-    stepRowY[y] = iy;
-    fx[y] = dx - ix;
-    fy[y] = dy - iy;
-    rowA[y] = Math.min(height - 1, Math.max(0, y + iy)) * width;
-    rowB[y] = Math.min(height - 1, Math.max(0, y + iy + 1)) * width;
+    set.offX[y] = ix;
+    set.stepRowY[y] = iy;
+    set.fx[y] = dx - ix;
+    set.fy[y] = dy - iy;
+    set.rowA[y] = Math.min(height - 1, Math.max(0, y + iy)) * width;
+    set.rowB[y] = Math.min(height - 1, Math.max(0, y + iy + 1)) * width;
+  };
+
+  const base = { rowA, rowB, offX, fx, fy, moving, stepRowY };
+  for (let y = 0; y < height; y++) fillDirection(base, y, wind.east[y], wind.north[y]);
+
+  // The longitude-dependent belt. `shift` says how far the rain belt is
+  // displaced at each column (see itczShiftByColumn); everything below is the
+  // consequence of that displacement, and with no shift none of it is built
+  // and every loop takes exactly the path it took before this existed.
+  //
+  // Two things follow from moving the belt at one longitude and not another:
+  // the rising and sinking air moves with it, and -- where the belt crosses a
+  // row -- the low-level flow at that column is now on the other side of it
+  // and therefore blows the other way. The second is the one that matters:
+  // it is what turns a trade wind blowing off a continent into a wind blowing
+  // off the sea, which is a monsoon.
+  let sel = null; // per cell: 0 = this row's own direction, 1 = the reverse
+  let beltCell = null; // per cell: the local convergence
+  let rev = null;
+  if (shift) {
+    const cellEdge = wind.cellEdgeDeg;
+    rev = {
+      rowA: new Int32Array(height), rowB: new Int32Array(height),
+      offX: new Int32Array(height), fx: new Float64Array(height),
+      fy: new Float64Array(height), moving: new Uint8Array(height),
+      stepRowY: new Int32Array(height),
+    };
+    for (let y = 0; y < height; y++) fillDirection(rev, y, -wind.east[y], -wind.north[y]);
+    sel = new Uint8Array(width * height);
+    beltCell = new Float32Array(width * height);
+    for (let y = 0; y < height; y++) {
+      const row = y * width;
+      // Northern rows carry their own hemisphere's summer and southern rows
+      // theirs, exactly as the wind field itself is assembled in
+      // computeClimate -- the two must agree or the belt and the wind would
+      // be describing different times of year.
+      const shiftRow = y < height / 2 ? shift.north : shift.south;
+      const offset = wind.offsetDeg[y];
+      const flowBase = -Math.sin((Math.PI * offset) / cellEdge);
+      for (let x = 0; x < width; x++) {
+        // The displacement is applied to the rising branch and fades to
+        // nothing by the cell's own edge, rather than sliding the whole cell
+        // bodily poleward.
+        //
+        // Measured, and this is why it is here: with the whole cell moving,
+        // pushing the belt 14 degrees north over Africa took the subsiding
+        // branch from 28 to 42 degrees with it and doubled the Sahara's
+        // summer moisture (0.275 to 0.570) -- the model wetting the largest
+        // desert on the planet, for the same reason Stage 7.5's first
+        // monsoon attempt did. A real overturning cell does not work that
+        // way: its rising branch migrates a long way with the sun while its
+        // poleward edge, set by the rotation, barely moves. Tapering by
+        // cos^2 across the cell reproduces that with no new parameter, and
+        // the clamp below keeps the map from latitude to phase monotonic
+        // (beyond 2*edge/pi the taper would fold two belts into one row).
+        const limit = (2 * cellEdge) / Math.PI;
+        const raw = Math.max(-limit, Math.min(limit, shiftRow[x]));
+        const t = Math.abs(offset) >= cellEdge
+          ? 0
+          : Math.cos((Math.PI * offset) / (2 * cellEdge)) ** 2;
+        const phase = (Math.PI * (offset - raw * t)) / cellEdge;
+        beltCell[row + x] = Math.cos(phase);
+        sel[row + x] = -Math.sin(phase) * flowBase < 0 ? 1 : 0;
+      }
+    }
   }
 
   // The upwind sample. Everything except `x` is constant across a row, so the
@@ -804,11 +1034,24 @@ function moistureField({
   // ascent out of the seabed.
   const transmission = new Float32Array(width * height);
   for (let y = 0; y < height; y++) {
-    if (!moving[y]) continue;
     const row = y * width;
-    const a = rowA[y], b = rowB[y], ox = offX[y], tx = fx[y], ty = fy[y];
+    if (!sel) {
+      if (!moving[y]) continue;
+      const a = rowA[y], b = rowB[y], ox = offX[y], tx = fx[y], ty = fy[y];
+      for (let x = 0; x < width; x++) {
+        const rise = Math.max(0, landHeight[row + x] - sampleRow(landHeight, a, b, ox, tx, ty, x));
+        transmission[row + x] = rowDecay[y] * Math.exp(-rise / params.orographicRiseM);
+      }
+      continue;
+    }
     for (let x = 0; x < width; x++) {
-      const rise = Math.max(0, landHeight[row + x] - sampleRow(landHeight, a, b, ox, tx, ty, x));
+      const set = sel[row + x] ? rev : base;
+      if (!set.moving[y]) continue;
+      const rise = Math.max(
+        0,
+        landHeight[row + x]
+          - sampleRow(landHeight, set.rowA[y], set.rowB[y], set.offX[y], set.fx[y], set.fy[y], x)
+      );
       transmission[row + x] = rowDecay[y] * Math.exp(-rise / params.orographicRiseM);
     }
   }
@@ -827,29 +1070,63 @@ function moistureField({
   // It is affordable for exactly the reason the sweep is: the wind is constant
   // across a row, so every offset here is a per-row constant and the scan is
   // eight reads per cell rather than a search.
-  const relief = new Float32Array(width * height);
-  for (let y = 0; y < height; y++) {
-    const row = y * width;
-    if (!moving[y]) {
-      for (let x = 0; x < width; x++) relief[row + x] = 1;
-      continue;
-    }
-    const a = rowA[y], b = rowB[y], ox = offX[y], tx = fx[y], ty = fy[y];
-    // The path upwind is the same for every cell in the row, so its row and
-    // column offsets are worked out once here rather than per cell.
+  // The path upwind is the same for every cell in a row that shares its wind
+  // direction, so its row and column offsets are worked out once per row per
+  // direction rather than per cell.
+  const walkPath = (set, y) => {
     const pathRow = new Int32Array(RAIN_SHADOW_STEPS);
     const pathCol = new Int32Array(RAIN_SHADOW_STEPS);
     let cursorY = y;
     let cursorX = 0;
     for (let step = 0; step < RAIN_SHADOW_STEPS; step++) {
-      cursorX += offX[cursorY];
-      cursorY = Math.min(height - 1, Math.max(0, cursorY + stepRowY[cursorY]));
+      cursorX += set.offX[cursorY];
+      cursorY = Math.min(height - 1, Math.max(0, cursorY + set.stepRowY[cursorY]));
       pathRow[step] = cursorY * width;
       pathCol[step] = cursorX;
     }
+    return { pathRow, pathCol };
+  };
+
+  const relief = new Float32Array(width * height);
+  for (let y = 0; y < height; y++) {
+    const row = y * width;
+    if (!sel) {
+      if (!moving[y]) {
+        for (let x = 0; x < width; x++) relief[row + x] = 1;
+        continue;
+      }
+      const a = rowA[y], b = rowB[y], ox = offX[y], tx = fx[y], ty = fy[y];
+      const { pathRow, pathCol } = walkPath(base, y);
+      for (let x = 0; x < width; x++) {
+        const i = row + x;
+        if (isSea[i]) { relief[i] = 1; continue; }
+        const here = landHeight[i];
+        let crest = here;
+        for (let step = 0; step < RAIN_SHADOW_STEPS; step++) {
+          const px = (((x + pathCol[step]) % width) + width) % width;
+          const h = landHeight[pathRow[step] + px];
+          if (h > crest) crest = h;
+        }
+        const barrier = crest - here;
+        const lift = Math.max(0, here - sampleRow(landHeight, a, b, ox, tx, ty, x));
+        // Behind a range: dried by how far this ground sits below the crest the
+        // air crossed. On the slope that forced the air up: wetted by the climb.
+        const shadow = Math.exp(-barrier / params.rainShadowM);
+        const windward = 2 - Math.exp(-lift / params.orographicLiftM);
+        relief[i] = shadow * windward;
+      }
+      continue;
+    }
+    // Two possible upwind paths per row now, one per direction; a cell takes
+    // the one its own side of the belt puts it on.
+    const paths = [walkPath(base, y), walkPath(rev, y)];
     for (let x = 0; x < width; x++) {
       const i = row + x;
       if (isSea[i]) { relief[i] = 1; continue; }
+      const which = sel[i];
+      const set = which ? rev : base;
+      if (!set.moving[y]) { relief[i] = 1; continue; }
+      const { pathRow, pathCol } = paths[which];
       const here = landHeight[i];
       let crest = here;
       for (let step = 0; step < RAIN_SHADOW_STEPS; step++) {
@@ -858,9 +1135,10 @@ function moistureField({
         if (h > crest) crest = h;
       }
       const barrier = crest - here;
-      const lift = Math.max(0, here - sampleRow(landHeight, a, b, ox, tx, ty, x));
-      // Behind a range: dried by how far this ground sits below the crest the
-      // air crossed. On the slope that forced the air up: wetted by the climb.
+      const lift = Math.max(
+        0,
+        here - sampleRow(landHeight, set.rowA[y], set.rowB[y], set.offX[y], set.fx[y], set.fy[y], x)
+      );
       const shadow = Math.exp(-barrier / params.rainShadowM);
       const windward = 2 - Math.exp(-lift / params.orographicLiftM);
       relief[i] = shadow * windward;
@@ -881,14 +1159,27 @@ function moistureField({
       const y = back ? height - 1 - k : k;
       // A row the wind does not reach has a transmission of zero everywhere,
       // so it can be skipped outright rather than multiplied by nothing.
-      if (!moving[y]) continue;
       const row = y * width;
-      const a = rowA[y], b = rowB[y], ox = offX[y], tx = fx[y], ty = fy[y];
+      if (!sel) {
+        if (!moving[y]) continue;
+        const a = rowA[y], b = rowB[y], ox = offX[y], tx = fx[y], ty = fy[y];
+        for (let j = 0; j < width; j++) {
+          const x = back ? width - 1 - j : j;
+          const i = row + x;
+          if (isSea[i]) continue;
+          const carried = transmission[i] * sampleRow(moisture, a, b, ox, tx, ty, x);
+          if (carried > moisture[i]) moisture[i] = Math.min(1, carried);
+        }
+        continue;
+      }
       for (let j = 0; j < width; j++) {
         const x = back ? width - 1 - j : j;
         const i = row + x;
         if (isSea[i]) continue;
-        const carried = transmission[i] * sampleRow(moisture, a, b, ox, tx, ty, x);
+        const set = sel[i] ? rev : base;
+        if (!set.moving[y]) continue;
+        const carried = transmission[i]
+          * sampleRow(moisture, set.rowA[y], set.rowB[y], set.offX[y], set.fx[y], set.fy[y], x);
         if (carried > moisture[i]) moisture[i] = Math.min(1, carried);
       }
     }
@@ -904,6 +1195,14 @@ function moistureField({
     const belt =
       (1 - params.subtropicalDryStrength * Math.max(0, -convergence)) *
       (1 + params.convergenceWetBonus * Math.max(0, convergence));
+    // With a longitude-dependent belt the rising and sinking air is no longer
+    // the same at every column of a row, so this is worked out per cell from
+    // the local convergence instead of once per row.
+    const beltAt = (i) => {
+      const c = beltCell[i];
+      return (1 - params.subtropicalDryStrength * Math.max(0, -c)) *
+        (1 + params.convergenceWetBonus * Math.max(0, c));
+    };
     // Stage 7.5-B, the other half of the monsoon: the land/sea heating
     // contrast draws air off the sea in the warm season and pushes it back out
     // in the cold one. `monsoon` is that contrast for this row, signed by the
@@ -915,7 +1214,7 @@ function moistureField({
       const wind_ = moisture[i];
       const total =
         wind_ + params.stillAirMoisture * params.coastalMoisture * still[i] * (1 - wind_);
-      moisture[i] = Math.min(1, Math.max(0, total * belt * relief[i]));
+      moisture[i] = Math.min(1, Math.max(0, total * (sel ? beltAt(i) : belt) * relief[i]));
     }
   }
   return moisture;
@@ -1011,13 +1310,36 @@ export function computeClimate({
       wind.east[y] = flipped.east[y];
       wind.north[y] = flipped.north[y];
       wind.convergence[y] = flipped.convergence[y];
+      wind.offsetDeg[y] = flipped.offsetDeg[y];
     }
+    // Where the belt sits at each longitude, once per hemisphere for the same
+    // reason the wind is assembled per hemisphere: in this composite field a
+    // northern row is in the northern summer while a southern row is in the
+    // southern one, and land pulls the belt toward whichever of the two is
+    // having it. Zero-cost when the mechanism is off -- itczShiftByColumn
+    // returns a zero array and moistureField then takes its original path.
+    const shift = params.itczLandPullDeg > 0
+      ? {
+        north: itczShiftByColumn({
+          isSea: geo.isSea, landHeight: geo.landHeight,
+          width: geo.width, height: geo.height,
+          lat0Deg: sign * subsolar, seasonSign: sign, seasonWeight,
+          maxSwingC: strongest, params,
+        }),
+        south: itczShiftByColumn({
+          isSea: geo.isSea, landHeight: geo.landHeight,
+          width: geo.width, height: geo.height,
+          lat0Deg: -sign * subsolar, seasonSign: sign, seasonWeight,
+          maxSwingC: strongest, params,
+        }),
+      }
+      : null;
     const moisture = moistureField({
       isSea: geo.isSea, landHeight: geo.landHeight,
       width: geo.width, height: geo.height, radiusMetres: geo.radiusMetres,
-      wind, evaporation, still, params, monsoon: sign, seasonWeight,
+      wind, evaporation, still, params, monsoon: sign, seasonWeight, shift,
     });
-    return { evaporation, still, wind, moisture };
+    return { evaporation, still, wind, moisture, shift };
   };
 
   const warm = season(profile.warmDeltaC, 1);
@@ -1037,6 +1359,9 @@ export function computeClimate({
     wind: warm.wind, evaporation: warm.evaporation, still: warm.still,
     warmMoisture: warm.moisture, coldMoisture: cold.moisture,
     coldWind: cold.wind, seasonWeight, subsolarDeg: subsolar,
+    // Kept for inspection: how far the belt was displaced at each longitude,
+    // which is the one thing this mechanism produces that nothing else can.
+    itczShift: warm.shift, coldItczShift: cold.shift,
     ...profile,
   };
 }

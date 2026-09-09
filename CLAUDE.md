@@ -130,6 +130,22 @@ continue.
   `docs/teacher-b-climate-structure.md` for the build and the
   self-verification that it actually works. Nothing about the climate model
   itself changed in either round; nothing new is drawn on screen.
+- **V0.8 経度依存ITCZ experiment (current, done, off by default)**: the one
+  mechanism the diagnosis named as the next step, built and measured on its
+  own. The rain belt's latitude now varies with longitude, from one principle
+  and no geography -- the belt is drawn toward the warmer surface, and only
+  land changes temperature with the seasons. Four new parameters, all
+  `empirical`, and `itczLandPullDeg` defaults to **0**, so the shipped app is
+  bit-for-bit what it was. See "V0.8: the longitude-dependent ITCZ" and
+  `docs/itcz-longitude-experiment.md`. It works and it is general (six
+  synthetic-world checks pass, including an ocean world, a zero-tilt world and
+  a 180-degree rotation of the map), it makes Teacher B's seasonal classes
+  non-empty for the first time, and it lifts Indochina from 28% to 66%
+  vegetated while leaving the Sahara at 0% -- but it only functions when the
+  season is real, and a real season still wrecks Teacher A's ice for the
+  reason Stage 7.5 already identified. Nothing was applied to the world's
+  config; the Pareto candidates are in
+  `worlds/kasoku-sekai/itcz-candidates.json`.
 - **V0.9+**: cities, borders/territories, historical eras, and other
   過速世界-specific data. Several distinct features, not one version —
   treat each as its own sub-version. **Needs the user's own world-setting
@@ -2635,6 +2651,68 @@ is the concrete, measured version of "the model is zonal" from round 1.
 Nothing about the climate model was changed to fix this; that is next
 Opus's task (ITCZ longitude-dependence), with Teacher B now in place to
 measure whether it actually helps.
+
+## V0.8: the longitude-dependent ITCZ
+
+The full write-up is `docs/itcz-longitude-experiment.md`; this is what a future
+session needs to know without opening it.
+
+**What it is.** Everything before this made the atmosphere a function of
+latitude alone. `itczShiftByColumn` in `js/climate.js` gives the rain belt a
+longitude, from a single principle: *the belt is drawn toward the warmer
+surface, and only land changes temperature with the seasons.* For each column
+it weighs the land near the belt -- more heavily the closer it is, the more
+that latitude's own year swings, and the higher it stands -- and pulls the
+belt that many degrees into whichever hemisphere is having its summer.
+Longitude is never an input; move the continents and the belt moves with them.
+
+**Why it is off by default.** `itczLandPullDeg` defaults to 0, which
+reproduces the purely zonal model *bit for bit* -- verified on all eight
+internal field hashes and both rendered textures. Every preset saved before
+this existed keeps drawing exactly what it drew. Turning it on is a
+deliberate act, not a side effect of updating.
+
+**The one design error worth remembering, because it repeats a pattern.** The
+first version translated the whole cell: pushing the belt 14 degrees north
+over Africa dragged the subsiding branch from 28 to 42 degrees with it and
+**doubled the Sahara's summer moisture**. That is the same shape of failure as
+Stage 7.5's first monsoon attempt (a term that cannot tell a monsoon coast
+from a desert). A real overturning cell does not translate -- its rising
+branch migrates far while its poleward edge, set by the rotation, barely
+moves. Tapering the displacement by `cos^2` across the cell fixes it with no
+new parameter, and an internal clamp at `2*cellEdge/pi` keeps latitude->phase
+monotonic (past that the taper folds two belts into one row). After the
+taper: **Indochina 28% -> 66% vegetated (teacher 74%) while the Sahara stays
+at 0%** -- the discrimination this project had never achieved.
+
+**What it bought, honestly.** Longitudinal share of the moisture variance
+19% -> 24.5% (27-28.5% at the Pareto edge). Teacher B's three seasonal classes
+go from exactly 0.0 to 5.1 (16.5 at the edge) -- the model had never painted a
+seasonal climate anywhere. Teacher B 17.63% -> 18.03% at the same season
+strength, 19.01% at the edge. Indochina's warm-minus-cold moisture swing goes
+from +0.002 to +0.314. Teacher A does *not* improve (-0.2 to -2.2 points at
+fixed season).
+
+**Three things it did not fix, and one trap.**
+- The old `monsoonStrength` parameter is *still* inert (+0.12 with it on or
+  off, in all four conditions). It scales the advection reach by a per-row
+  quantity, so it stays zonal no matter what the belt does. The monsoon that
+  appeared came through a different route -- the belt moving and the low-level
+  flow reversing -- not through reviving that knob.
+- East Asia, the US Midwest, Patagonia and Tibet do not move at all, because
+  they sit outside the circulation cell where the taper has fallen to zero.
+  A monsoon that reaches beyond the Hadley cell needs a pressure field, which
+  was deliberately not built.
+- The mechanism's strength is proportional to the actual seasonal swing
+  (`tanh(maxSwing / 20)`), so at the shipped `seasonalSensitivityC` of about 4
+  it is at 24% of nominal and does almost nothing. **Any large search over
+  this will collapse to "switch the season off" until the melt-temperature
+  ceiling Stage 7.5 identified is built.** That is the prerequisite, not this.
+- **The trap**: the world-switch regression check in the scratchpad had been
+  calling `window.__setWorld`, which does not exist, guarded by `&&` -- so it
+  silently switched nothing and passed. The real hooks are `window.__loadWorld`
+  and `window.__currentWorld`. Same lesson as V0.7.1's graticule probe: when a
+  measurement says "no effect", suspect the measurement.
 
 ## The panel move (after Stage 6)
 
