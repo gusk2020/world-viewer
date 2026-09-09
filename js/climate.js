@@ -40,21 +40,43 @@
 // parameter that exists to express a required effect may come out weak, but
 // it may not come out absent, so those are floored. That is not rigging the
 // answer -- it is saying what the parameter means.
+// `search` says whether the automatic parameter search may move a term, and
+// within what range. It is here rather than in the search tool because it is
+// part of what a parameter *means*, and because three separate rounds have now
+// shown that a search will find any degenerate solution the setup permits:
+//
+//   search: false        -- never moved. Either a fact about the world (a lapse
+//                           rate, the freezing point of seawater), a number the
+//                           user drives themselves (the mean temperature), or a
+//                           term nothing in the objective can see, which means
+//                           the search would be fitting noise: a colour, or --
+//                           for cellRotationExponent -- a rotation rate that on
+//                           Earth is by definition the reference.
+//   search: { min, max } -- moved, but inside a narrower range than the model
+//                           itself allows. Only evaporationHalfC needs this, and
+//                           the reason is measured: this model's seas run about
+//                           -3 to +25 C, so a half-point outside that saturates
+//                           the term at one end and it stops doing anything at
+//                           all. That is exactly what happened before -- the fit
+//                           parked it at -19.7 and the whole mechanism was inert
+//                           while being credited for an improvement it had not
+//                           caused.
+//   (absent)             -- moved, over the parameter's own min..max.
 export const CLIMATE_PARAMETERS = {
   meanTemperatureC: {
-    value: 14, kind: "physical", min: -60, max: 60,
+    value: 14, kind: "physical", min: -60, max: 60, search: false,
     note: "Global mean surface temperature. Earth today is about 14 C.",
   },
   lapseRateCPerKm: {
-    value: 6.5, kind: "physical", min: 0, max: 12,
+    value: 6.5, kind: "physical", min: 0, max: 12, search: false,
     note: "How fast air cools with height. Earth's average is 6.5 C/km.",
   },
   freezeTemperatureC: {
-    value: 0, kind: "physical", min: -40, max: 20,
+    value: 0, kind: "physical", min: -40, max: 20, search: false,
     note: "Where snow lies on land. Fresh water freezes at 0 C.",
   },
   seaIceTemperatureC: {
-    value: -1.8, kind: "physical", min: -40, max: 10,
+    value: -1.8, kind: "physical", min: -40, max: 10, search: false,
     note: "Where sea ice forms. Salt water freezes near -1.8 C.",
   },
 
@@ -96,6 +118,7 @@ export const CLIMATE_PARAMETERS = {
   },
   evaporationHalfC: {
     value: 10, kind: "empirical", min: -20, max: 35,
+    search: { min: -3, max: 25 },
     note:
       "Sea-surface temperature at which a sea gives up half as much moisture " +
       "as a warm one. Evaporation really does depend steeply on temperature, " +
@@ -121,7 +144,7 @@ export const CLIMATE_PARAMETERS = {
   },
 
   coriolisStrength: {
-    value: 4, kind: "empirical", min: 1, max: 12,
+    value: 4, kind: "empirical", min: 1, max: 12, search: false,
     note:
       "How far the spin turns the cells' north-south flow toward the " +
       "east-west. It enters as an angle -- the flow is rotated right in the " +
@@ -148,7 +171,7 @@ export const CLIMATE_PARAMETERS = {
       "the subtropical deserts there and the polar front near 60.",
   },
   cellRotationExponent: {
-    value: 0.33, kind: "empirical", min: 0, max: 1,
+    value: 0.33, kind: "empirical", min: 0, max: 1, search: false,
     note:
       "How much a slower spin widens the cells. At 0 the cell structure is " +
       "fixed whatever the day length; positive, and a slow rotator collapses " +
@@ -221,7 +244,7 @@ export const CLIMATE_PARAMETERS = {
   },
 
   sandTemperatureC: {
-    value: 10, kind: "empirical", min: -20, max: 40,
+    value: 10, kind: "empirical", min: -20, max: 40, search: false,
     note:
       "Temperature at which bare ground is half sand, half rock. A hot desert " +
       "is sand; a cold one is rock and gravel. This used to be read off the " +
@@ -231,7 +254,7 @@ export const CLIMATE_PARAMETERS = {
       "the objective can see a colour, so this is deliberately not searched.",
   },
   sandWidthC: {
-    value: 10, kind: "empirical", min: 2, max: 25,
+    value: 10, kind: "empirical", min: 2, max: 25, search: false,
     note: "How gradually bare ground turns from rock to sand as it warms.",
   },
 
@@ -253,7 +276,7 @@ export const CLIMATE_PARAMETERS = {
     note: "Width of the sea-ice edge.",
   },
   seaDepthShadingM: {
-    value: 4000, kind: "empirical", min: 100, max: 12000,
+    value: 4000, kind: "empirical", min: 100, max: 12000, search: false,
     note: "Depth at which the sea reaches its darkest colour.",
   },
 };
@@ -857,6 +880,25 @@ export function classifyPoint(out, metres, seaLevelMetres, seaLevelC, moisture, 
 // a fraction of the ground, and without the weight Antarctica would count for
 // several times what it is.
 // ---------------------------------------------------------------------------
+
+// The parameters the automatic search may move, with the range it may move
+// each one over. Derived from the schema rather than listed again, so adding a
+// parameter puts it in the search unless it says otherwise.
+export function searchableParameters() {
+  const out = [];
+  for (const [name, spec] of Object.entries(CLIMATE_PARAMETERS)) {
+    if (spec.search === false) continue;
+    const range = spec.search && typeof spec.search === "object" ? spec.search : {};
+    out.push({
+      name,
+      min: range.min !== undefined ? range.min : spec.min,
+      max: range.max !== undefined ? range.max : spec.max,
+      value: spec.value,
+      kind: spec.kind,
+    });
+  }
+  return out;
+}
 
 // The teacher's class numbers. They are the bytes in the committed teacher
 // PNG, and tools/build_teacher.py writes them.
