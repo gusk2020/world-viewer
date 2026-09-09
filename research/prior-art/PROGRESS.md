@@ -44,7 +44,10 @@ Status: ✅ Done. Focus on Azgaar and Genesis (most product-like competitors) pl
 Status: ✅ Done. Table of all 10 with license, referenced files/papers, principle-only vs code-candidate. Only Azgaar and WorldEngine are MIT; both still marked "do not use code" for differentiation/quality reasons. No code was copied from any of the 10 into this repo.
 
 ## Pass 7 — civilization-simulator-roadmap.md
-Status: ⬜ Not started
+Status: ✅ Done. Layer 0-8 architecture (terrain/sea/climate through generative-AI narration), each with input/state/output/min-impl/advanced/calibration/compute-placement. 3 differentiation principles restated. Calibration teacher-data table (Out of Africa, Neolithic spread, coastal migration, river-valley concentration, trade barriers, tech/crop/religion/language diffusion). Compute-placement summary table (what runs on-device on a Pixel 7a vs. cloud batch/precompute). Ends with 4 open questions left for the user to decide (not implemented).
+
+## ALL 7 PASSES COMPLETE (2026-09-09)
+research/prior-art/ now contains all 15 required deliverables: PROGRESS.md, 01-10 individual surveys, comparison-matrix.md, reusable-principles.md, differentiation-risks.md, license-and-provenance.md, civilization-simulator-roadmap.md. All committed and pushed to branch `research/prior-art-review` (base: `claude/map-app-v0-1-az6aoa`). No application code was touched at any point.
 
 ## Next action
 Pass 1 is complete (all 10 individual survey files written). Proceed to Pass 2: comparison-matrix.md (score all 10 projects 0-100 on criteria A-H). Then Pass 3 (deep-dive causal graphs on top 5-6), Pass 4 (reusable-principles.md), Pass 5 (differentiation-risks.md), Pass 6 (license-and-provenance.md), Pass 7 (civilization-simulator-roadmap.md, the most important deliverable).
