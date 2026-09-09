@@ -38,7 +38,7 @@ Status: ✅ Done. Added Mermaid causal-flow diagrams as a "Pass 3 深掘り: 因
 Status: ✅ Done. 20 topic sections (terrain->climate through LLM role), each with simplest/richer/advanced implementation + best source project + how to make it not-Earth-specific.
 
 ## Pass 5 — differentiation-risks.md
-Status: ⬜ Not started
+Status: ✅ Done. Focus on Azgaar and Genesis (most product-like competitors) plus shorter notes on AEON/MayaSim/Oikoumene/randyau. Ends with 3 cross-cutting differentiation principles: (a) parameters live in environment+history not in a civ's "personality", (b) determinism -> probability distributions everywhere, (c) LLM as interpreter only, even more conservative than AEON's already-conservative boundary.
 
 ## Pass 6 — license-and-provenance.md
 Status: ⬜ Not started
