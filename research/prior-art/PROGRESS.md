@@ -35,7 +35,7 @@ Status: ✅ Done. Ranking: Oikoumene(66) > AEON(63) > MayaSim(60) > Genesis(56) 
 Status: ✅ Done. Added Mermaid causal-flow diagrams as a "Pass 3 深掘り: 因果グラフ" section inside each of: 02-mayasim.md, 03-azgaar.md, 04-oikoumene.md, 05-genesis.md, 06-aeon.md, 07-randyau-worldgen.md.
 
 ## Pass 4 — reusable-principles.md
-Status: ⬜ Not started
+Status: ✅ Done. 20 topic sections (terrain->climate through LLM role), each with simplest/richer/advanced implementation + best source project + how to make it not-Earth-specific.
 
 ## Pass 5 — differentiation-risks.md
 Status: ⬜ Not started
