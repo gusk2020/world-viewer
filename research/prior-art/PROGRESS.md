@@ -1,0 +1,51 @@
+# Prior-Art Research Progress
+
+Tracking document for the先行実装・競合・研究実装 survey. This file is the resume point if the session is interrupted — read this first in any new session before continuing.
+
+**Base branch for this work:** `claude/map-app-v0-1-az6aoa` (actual current default branch — confirmed via `git fetch` + `git branch -r` on 2026-09-09; the previously assumed branch did not exist).
+**Working branch:** `research/prior-art-review` (created successfully from `claude/map-app-v0-1-az6aoa`).
+**Constraint:** This task must NOT modify any existing application code (src/js/css/html/worlds/tools/etc), package files, workflows, terrain/climate data, or config. Only files under `research/prior-art/` are added. No external code is copied into the repo; any clones live in `/tmp` (outside the repo) and are discarded after note-taking.
+
+## Status legend
+- ✅ Done
+- 🔄 In progress
+- ⬜ Not started
+
+## Pass 1 — Individual project surveys (research/prior-art/NN-*.md)
+
+| # | Project | File | Status | Notes |
+|---|---------|------|--------|-------|
+| 01 | World Orogen (planet_heightmap_generation) | 01-world-orogen.md | ⬜ | |
+| 02 | MayaSim | 02-mayasim.md | ⬜ | |
+| 03 | Azgaar Fantasy Map Generator | 03-azgaar.md | ⬜ | |
+| 04 | Oikoumene | 04-oikoumene.md | ⬜ | |
+| 05 | Genesis (tan-zhuo) | 05-genesis.md | ⬜ | |
+| 06 | AEON: Living Worlds | 06-aeon.md | ⬜ | |
+| 07 | randyau/worldgen (World Engine) | 07-randyau-worldgen.md | ⬜ | |
+| 08 | WorldEngine (Mindwerks) | 08-worldengine.md | ⬜ | |
+| 09 | NeoNet | 09-neonet.md | ⬜ | |
+| 10 | Mesoudi migration models | 10-migration-models.md | ⬜ | |
+
+## Pass 2 — comparison-matrix.md
+Status: ⬜ Not started (requires Pass 1 complete)
+
+## Pass 3 — Deep dive on top 5-6 (causal graphs, folded into individual files or a supplement)
+Status: ⬜ Not started
+
+## Pass 4 — reusable-principles.md
+Status: ⬜ Not started
+
+## Pass 5 — differentiation-risks.md
+Status: ⬜ Not started
+
+## Pass 6 — license-and-provenance.md
+Status: ⬜ Not started
+
+## Pass 7 — civilization-simulator-roadmap.md
+Status: ⬜ Not started
+
+## Next action
+Begin Pass 1 survey of project 01 (World Orogen), then 02 (MayaSim), commit after each ~2 projects, push after each commit.
+
+## Log
+- 2026-09-09: Verified git state, checked out real default branch `claude/map-app-v0-1-az6aoa`, created `research/prior-art-review` branch, created this PROGRESS.md.
