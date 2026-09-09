@@ -105,6 +105,51 @@ export const CLIMATE_PARAMETERS = {
       "and 0 is 'every sea is at the global mean'.",
   },
 
+  seasonalSensitivityC: {
+    value: 45, kind: "empirical", min: 0, max: 120,
+    note:
+      "Degrees a latitude departs from its own annual mean at the solstices, " +
+      "per unit of seasonal insolation anomaly. Stage 7.5-A: the annual mean " +
+      "alone cannot say whether snow survives the summer or whether a monsoon " +
+      "reverses, and both turned out to matter more than any parameter did. " +
+      "At 0 every downstream formula reduces exactly to the annual model.",
+  },
+  seaSeasonalDamping: {
+    value: 0.25, kind: "empirical", min: 0, max: 1,
+    note:
+      "How much of that seasonal swing the sea keeps. Water's heat capacity " +
+      "is enormous next to a rock surface, so a coast swings far less than an " +
+      "interior -- and the *difference* between the two is what drives a " +
+      "monsoon, so this one number does double duty.",
+  },
+  itczFollowFraction: {
+    value: 0.6, kind: "empirical", min: 0, max: 1.5,
+    note:
+      "How far the circulation cells follow the sub-solar latitude into the " +
+      "summer hemisphere, as a fraction of the axial tilt. Stage 7.5-B: this " +
+      "is the seasonal part of the *wind*, and it is what puts a rain belt " +
+      "over land that the annual-mean position never reaches. Derived from " +
+      "the tilt rather than set in degrees, so it means the same thing on a " +
+      "body tilted 6 degrees and one tilted 80.",
+  },
+  monsoonStrength: {
+    value: 1.2, kind: "empirical", min: 0, max: 4,
+    note:
+      "How strongly the land/sea heating contrast pulls moist air inland in " +
+      "the warm season -- and pushes it back out in the cold one. Scaled by " +
+      "each row's own seasonal swing and by how much less the sea swings, so " +
+      "it is nil at the equator, nil on a world with no tilt, and nil if the " +
+      "sea and the land respond alike.",
+  },
+  growingSeasonWeight: {
+    value: 0.7, kind: "empirical", min: 0, max: 1,
+    note:
+      "How much plant cover depends on the warm season's moisture rather " +
+      "than the cold season's. A monsoon climate is wet in one season and dry " +
+      "in the other, and it is the wet one that grows the forest; at 0.5 this " +
+      "is a plain annual average again.",
+  },
+
   coastalMoisture: {
     value: 1, kind: "empirical", min: 0, max: 1,
     note: "Moisture available right at the shore, before any inland decay.",
@@ -188,6 +233,22 @@ export const CLIMATE_PARAMETERS = {
       "How far moisture rides the wind before rain takes it out, as an " +
       "e-folding distance along the flow.",
   },
+  orographicLiftM: {
+    value: 700, kind: "empirical", min: 100, max: 4000,
+    note:
+      "Height of ascent that gives a windward slope its full extra rain. " +
+      "Stage 7.5-C: the sweep's climb term already removes moisture going up " +
+      "a mountain, but nothing was *adding* it to the slope that forced the " +
+      "air up in the first place, which is half of what a rain shadow is.",
+  },
+  rainShadowM: {
+    value: 1200, kind: "empirical", min: 100, max: 5000,
+    note:
+      "Height of an upwind barrier that dries the ground behind it by about " +
+      "63%. Measured by walking a fixed distance upwind and taking the " +
+      "highest ground on the way, so it works for any range on any world -- " +
+      "the Andes, a fictional cordillera, or nothing at all.",
+  },
   orographicRiseM: {
     value: 900, kind: "empirical", min: 100, max: 2500,
     note:
@@ -259,14 +320,18 @@ export const CLIMATE_PARAMETERS = {
     note: "How gradually bare ground turns from rock to sand as it warms.",
   },
 
-  permanentSnowOffsetC: {
-    value: -9, kind: "empirical", min: -30, max: 5,
+  snowSummerMeltC: {
+    value: 2, kind: "empirical", min: -15, max: 15,
     note:
-      "How far below freezing the *annual mean* has to sit before snow lies " +
-      "all year. Without it the model paints everywhere averaging under 0 C " +
-      "solid white -- which put all of Siberia under permanent ice, since its " +
-      "annual mean really is about -5 C. Summer melts it; an annual-mean " +
-      "model cannot know that, so this stands in for the seasonal cycle.",
+      "How far above freezing the *warm season* mean may sit and still leave " +
+      "snow lying all year. Stage 7.5-D, and it **replaces** " +
+      "`permanentSnowOffsetC`, which was an annual-mean fudge standing in for " +
+      "exactly this: with no seasons, everywhere averaging below zero painted " +
+      "solid white, which put all of Siberia under permanent ice. Now the " +
+      "question is asked directly -- does the melt season melt it -- which is " +
+      "what actually decides a snow line, and it is why a 5000 m plateau can " +
+      "hold ice at a latitude where the lowland is forest. A set still naming " +
+      "the old parameter loads: it is reported and skipped.",
   },
   snowBlendC: {
     value: 4, kind: "empirical", min: 1.5, max: 20, search: false,
@@ -403,6 +468,65 @@ export function annualInsolationByLatitude(latitudesRad, tiltDegrees, steps = 18
   return out;
 }
 
+// The two seasons, as the daily-mean insolation at each solstice.
+//
+// Stage 7.5-A. The user asked for "at least a warm season and a cold season",
+// with the seasonal swing growing with latitude and with the axial tilt, and
+// explicitly said a full insolation calculation was not required. It is done
+// properly anyway, because the annual version already exists here and running
+// it at two orbital positions instead of averaging over the year costs the
+// same few thousand evaluations. Doing it from the geometry rather than from a
+// fitted "seasons are bigger at high latitudes" curve is what makes it work
+// unchanged on a world tilted 80 degrees, or on the Moon at 6.7.
+//
+// Each latitude gets its *own* warm and cold season -- the maximum and minimum
+// of the two solstices -- so the northern and southern hemispheres are warm at
+// opposite times, as they should be. The fields this produces are therefore a
+// composite of two moments in the year rather than one; that is deliberate and
+// it is exactly what "what is the growing season like here" needs.
+//
+// `orbit` is the seam for eccentricity later: a real orbit varies the distance
+// to the star, so each solstice's insolation would be scaled by 1/r². With a
+// circular orbit both scales are 1 and this reduces to the geometry alone.
+export function seasonalInsolationByLatitude(
+  latitudesRad, tiltDegrees, orbit = { eccentricity: 0, perihelionDeg: 90 }
+) {
+  const tilt = (tiltDegrees * Math.PI) / 180;
+  const warm = new Float64Array(latitudesRad.length);
+  const cold = new Float64Array(latitudesRad.length);
+  const eccentricity = orbit && Number.isFinite(orbit.eccentricity) ? orbit.eccentricity : 0;
+  const perihelion = ((orbit && orbit.perihelionDeg) || 0) * (Math.PI / 180);
+
+  // Daily-mean insolation at one declination, the same formula the annual
+  // integral uses one step at a time.
+  const daily = (lat, declination, scale) => {
+    const sinLat = Math.sin(lat);
+    const cosLat = Math.cos(lat);
+    const sinDec = Math.sin(declination);
+    const cosDec = Math.cos(declination);
+    const cosH = Math.min(1, Math.max(-1, -Math.tan(lat) * Math.tan(declination)));
+    const h = Math.acos(cosH);
+    return (scale * (h * sinLat * sinDec + cosLat * cosDec * Math.sin(h))) / Math.PI;
+  };
+
+  // Inverse-square distance at each solstice. Zero eccentricity gives 1 and 1.
+  const distanceScale = (lambda) => {
+    const r = (1 - eccentricity * eccentricity) / (1 + eccentricity * Math.cos(lambda - perihelion));
+    return 1 / (r * r);
+  };
+  const scaleNorth = distanceScale(Math.PI / 2);
+  const scaleSouth = distanceScale((3 * Math.PI) / 2);
+
+  for (let i = 0; i < latitudesRad.length; i++) {
+    const lat = latitudesRad[i];
+    const a = daily(lat, tilt, scaleNorth);
+    const b = daily(lat, -tilt, scaleSouth);
+    warm[i] = Math.max(a, b);
+    cold[i] = Math.min(a, b);
+  }
+  return { warm, cold };
+}
+
 const COARSE_WIDTH = 512;
 
 // Earth's sidereal day. Every spin in this model is measured against it, so
@@ -451,7 +575,7 @@ function smoothstep(edge0, edge1, x) {
 // The cells also widen as the spin slows, by a fitted exponent: far enough and
 // a hemisphere ends up with a single cell reaching the pole, as Venus and
 // Titan do.
-export function windField(rows, dayLengthHours, rotationDirection, params) {
+export function windField(rows, dayLengthHours, rotationDirection, params, subsolarDeg = 0) {
   const direction = rotationDirection >= 0 ? 1 : -1;
   const spin = (direction * REFERENCE_DAY_HOURS) / Math.max(Math.abs(dayLengthHours), 1e-3);
   const cellEdgeDeg = Math.min(
@@ -465,7 +589,13 @@ export function windField(rows, dayLengthHours, rotationDirection, params) {
   for (let y = 0; y < rows; y++) {
     const latDeg = (0.5 - (y + 0.5) / rows) * 180;
     const latRad = (latDeg * Math.PI) / 180;
-    const phase = (Math.PI * latDeg) / cellEdgeDeg;
+    // Stage 7.5-B. The whole cell structure hangs off the sub-solar latitude,
+    // so giving it a season shifts the rising branch into the summer
+    // hemisphere and takes the sinking branch with it. A hemisphere's own
+    // summer therefore has its rain belt further poleward than the annual
+    // mean ever puts it -- which is the largest single reason an annual-mean
+    // model cannot make a monsoon. Zero reproduces the annual field exactly.
+    const phase = (Math.PI * (latDeg - subsolarDeg)) / cellEdgeDeg;
     const flow = -Math.sin(phase);
     // The cells' flow, turned by the spin. A quarter turn is the limit: that
     // is flow entirely along the parallels, which is what a fast rotator's
@@ -482,12 +612,17 @@ export function windField(rows, dayLengthHours, rotationDirection, params) {
 // How much moisture a sea gives up, per latitude row. A sea's temperature is
 // the moderated profile `classifyPoint` already uses for open water, so this
 // costs nothing beyond the smoothstep.
-function evaporationByRow(seaLevelC, profileRows, rows, params) {
+function evaporationByRow(seaLevelC, profileRows, rows, params, seasonDeltaC = null) {
   const out = new Float64Array(rows);
   for (let y = 0; y < rows; y++) {
-    const t = seaLevelC[Math.min(profileRows - 1, Math.floor((y * profileRows) / rows))];
+    const p = Math.min(profileRows - 1, Math.floor((y * profileRows) / rows));
+    const t = seaLevelC[p];
+    // A warm sea gives up more moisture than a cold one, and a sea is warmer
+    // in its own summer -- so the season reaches the moisture supply too, not
+    // only the temperature the ground is judged at.
+    const season = seasonDeltaC ? params.seaSeasonalDamping * seasonDeltaC[p] : 0;
     const temperature =
-      params.meanTemperatureC + params.oceanModeration * (t - params.meanTemperatureC);
+      params.meanTemperatureC + params.oceanModeration * (t - params.meanTemperatureC) + season;
     out[y] = smoothstep(
       params.evaporationHalfC - params.evaporationWidthC,
       params.evaporationHalfC + params.evaporationWidthC,
@@ -578,8 +713,15 @@ function stillAirField(isSea, width, height, radiusMetres, evaporation, params) 
 // and the climb out of the upwind cell never changes at all. So everything is
 // worked out once into a per-cell transmission factor and each sweep is four
 // reads and three multiplies.
+// How many cells upwind the barrier scan looks. On a 512-wide grid that is
+// roughly 6000 km at the equator and less toward the poles -- far enough to
+// find a range the air had to cross, short enough that the far side of a
+// continent is not blamed for it. A convergence setting, not a world property.
+const RAIN_SHADOW_STEPS = 8;
+
 function moistureField({
   isSea, landHeight, width, height, radiusMetres, wind, evaporation, still, params,
+  monsoon = 0, seasonWeight = null,
 }) {
   const stepYKm = (Math.PI * radiusMetres) / height / 1000;
   const decay = Math.exp(-stepYKm / params.advectionRangeKm);
@@ -590,6 +732,9 @@ function moistureField({
   const fx = new Float64Array(height);
   const fy = new Float64Array(height);
   const moving = new Uint8Array(height);
+  // The whole-cell part of the upwind step, kept so the barrier scan below can
+  // walk several cells against the wind instead of only sampling one.
+  const stepRowY = new Int32Array(height);
 
   for (let y = 0; y < height; y++) {
     const latRad = (0.5 - (y + 0.5) / height) * Math.PI;
@@ -613,6 +758,7 @@ function moistureField({
     const ix = Math.floor(dx);
     const iy = Math.floor(dy);
     offX[y] = ix;
+    stepRowY[y] = iy;
     fx[y] = dx - ix;
     fy[y] = dy - iy;
     rowA[y] = Math.min(height - 1, Math.max(0, y + iy)) * width;
@@ -643,6 +789,60 @@ function moistureField({
     for (let x = 0; x < width; x++) {
       const rise = Math.max(0, landHeight[row + x] - sampleRow(landHeight, a, b, ox, tx, ty, x));
       transmission[row + x] = decay * Math.exp(-rise / params.orographicRiseM);
+    }
+  }
+
+  // Stage 7.5-C: the terrain the air had to cross to get here.
+  //
+  // The transmission factor above already takes moisture out of air climbing
+  // one cell. What it cannot see is a range the parcel crossed several cells
+  // back and has since come down from -- and that descent is most of what a
+  // rain shadow is. So this walks a fixed distance upwind, keeps the highest
+  // ground on the way, and dries the cell by how far it stands below it. The
+  // windward half is the same scan read the other way: ground that rises out
+  // of the cell upwind of it is where the air was forced up, and it gets the
+  // extra rain that the lee is missing.
+  //
+  // It is affordable for exactly the reason the sweep is: the wind is constant
+  // across a row, so every offset here is a per-row constant and the scan is
+  // eight reads per cell rather than a search.
+  const relief = new Float32Array(width * height);
+  for (let y = 0; y < height; y++) {
+    const row = y * width;
+    if (!moving[y]) {
+      for (let x = 0; x < width; x++) relief[row + x] = 1;
+      continue;
+    }
+    const a = rowA[y], b = rowB[y], ox = offX[y], tx = fx[y], ty = fy[y];
+    // The path upwind is the same for every cell in the row, so its row and
+    // column offsets are worked out once here rather than per cell.
+    const pathRow = new Int32Array(RAIN_SHADOW_STEPS);
+    const pathCol = new Int32Array(RAIN_SHADOW_STEPS);
+    let cursorY = y;
+    let cursorX = 0;
+    for (let step = 0; step < RAIN_SHADOW_STEPS; step++) {
+      cursorX += offX[cursorY];
+      cursorY = Math.min(height - 1, Math.max(0, cursorY + stepRowY[cursorY]));
+      pathRow[step] = cursorY * width;
+      pathCol[step] = cursorX;
+    }
+    for (let x = 0; x < width; x++) {
+      const i = row + x;
+      if (isSea[i]) { relief[i] = 1; continue; }
+      const here = landHeight[i];
+      let crest = here;
+      for (let step = 0; step < RAIN_SHADOW_STEPS; step++) {
+        const px = (((x + pathCol[step]) % width) + width) % width;
+        const h = landHeight[pathRow[step] + px];
+        if (h > crest) crest = h;
+      }
+      const barrier = crest - here;
+      const lift = Math.max(0, here - sampleRow(landHeight, a, b, ox, tx, ty, x));
+      // Behind a range: dried by how far this ground sits below the crest the
+      // air crossed. On the slope that forced the air up: wetted by the climb.
+      const shadow = Math.exp(-barrier / params.rainShadowM);
+      const windward = 2 - Math.exp(-lift / params.orographicLiftM);
+      relief[i] = shadow * windward;
     }
   }
 
@@ -683,12 +883,21 @@ function moistureField({
     const belt =
       (1 - params.subtropicalDryStrength * Math.max(0, -convergence)) *
       (1 + params.convergenceWetBonus * Math.max(0, convergence));
+    // Stage 7.5-B, the other half of the monsoon: the land/sea heating
+    // contrast draws air off the sea in the warm season and pushes it back out
+    // in the cold one. `monsoon` is that contrast for this row, signed by the
+    // season, and it scales the inflow that reaches inland -- so a coast at a
+    // strongly seasonal latitude is far wetter in its summer than its winter,
+    // and a coast at the equator, or on a world with no tilt, is neither.
+    const inflow = seasonWeight
+      ? Math.max(0, 1 + params.monsoonStrength * monsoon * seasonWeight[y])
+      : 1;
     for (let x = 0; x < width; x++) {
       const i = row + x;
       const wind_ = moisture[i];
       const total =
-        wind_ + params.stillAirMoisture * params.coastalMoisture * still[i] * (1 - wind_);
-      moisture[i] = Math.min(1, Math.max(0, total * belt));
+        wind_ + params.stillAirMoisture * params.coastalMoisture * still[i] * inflow * (1 - wind_);
+      moisture[i] = Math.min(1, Math.max(0, total * belt * relief[i]));
     }
   }
   return moisture;
@@ -741,21 +950,75 @@ export function computeClimate({
 }) {
   const geo = geography || computeGeography({ elevation, seaLevelMetres, radiusMetres });
   const profile = temperatureProfile(axialTiltDegrees, params);
-  const evaporation = evaporationByRow(
-    profile.seaLevelC, profile.profileRows, geo.height, params
-  );
-  const still = stillAirField(
-    geo.isSea, geo.width, geo.height, geo.radiusMetres, evaporation, params
-  );
-  const wind = windField(geo.height, dayLengthHours, rotationDirection, params);
-  const moisture = moistureField({
-    isSea: geo.isSea, landHeight: geo.landHeight,
-    width: geo.width, height: geo.height, radiusMetres: geo.radiusMetres,
-    wind, evaporation, still, params,
-  });
+
+  // Stage 7.5. Everything below is computed twice -- once for each latitude's
+  // own warm season and once for its cold one -- because the two questions
+  // this stage exists to answer cannot be asked of an annual mean: does the
+  // melt season melt the snow, and does the wind reverse.
+  //
+  // How much a row swings at all, as a fraction of the largest swing anywhere.
+  // It is what scales the monsoon: nil at the equator, nil on a body with no
+  // tilt, and nil if the sea responded to the seasons as strongly as the land
+  // does. One number, and all three of those fall out of it.
+  const seasonWeight = new Float64Array(geo.height);
+  let strongest = 0;
+  for (let y = 0; y < geo.height; y++) {
+    const p = Math.min(profile.profileRows - 1, Math.floor((y * profile.profileRows) / geo.height));
+    const swing = (profile.warmDeltaC[p] - profile.coldDeltaC[p]) * (1 - params.seaSeasonalDamping);
+    seasonWeight[y] = Math.max(0, swing);
+    if (seasonWeight[y] > strongest) strongest = seasonWeight[y];
+  }
+  if (strongest > 0) for (let y = 0; y < geo.height; y++) seasonWeight[y] /= strongest;
+
+  // The sub-solar latitude follows the sun into whichever hemisphere is having
+  // its summer, so a "warm season" field is a composite of the two solstices.
+  // Rows are signed by their own hemisphere, which is why one field can carry
+  // both -- see seasonalInsolationByLatitude.
+  const subsolar = params.itczFollowFraction * axialTiltDegrees;
+
+  const season = (deltaC, sign) => {
+    const evaporation = evaporationByRow(
+      profile.seaLevelC, profile.profileRows, geo.height, params, deltaC
+    );
+    const still = stillAirField(
+      geo.isSea, geo.width, geo.height, geo.radiusMetres, evaporation, params
+    );
+    // Northern rows lead with the northern solstice and southern rows with the
+    // southern one, so the rain belt moves poleward in each hemisphere's own
+    // summer rather than sitting on one side of the equator all year.
+    const wind = windField(geo.height, dayLengthHours, rotationDirection, params, sign * subsolar);
+    const flipped = windField(geo.height, dayLengthHours, rotationDirection, params, -sign * subsolar);
+    for (let y = 0; y < geo.height; y++) {
+      if (y < geo.height / 2) continue; // southern rows take the mirrored field
+      wind.east[y] = flipped.east[y];
+      wind.north[y] = flipped.north[y];
+      wind.convergence[y] = flipped.convergence[y];
+    }
+    const moisture = moistureField({
+      isSea: geo.isSea, landHeight: geo.landHeight,
+      width: geo.width, height: geo.height, radiusMetres: geo.radiusMetres,
+      wind, evaporation, still, params, monsoon: sign, seasonWeight,
+    });
+    return { evaporation, still, wind, moisture };
+  };
+
+  const warm = season(profile.warmDeltaC, 1);
+  const cold = season(profile.coldDeltaC, -1);
+
+  // What a plant sees. The warm season carries most of the weight because that
+  // is when it grows, and a monsoon climate is exactly a place where the two
+  // seasons disagree.
+  const w = params.growingSeasonWeight;
+  const moisture = new Float32Array(geo.width * geo.height);
+  for (let i = 0; i < moisture.length; i++) {
+    moisture[i] = w * warm.moisture[i] + (1 - w) * cold.moisture[i];
+  }
 
   return {
-    width: geo.width, height: geo.height, moisture, wind, evaporation, still,
+    width: geo.width, height: geo.height, moisture,
+    wind: warm.wind, evaporation: warm.evaporation, still: warm.still,
+    warmMoisture: warm.moisture, coldMoisture: cold.moisture,
+    coldWind: cold.wind, seasonWeight, subsolarDeg: subsolar,
     ...profile,
   };
 }
@@ -786,7 +1049,28 @@ export function temperatureProfile(axialTiltDegrees, params, rows = 512) {
       params.insolationSensitivityC * anomaly +
       params.polarExtraC * polar;
   }
-  return { profileRows: rows, seaLevelC, latitudes };
+
+  // Stage 7.5-A. How far each latitude departs from its own annual mean at the
+  // two solstices, in degrees. Kept as a *departure* rather than an absolute
+  // temperature for one concrete reason: the sea keeps far less of the swing
+  // than the land does, and that difference is per cell, not per row -- so
+  // classifyPoint applies `seaSeasonalDamping` to the sea and the full
+  // departure to the land, and the land/sea contrast that drives the monsoon
+  // falls out of the same two numbers.
+  //
+  // At seasonalSensitivityC = 0 both departures are zero and every formula
+  // downstream reduces exactly to the annual model, which is what makes this
+  // change auditable rather than a rewrite.
+  const seasons = seasonalInsolationByLatitude(latitudes, axialTiltDegrees);
+  const warmDeltaC = new Float32Array(rows);
+  const coldDeltaC = new Float32Array(rows);
+  for (let y = 0; y < rows; y++) {
+    const warmAnomaly = mean > 0 ? (seasons.warm[y] - insolation[y]) / mean : 0;
+    const coldAnomaly = mean > 0 ? (seasons.cold[y] - insolation[y]) / mean : 0;
+    warmDeltaC[y] = params.seasonalSensitivityC * warmAnomaly;
+    coldDeltaC[y] = params.seasonalSensitivityC * coldAnomaly;
+  }
+  return { profileRows: rows, seaLevelC, warmDeltaC, coldDeltaC, latitudes };
 }
 
 // Where one texture column lands in the coarse grid. The painter walks two
@@ -818,7 +1102,9 @@ export const SURFACE_SEA_ICE = 2;
 export const SURFACE_SAND = 3;
 export const SURFACE_IS_SEA = 4;
 
-export function classifyPoint(out, metres, seaLevelMetres, seaLevelC, moisture, params) {
+export function classifyPoint(
+  out, metres, seaLevelMetres, seaLevelC, warmDeltaC, coldDeltaC, moisture, params
+) {
   out[SURFACE_VEGETATION] = 0;
   out[SURFACE_SNOW] = 0;
   out[SURFACE_SEA_ICE] = 0;
@@ -826,39 +1112,59 @@ export function classifyPoint(out, metres, seaLevelMetres, seaLevelC, moisture, 
 
   if (metres < seaLevelMetres) {
     out[SURFACE_IS_SEA] = 1;
-    const temperature =
+    const annual =
       params.meanTemperatureC + params.oceanModeration * (seaLevelC - params.meanTemperatureC);
+    // Sea ice is judged on the *warm* season, because what the teacher's
+    // cloud-free composite shows is the ice that survived the melt season, not
+    // the far larger area that freezes over each winter. The sea keeps only
+    // part of the swing -- that is what seaSeasonalDamping is.
+    const warm = annual + params.seaSeasonalDamping * warmDeltaC;
     out[SURFACE_SEA_ICE] = 1 - smoothstep(
       params.seaIceTemperatureC - params.seaIceBlendC,
       params.seaIceTemperatureC + params.seaIceBlendC,
-      temperature
+      warm
     );
     return out;
   }
 
   out[SURFACE_IS_SEA] = 0;
-  const temperature = seaLevelC - params.lapseRateCPerKm * ((metres - seaLevelMetres) / 1000);
+  const annual = seaLevelC - params.lapseRateCPerKm * ((metres - seaLevelMetres) / 1000);
+  // Land keeps the whole seasonal swing; the sea above keeps a fraction of it.
+  const warm = annual + warmDeltaC;
+  // What a plant experiences: weighted toward the warm season, because that is
+  // when it grows. The same weight is used for the moisture the caller hands
+  // in, so "the growing season" means one thing in both places.
+  const growing =
+    annual + params.growingSeasonWeight * warmDeltaC
+    + (1 - params.growingSeasonWeight) * coldDeltaC;
 
   const warmth = smoothstep(
     params.vegetationWarmthC - params.vegetationWarmthWidthC,
     params.vegetationWarmthC + params.vegetationWarmthWidthC,
-    temperature
+    growing
   );
   const wet = smoothstep(
     params.vegetationMoistureHalf - params.vegetationMoistureWidth,
     params.vegetationMoistureHalf + params.vegetationMoistureWidth,
     moisture
   );
+  // The rock/sand split is a colour, and a colour is a property of the place
+  // rather than of one season, so it stays on the annual mean.
   out[SURFACE_SAND] = smoothstep(
     params.sandTemperatureC - params.sandWidthC,
     params.sandTemperatureC + params.sandWidthC,
-    temperature
+    annual
   );
   out[SURFACE_VEGETATION] = warmth * wet;
 
-  const snowLine = params.freezeTemperatureC + params.permanentSnowOffsetC;
+  // Stage 7.5-D. Snow lies all year where the melt season fails to melt it --
+  // which is a question about the warmest month, not about the average of a
+  // year. That is why a 5000 m plateau can hold ice at a latitude whose
+  // lowland is forest, and it is why this needed seasons before it could be
+  // asked at all.
+  const meltPoint = params.freezeTemperatureC + params.snowSummerMeltC;
   out[SURFACE_SNOW] = 1 - smoothstep(
-    snowLine - params.snowBlendC, snowLine + params.snowBlendC, temperature
+    meltPoint - params.snowBlendC, meltPoint + params.snowBlendC, warm
   );
   return out;
 }
@@ -1051,7 +1357,10 @@ export function scoreAgainstTeacher({
     const latDeg = 90 - ((y + 0.5) / height) * 180;
     const w = Math.cos((latDeg * Math.PI) / 180);
     if (w <= 0) continue;
-    const seaLevelC = climate.seaLevelC[Math.min(climate.profileRows - 1, Math.floor(y * rowScale))];
+    const profileRow = Math.min(climate.profileRows - 1, Math.floor(y * rowScale));
+    const seaLevelC = climate.seaLevelC[profileRow];
+    const warmDeltaC = climate.warmDeltaC[profileRow];
+    const coldDeltaC = climate.coldDeltaC[profileRow];
     const fy = (y + 0.5) * coarseY - 0.5;
     const y0 = Math.floor(fy);
     const ty = fy - y0;
@@ -1072,7 +1381,9 @@ export function scoreAgainstTeacher({
         const bottom = field[yb + xa] * (1 - tx) + field[yb + xb] * tx;
         moisture = top * (1 - ty) + bottom * ty;
       }
-      classifyPoint(surface, metres, seaLevelMetres, seaLevelC, moisture, params);
+      classifyPoint(
+        surface, metres, seaLevelMetres, seaLevelC, warmDeltaC, coldDeltaC, moisture, params
+      );
 
       const want = teacher.data[teacherRow + Math.min(teacher.width - 1, Math.floor(x * teacherScaleX))];
       const got = hardClass(surface);
@@ -1210,7 +1521,10 @@ export function paintClimate(data, elevation, climate, seaLevelMetres, params, p
   const surface = new Float64Array(5);
 
   for (let y = 0; y < height; y++) {
-    const seaLevelC = climate.seaLevelC[Math.min(climate.profileRows - 1, Math.floor(y * rowScale))];
+    const profileRow = Math.min(climate.profileRows - 1, Math.floor(y * rowScale));
+    const seaLevelC = climate.seaLevelC[profileRow];
+    const warmDeltaC = climate.warmDeltaC[profileRow];
+    const coldDeltaC = climate.coldDeltaC[profileRow];
     // The row's two coarse rows and the weight between them: constant across
     // the whole row, so they come out of the inner loop too.
     const fy = (y + 0.5) * coarseY - 0.5;
@@ -1235,7 +1549,9 @@ export function paintClimate(data, elevation, climate, seaLevelMetres, params, p
         const bottom = field[yb + xa] * (1 - tx) + field[yb + xb] * tx;
         moisture = top * (1 - ty) + bottom * ty;
       }
-      classifyPoint(surface, metres, seaLevelMetres, seaLevelC, moisture, params);
+      classifyPoint(
+        surface, metres, seaLevelMetres, seaLevelC, warmDeltaC, coldDeltaC, moisture, params
+      );
 
       if (surface[SURFACE_IS_SEA]) {
         mix(colour, palette.shallowSea, palette.deepSea,
