@@ -27,6 +27,7 @@ async function main() {
   const climateTempSlider = document.getElementById("climate-temp-slider");
   const climateTempReadout = document.getElementById("climate-temp-readout");
   const climateScoreLine = document.getElementById("climate-score");
+  const axisRow = document.getElementById("axis-row");
   const axisButton = document.getElementById("axis-toggle");
   const axisReadout = document.getElementById("axis-readout");
   const graticuleButton = document.getElementById("graticule-toggle");
@@ -81,6 +82,10 @@ async function main() {
     // The sea-level and seabed controls only apply to the 3D view; the 2D
     // map has no sea-level concept.
     controlPanel.hidden = mode !== "3d";
+    // The 天体 row stays reachable in 2D -- picking Mars from there is
+    // meaningful, and switching away from Earth forces the view back to 3D.
+    // The axis and graticule are 3D-only, so that row goes with the panel.
+    axisRow.hidden = mode !== "3d";
     // The scale bar is derived from the 3D camera, so it would be quietly
     // wrong sitting on top of the 2D map -- which draws its own.
     scaleBar.hidden = mode !== "3d" || GRATICULE_STATES[graticuleIndex].mode === "off";

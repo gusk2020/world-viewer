@@ -2257,6 +2257,50 @@ but no reachable host serves them, and writing the numbers down from memory
 would be inventing data in the one file that exists so that nothing is invented.
 Left as a stated gap with the same fix as sea ice: fetch a real one from a runner.
 
+## The panel move (after Stage 6)
+
+The user's fix for the panel growing again: **put the 天体 row and the 軸/線 row
+below the 2D/3D button** instead of at the top. Their call, and a good one —
+those two are the controls you reach for least while actually looking at the
+globe.
+
+`#bottom-controls` is a fixed column at the bottom holding the 2D/3D button and
+then a second panel with the two rows, so the rows sit under the button exactly
+as asked. Both boxes now share a `.panel` class; `#sea-level-control` keeps only
+its own position and width, and the row, label and slider rules moved onto
+`.panel` so a row can be moved between the two boxes without touching CSS.
+
+**The `[hidden]` rule has to stay *after* the `.control-row` rule.** Both are
+specificity 0-2-0 now (`.panel .control-row` and `.panel [hidden]`), so order is
+the only thing deciding it — the same trap that made a row set to `display:flex`
+ignore `hidden` in V0.7.
+
+Measured, at 412×892:
+
+| | before | after |
+| --- | --- | --- |
+| top panel, 標準 | 201 px | **137 px** (15% of the screen) |
+| top panel, 陸地塗り分け | 250 px | **186 px** |
+| top panel, Mars | 167 px | **103 px** |
+| bottom group | 44 px (the button alone) | 123 px on Earth, 73 px on Mars |
+
+Worth being straight about the total: top plus bottom is 260 px against 245
+before, so a little *more* of the screen is covered overall — but the top panel,
+which is what sits over the part of the globe you are looking at, is a third
+smaller, and the bottom of a phone screen is where a thumb already is.
+
+**The scale bar had to move up with it**, from 76 px above the bottom to 152 px,
+or the bottom group would have covered it. Measured rather than guessed: the bar
+now sits at 704-740 against the group's top edge at 757.
+
+The axis/graticule row hides in 2D, like the top panel and the scale bar — but
+**the 天体 row stays**, because picking Mars from the 2D map is meaningful and
+`main.js` already forces the view back to 3D when it happens.
+
+Nothing about the globe changed: both painted textures hash the same
+(`f28ab2b0` / `6dbc6304`), the agreement score is unchanged at 62.96%, and the
+world-switch failure test still passes.
+
 ## V0.8 stage 6: scoring
 
 The spec: compare what the model paints against the teacher data and put a

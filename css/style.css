@@ -43,11 +43,28 @@ html, body {
   display: none;
 }
 
-#view-toggle {
+/* The 天体 and 軸/線 rows moved down here at the user's request -- the top
+   panel had grown too tall again, and these two are the ones you reach for
+   least often while looking at the globe. The 2D/3D button leads the group,
+   so the rows sit under it exactly as asked. */
+#bottom-controls {
   position: fixed;
   left: 50%;
-  bottom: calc(env(safe-area-inset-bottom, 0) + 16px);
+  bottom: calc(env(safe-area-inset-bottom, 0) + 12px);
   transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: min(368px, 92vw);
+  z-index: 5;
+}
+
+#bottom-panel {
+  width: 100%;
+}
+
+#view-toggle {
   min-height: 44px;
   padding: 0 20px;
   border: none;
@@ -57,16 +74,12 @@ html, body {
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   font-size: 0.95rem;
   font-weight: 600;
-  z-index: 5;
 }
 
-/* V0.5: only shown in 3D mode (the 2D map has no sea-level concept yet) --
-   js/main.js toggles [hidden] on this alongside #app. */
-#sea-level-control {
-  position: fixed;
-  left: 50%;
-  top: calc(env(safe-area-inset-top, 0) + 16px);
-  transform: translateX(-50%);
+/* One look for both control boxes -- the one at the top and the one under
+   the 2D/3D button -- so moving a row between them changes nothing but where
+   it sits. */
+.panel {
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -77,6 +90,15 @@ html, body {
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   font-size: 0.88rem;
   font-weight: 600;
+}
+
+/* V0.5: only shown in 3D mode (the 2D map has no sea-level concept yet) --
+   js/main.js toggles [hidden] on this alongside #app. */
+#sea-level-control {
+  position: fixed;
+  left: 50%;
+  top: calc(env(safe-area-inset-top, 0) + 16px);
+  transform: translateX(-50%);
   z-index: 5;
   /* Wider and shorter than it was. The panel had grown to six rows and a
      third of the screen height; folding the axis and graticule controls onto
@@ -84,7 +106,7 @@ html, body {
   width: min(368px, 92vw);
 }
 
-#sea-level-control .control-row {
+.panel .control-row {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -93,17 +115,18 @@ html, body {
 
 /* A row set to display:flex outranks the browser's own
    [hidden] { display: none }, so hiding a row from JavaScript did nothing at
-   all -- Earth's seabed buttons stayed on screen on Mars. */
-#sea-level-control [hidden] {
+   all -- Earth's seabed buttons stayed on screen on Mars. This has the same
+   specificity as the rule above, so it has to stay *after* it. */
+.panel [hidden] {
   display: none;
 }
 
-#sea-level-control label {
+.panel label {
   white-space: nowrap;
   min-width: 4.6em;
 }
 
-#sea-level-control input[type="range"] {
+.panel input[type="range"] {
   flex: 1;
 }
 
@@ -206,7 +229,9 @@ html, body {
 #scale-bar {
   position: fixed;
   left: 14px;
-  bottom: calc(env(safe-area-inset-bottom, 0) + 76px);
+  /* Clears the bottom group: the 2D/3D button plus the two-row panel under
+     it. Measured rather than guessed -- see the note in CLAUDE.md. */
+  bottom: calc(env(safe-area-inset-bottom, 0) + 152px);
   display: flex;
   flex-direction: column;
   gap: 3px;
