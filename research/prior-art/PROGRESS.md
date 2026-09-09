@@ -32,7 +32,7 @@ Tracking document for the先行実装・競合・研究実装 survey. This file 
 Status: ✅ Done. Ranking: Oikoumene(66) > AEON(63) > MayaSim(60) > Genesis(56) > Azgaar(47) > randyau/worldgen(38) > World Orogen(30) > Mesoudi(29) > NeoNet(27) > WorldEngine(16). Top 6 selected for Pass 3: Oikoumene, AEON, MayaSim, Genesis, Azgaar, randyau/worldgen (World Orogen excluded from Pass 3 deep-dive since it already has a detailed causal writeup in 01-world-orogen.md and has no civilization content).
 
 ## Pass 3 — Deep dive on top 5-6 (causal graphs, folded into individual files or a supplement)
-Status: ⬜ Not started
+Status: ✅ Done. Added Mermaid causal-flow diagrams as a "Pass 3 深掘り: 因果グラフ" section inside each of: 02-mayasim.md, 03-azgaar.md, 04-oikoumene.md, 05-genesis.md, 06-aeon.md, 07-randyau-worldgen.md.
 
 ## Pass 4 — reusable-principles.md
 Status: ⬜ Not started

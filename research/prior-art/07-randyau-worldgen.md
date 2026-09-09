@@ -106,6 +106,34 @@
 
 **[事実]** 学術論文の引用はなし。Dwarf Fortress（ADR-010, ADR-015で「DFの3Dボクセルシミュレーションは1万年規模の計算予算と非互換のため却下」「DFの50特性は大半が行動に現れないため却下」と明記、反面教師として言及）とThe Sims（ADR-015、「5つの離散特性は少なすぎ、連続的でない」として却下）が設計判断の比較対象として言及されている。
 
+## Pass 3 深掘り: 因果グラフ
+
+**[Sonnetによる整理。本プロジェクトの価値は因果モデルよりデータ構造にあるため、「イベント発生→記録→検索」のパイプラインとして整理]**
+
+```mermaid
+flowchart TD
+    SIMSTATE[シミュレーション状態変化<br/>キャラクター意思決定/集落形成/戦争等] --> PENDINGEVENT[PendingEvent生成]
+    PENDINGEVENT --> SIGRULE1[Tier関与ルール]
+    PENDINGEVENT --> SIGRULE2[動詞クラスルール<br/>創造/破壊/変容/移転/紛争/維持/交流]
+    PENDINGEVENT --> SIGRULE3[人口影響ルール<br/>None/Minor/Moderate/Major/Catastrophic]
+    SIGRULE1 --> MAXTIER[3ルールの最大値<br/>=最終重要度Tier]
+    SIGRULE2 --> MAXTIER
+    SIGRULE3 --> MAXTIER
+    MAXTIER --> BATCH[メモリ上にバッチ蓄積<br/>Nティックごと]
+    BATCH --> TXN[単一アトミックトランザクション書き込み]
+    TXN --> EVENTSTABLE[Eventsテーブル<br/>Year/Season/Tick/PayloadJson]
+    TXN --> ENTITYJUNCTION[EventEntities<br/>イベント↔エンティティ多対多]
+    TXN --> CAUSALEDGE[CausalEdges<br/>イベント間の因果依存]
+    EVENTSTABLE --> SUMMARYUPDATE[CharacterSummaries/<br/>CivSummaries事前集計更新]
+    EVENTSTABLE --> YEARLYMETRICS[yearly_metrics<br/>年次世界統計]
+    EVENTSTABLE --> QUERYSVC[IHistoryQueryサービス<br/>LRUキャッシュ付き]
+    ENTITYJUNCTION --> QUERYSVC
+    SUMMARYUPDATE --> QUERYSVC
+    QUERYSVC --> NARRATIVE["物語化/検索<br/>GetCivHistory等"]
+```
+
+**読み方**: この図は因果モデルではなく「シミュレーションのどんな出来事を、どう記録し、どう後から検索可能にするか」というデータフローを示す。重要なのは、生の状態変化（SIMSTATE）を毎回記録するのではなく、3つの独立した重要度ルールの最大値によって「記録に値するイベント」を選別している点（MAXTIER）。さらに生イベントテーブルとは別に、事後クエリを高速化するための事前集計サマリーテーブル（CharacterSummaries/CivSummaries）を並行して維持する二層構造が、大量の年次シミュレーションを実用的な速度で「検索可能な歴史」にする鍵になっている。今回のアプリでLLMによる歴史の物語化機能を実装する際、このイベント選別＋二層記録の構造がそのまま設計テンプレートとして使える。
+
 ## 確信度
 
 高。Haikuエージェントがデータベーススキーマの完全なDDLとADR文書を詳細に抽出している。

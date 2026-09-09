@@ -99,6 +99,53 @@
 
 **[事実]** Whittaker (1975)（バイオーム分類）、Lieth (1975)（Miami NPPモデル、コード内に式`NPP=min(NPP_T, NPP_P)`まで明記）、IPCC（気候感度）、Arrhenius（CO2-気温の古典関係式）。正式な引用セクションはなく、コードコメント内での言及のみ。
 
+## Pass 3 深掘り: 因果グラフ
+
+**[Sonnetによる整理]**
+
+```mermaid
+flowchart TD
+    GEO[大陸生成<br/>fBm+plate-tectonics-lite] --> CLIMATE["気温=緯度日射+標高減率<br/>降水=Hadley循環+地形性降水"]
+    CLIMATE --> BIOME[Whittakerバイオーム分類]
+    BIOME --> FERTILITY["肥沃度 Miami NPPモデル<br/>NPP=min(NPP_T,NPP_P)"]
+    FERTILITY --> FOODYIELD[食料収量]
+    FOODYIELD --> CAPACITY["収容力<br/>=max(200,food×200×tech係数)"]
+    POP[人口] --> CROWD[過密度=人口/収容力]
+    CAPACITY --> CROWD
+    FOODYIELD --> BIRTHRATE[出生率<br/>食料比×幸福度の関数]
+    CROWD -->|過密で↓| BIRTHRATE
+    FOODYIELD -->|飢饉で↑| DEATHRATE[死亡率]
+    CROWD -->|過密で疾病↑| DEATHRATE
+    BIRTHRATE --> POP
+    DEATHRATE --> POP
+    CROWD -->|圧力| MIGPRESSURE[移住圧力]
+    TRAIT_MIG[Migration trait] --> MIGDRIVE[移住ドライブ]
+    MIGPRESSURE --> MIGDRIVE
+    MIGDRIVE --> MIGRATE{移住発生}
+    MIGRATE --> DESTSCORE["半径4内スコア評価<br/>=肥沃度×100-人口×0.05-距離×2"]
+    DESTSCORE --> RESETTLE[最高スコア地へ移動]
+    GEO -->|沿岸/山地/河川| TECHBIAS[地理バイアス]
+    TRAIT_SET[性格8軸<br/>Aggression等] --> TECHBIAS2[性格バイアス]
+    TECHBIAS --> RESEARCH[加重ランダム研究選択]
+    TECHBIAS2 --> RESEARCH
+    RESEARCH --> TECHTREE[技術DAG進展]
+    TECHTREE -->|軍事技術| POWER[戦力]
+    TRAIT_AGG[Aggression trait] --> WARPROB[開戦確率]
+    RELATIONS[対文明関係値] --> WARPROB
+    POWER --> WARPROB
+    WARPROB --> WAR[戦争]
+    WAR -->|年次パワー差| TERRITORY[領土変化]
+    TERRITORY -->|12%超| EMPIRE[帝国宣言]
+    STABILITY[安定度] -->|8年閾値未満継続| CIVILWAR[内戦分裂]
+    TECHTREE -->|産業技術| CO2[CO2排出]
+    CO2 --> WARMING[気温上昇 IPCC対数モデル]
+    WARMING --> BIOME
+    WARMING --> SEALEVEL[海面上昇]
+    SEALEVEL -->|沿岸都市| DROWN[都市水没]
+```
+
+**読み方**: Genesisの因果連鎖で特に注目すべきは、「性格8軸（TRAIT_SET）」が技術研究バイアス（TECHBIAS2）と開戦確率（WARPROB経由のTRAIT_AGG）という2つの重要な意思決定ポイントに直接介入している点。これは「文明の内心パラメータが直接行動を決める」という、ユーザーが避けたい設計の具体的な機序。対照的に「地理バイアス（TECHBIAS）」は地形条件から技術選択への間接的な影響であり、こちらは活用可能な原理。差別化の要点は、性格パラメータのノードを図から取り除き、代わりに「接触履歴」「過去の成功/失敗」「隣接集団との資源競合の実績」のような、環境と履歴から導かれる状態変数に置き換えることにある。
+
 ## 確信度
 
 高。Haikuエージェントが数式・デフォルト値・テストの検証内容まで極めて詳細に抽出している。

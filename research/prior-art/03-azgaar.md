@@ -94,6 +94,45 @@
 
 **[事実]** 学術論文の引用はなし。全てブログ・Web解説記事: Martin O'Leary "Generating fantasy maps"、Amit Patel "Polygonal Map Generation for Games"、Scott Turner "Here Dragons Abound"、Mapbox "Pole of inaccessibility"アルゴリズム解説、Bowyer-Watson法（Wikipedia）。
 
+## Pass 3 深掘り: 因果グラフ
+
+**[Sonnetによる整理]**
+
+```mermaid
+flowchart TD
+    HEIGHT[標高マップ] --> BIOME[biome分類]
+    BIOME --> SUIT[適地スコア s]
+    RIVER[河川flux] --> SUIT
+    COAST[海岸距離] --> SUIT
+    SUIT --> CAPITAL[首都quadtree配置]
+    CAPITAL --> TOWN[町Gauss分布配置]
+    TOWN --> BURGTYPE{地形条件で<br/>タイプ決定論的判定}
+    BURGTYPE -->|標高>60| HIGHLAND[Highland burg]
+    BURGTYPE -->|河川flux>=100| RIVERBURG[River burg]
+    BURGTYPE -->|港湾あり| NAVAL[Naval burg]
+    CULTURESORT[文化別ソート関数<br/>気温差+biomeペナルティ+海岸ペナルティ] --> CULTURECENTER[文化中心地配置]
+    CULTURECENTER --> CULTURETYPE{地形条件で<br/>文化タイプ決定論的判定}
+    CULTURETYPE -->|標高<70&biome特定| NOMADIC[Nomadic文化]
+    CULTURETYPE -->|標高>50| HIGHLANDCULT[Highland文化]
+    NOMADIC --> EXPANRATE[拡張係数<br/>タイプ別基準値×乱数]
+    EXPANRATE --> PQUEUE[優先度キュー拡張]
+    BIOME -->|タイプ別コスト係数| PQUEUECOST[コスト関数<br/>biome+標高+河川+気温+タイプ]
+    PQUEUECOST --> PQUEUE
+    PQUEUE --> CULTUREMAP[文化領域確定]
+    CULTUREMAP --> RELIGIONCENTER[宗教中心地<br/>Folk=文化ごと1つ]
+    RELIGIONCENTER --> RELIGIONEXPAND[宗教拡張<br/>文化境界に沿う]
+    CULTUREMAP --> STATECAPITAL[国家首都選定]
+    STATECAPITAL --> STATEEXPAND[国家拡張<br/>burg誘引+地形コスト+文化コスト]
+    STATEEXPAND --> STATEFORM{統治形態決定}
+    STATEFORM --> TAX[税率<br/>形態別デフォルト+jitter]
+    BURGPOS[burg座標群] --> DELAUNAY[Delaunay三角形分割]
+    DELAUNAY --> URQUHART[最長辺除去<br/>Urquhart graph]
+    URQUHART --> ROUTECOST[陸路/水路別コスト評価]
+    ROUTECOST --> ROADS[道路網確定]
+```
+
+**読み方**: Azgaarの因果連鎖で最も特徴的なのは「BURGTYPE」「CULTURETYPE」という分岐ノードで、地形条件（標高・biome・河川flux）から生業/文化タイプへの**決定論的な閾値判定**が行われている点（例: 標高>60なら必ずHighland）。これはユーザーが避けたい「砂漠だから必ず遊牧民」型の一対一決定論の典型的な実装パターンであり、今回のアプリで転用する際は、この決定論的分岐を確率分布（例えば「標高>60ならHighland型になる確率が高いが、Lowland型や複合型もありうる」）に置き換える必要がある。一方、優先度キューによるコストベースの領域拡張（PQUEUE）自体は決定論とは独立した汎用アルゴリズムであり、そのまま活用できる。
+
 ## 確信度
 
 高。Haikuエージェントがコスト関数の具体的な数式・係数まで抽出しており、非常に詳細。
