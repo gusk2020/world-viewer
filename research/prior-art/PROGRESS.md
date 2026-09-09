@@ -19,8 +19,8 @@ Tracking document for the先行実装・競合・研究実装 survey. This file 
 | 02 | MayaSim | 02-mayasim.md | ✅ | Factsheet + final md done |
 | 03 | Azgaar Fantasy Map Generator | 03-azgaar.md | ✅ | Factsheet + final md done |
 | 04 | Oikoumene | 04-oikoumene.md | ✅ | Factsheet + final md done. High relevance to final goal. |
-| 05 | Genesis (tan-zhuo) | 05-genesis.md | 🔄 | Factsheet ready at /tmp/prior-art-clones/05-genesis-factsheet.md, final md not written yet |
-| 06 | AEON: Living Worlds | 06-aeon.md | 🔄 | Factsheet ready at /tmp/prior-art-clones/06-aeon-factsheet.md, final md not written yet |
+| 05 | Genesis (tan-zhuo) | 05-genesis.md | ✅ | Factsheet + final md done. Treated as future competitor - differentiation focus. |
+| 06 | AEON: Living Worlds | 06-aeon.md | ✅ | Factsheet + final md done. Best concrete reference for sim/LLM boundary design. |
 | 07 | randyau/worldgen (World Engine) | 07-randyau-worldgen.md | 🔄 | Factsheet ready at /tmp/prior-art-clones/07-randyau-worldgen-factsheet.md, final md not written yet |
 | 08 | WorldEngine (Mindwerks) | 08-worldengine.md | 🔄 | Factsheet ready at /tmp/prior-art-clones/08-worldengine-factsheet.md, final md not written yet |
 | 09 | NeoNet | 09-neonet.md | 🔄 | Factsheet ready at /tmp/prior-art-clones/09-neonet-factsheet.md, final md not written yet |
