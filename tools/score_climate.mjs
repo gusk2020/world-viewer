@@ -123,14 +123,14 @@ function main() {
   console.log(`  探索用スコア (低いほど良い) ${result.score.toFixed(4)}`);
 
   if (args.regions > 0) {
-    const worst = [...result.regions].sort((a, b) => a.softIou - b.softIou).slice(0, args.regions);
+    const worst = [...result.regions].sort((a, b) => a.iou - b.iou).slice(0, args.regions);
     console.log("");
     console.log(`  worst ${worst.length} regions:`);
     for (const r of worst) {
       console.log(
         `    lat ${String(r.lat - 15).padStart(4)}..${String(r.lat).padStart(3)}  ` +
         `lng ${String(r.lng).padStart(5)}..${String(r.lng + 30).padStart(4)}  ` +
-        `${percent(r.softIou).padStart(6)}  (${(r.land * 100).toFixed(1)}% of land)`
+        `${percent(r.iou).padStart(6)}  (${(r.land * 100).toFixed(1)}% of land)`
       );
     }
   }

@@ -880,12 +880,22 @@ export function classifyPoint(out, metres, seaLevelMetres, seaLevelC, moisture, 
 // Two versions of each number come out, and they answer different questions:
 //
 //   hard  -- the model's colours resolved to one class per pixel, exactly the
-//            way the painter resolves them. This is what gets reported,
-//            because it is what the eye sees.
-//   soft  -- the same thing computed from the model's own memberships, which
-//            move continuously as a parameter moves. This is what the search
-//            in the next stage optimises, because a hard label only changes
-//            when a pixel flips and gives the search almost nothing to follow.
+//            way the painter resolves them. This is what gets reported, what
+//            the phone shows, and -- since Stage 7 -- what the search
+//            optimises.
+//   soft  -- the same thing computed from the model's own memberships. It was
+//            meant to be the search's target, on the reasoning that a hard
+//            label only changes when a pixel flips and so gives a search
+//            nothing to follow. **Measurement killed that idea**: with the
+//            gradient widths held fixed the two disagree in *direction* -- a
+//            model that hedges, keeping its memberships near the middle,
+//            scores better softly and worse once the colours are resolved.
+//            Optimising a surrogate that disagrees with the number being
+//            reported is worse than optimising nothing, and the worry behind
+//            it was unfounded anyway: at two million pixels a small parameter
+//            change flips thousands of them, so the hard score moves smoothly
+//            enough for a gradient-free search. It is still computed and
+//            reported, as a diagnostic.
 //
 // Everything is area-weighted by cos(latitude): an equirectangular grid gives
 // a polar cell the same number of pixels as an equatorial one while it covers
@@ -939,10 +949,26 @@ const REGION_LAT_STEP = 15;
 const REGION_LNG_STEP = 30;
 const REGION_MIN_LAND_FRACTION = 0.001;
 
-// How much the region term counts next to the global one. Half: the global
-// agreement is the headline, and the region term exists to stop one continent
-// being paid for by another, not to become the score itself.
-const REGION_WEIGHT = 0.5;
+// How much the region term counts next to the global one.
+//
+// **It was 0.5, and at that weight it decided the answer rather than guarding
+// it.** Two full searches, 40,000 trials each, improved this score by 5% and
+// came back with *every one of their twenty best candidates worse than the
+// shipped model on the mean IoU* -- the number the user's own specification
+// names as the total, and the one the phone displays. A search that makes the
+// headline worse while its own score improves is being pointed at the wrong
+// quantity.
+//
+// The term still earns a place, but a small one. Its original job (Stage 2)
+// was to stop Africa being twice as green as it should be while Eurasia was
+// half, with the two errors cancelling inside one number -- but that
+// cancellation was possible because the global measure then was a *mean
+// vegetated fraction*. Intersection over union is per pixel: a misplaced pixel
+// is counted wherever it is, so the cancellation it was built to prevent
+// cannot happen any more. What is left is a guard against a fit that is right
+// on the big continents and wrong on the small ones, which is worth 0.15 and
+// not worth 0.5.
+const REGION_WEIGHT = 0.15;
 
 // The model's memberships resolved to one class, matching what paintClimate
 // actually draws: it blends all the way to snow at 1, and dry grass is the
@@ -1014,6 +1040,8 @@ export function scoreAgainstTeacher({
   const cells = latRows * lngColumns;
   const cellHit = new Float64Array(cells * n);
   const cellUnion = new Float64Array(cells * n);
+  const cellHardHit = new Float64Array(cells * n);
+  const cellHardUnion = new Float64Array(cells * n);
   const cellLand = new Float64Array(cells);
 
   const surface = new Float64Array(5);
@@ -1074,6 +1102,8 @@ export function scoreAgainstTeacher({
         softUnion[k] += union;
         cellHit[cell * n + k] += hit;
         cellUnion[cell * n + k] += union;
+        cellHardHit[cell * n + k] += w * teacherIs * modelIs;
+        cellHardUnion[cell * n + k] += w * (teacherIs + modelIs - teacherIs * modelIs);
       }
     }
   }
@@ -1106,18 +1136,23 @@ export function scoreAgainstTeacher({
 
   const regions = [];
   let regionPenalty = 0;
+  let softRegionPenalty = 0;
   let regionCount = 0;
   const totalLand = cellLand.reduce((a, b) => a + b, 0);
   for (let cell = 0; cell < cells; cell++) {
     if (cellLand[cell] < totalLand * REGION_MIN_LAND_FRACTION) continue;
     let sum = 0;
+    let hardSum = 0;
     let used = 0;
     for (let k = 0; k < n; k++) {
       if (cellUnion[cell * n + k] <= 0) continue;
       sum += cellHit[cell * n + k] / cellUnion[cell * n + k];
+      hardSum += cellHardUnion[cell * n + k] > 0
+        ? cellHardHit[cell * n + k] / cellHardUnion[cell * n + k] : 0;
       used++;
     }
-    const value = used ? sum / used : 0;
+    const value = used ? hardSum / used : 0;
+    softRegionPenalty += 1 - (used ? sum / used : 0);
     regionPenalty += 1 - value;
     regionCount++;
     const latIndex = Math.floor(cell / lngColumns);
@@ -1125,11 +1160,12 @@ export function scoreAgainstTeacher({
     regions.push({
       lat: 90 - latIndex * REGION_LAT_STEP,
       lng: -180 + lngIndex * REGION_LNG_STEP,
-      softIou: value,
+      iou: value,
       land: cellLand[cell] / totalLand,
     });
   }
   regionPenalty = regionCount ? regionPenalty / regionCount : 0;
+  softRegionPenalty = regionCount ? softRegionPenalty / regionCount : 0;
 
   const meanIou = counted ? hardTotal / counted : 0;
   const meanSoftIou = counted ? softTotal / counted : 0;
@@ -1141,9 +1177,13 @@ export function scoreAgainstTeacher({
     totalWeight,
     regions,
     regionPenalty,
+    softRegionPenalty,
     regionCount,
     // Lower is better, and this is the number the automatic search minimises.
-    score: 1 - meanSoftIou + REGION_WEIGHT * regionPenalty,
+    // Built from the *hard* figures, so it is one arithmetic step away from
+    // the total the user reads: nothing can improve this while making that
+    // worse.
+    score: 1 - meanIou + REGION_WEIGHT * regionPenalty,
   };
 }
 
