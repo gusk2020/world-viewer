@@ -41,7 +41,7 @@ Status: ✅ Done. 20 topic sections (terrain->climate through LLM role), each wi
 Status: ✅ Done. Focus on Azgaar and Genesis (most product-like competitors) plus shorter notes on AEON/MayaSim/Oikoumene/randyau. Ends with 3 cross-cutting differentiation principles: (a) parameters live in environment+history not in a civ's "personality", (b) determinism -> probability distributions everywhere, (c) LLM as interpreter only, even more conservative than AEON's already-conservative boundary.
 
 ## Pass 6 — license-and-provenance.md
-Status: ⬜ Not started
+Status: ✅ Done. Table of all 10 with license, referenced files/papers, principle-only vs code-candidate. Only Azgaar and WorldEngine are MIT; both still marked "do not use code" for differentiation/quality reasons. No code was copied from any of the 10 into this repo.
 
 ## Pass 7 — civilization-simulator-roadmap.md
 Status: ⬜ Not started
