@@ -113,6 +113,23 @@ continue.
   the user inserted this stage after Stage 7 converged: add representational
   power to the climate model rather than search harder. Seasons, seasonal
   winds, rain shadow, and a summer-melt snow test. See "V0.8 stage 7.5".
+- **V0.8 stage 7.5 diagnosis + Teacher B (current, done, no app behaviour
+  changed)**: after Stage 7.5, the user asked for a diagnosis rather than
+  more model changes: is ~63% the model's ceiling, or the teacher's? Full
+  write-up in `docs/climate-model-diagnosis-after-stage7_5.md` — the short
+  version is that the shipped model is, in effect, a *zonal* model (a
+  latitude-only lookup table scores 62.86% against the same teacher the
+  model scores 63.37% on), 70.6% of what the teacher can't explain is
+  longitudinal, and the parameter search was confirmed *not* to be the wall
+  from a fourth independent direction. The user then asked for a second,
+  independent teacher — one that can actually see season/monsoon/wet-dry
+  structure, which the four-class annual teacher (Teacher A) was shown to
+  barely see at all (switching the monsoon term off moves Teacher A by
+  exactly 0.00) — before touching the climate model further. See "V0.8
+  stage 7.5 diagnosis and Teacher B" and
+  `docs/teacher-b-climate-structure.md` for the build and the
+  self-verification that it actually works. Nothing about the climate model
+  itself changed in either round; nothing new is drawn on screen.
 - **V0.9+**: cities, borders/territories, historical eras, and other
   過速世界-specific data. Several distinct features, not one version —
   treat each as its own sub-version. **Needs the user's own world-setting
@@ -2560,6 +2577,64 @@ What Stage 7.5 leaves behind that is worth keeping regardless: the rain shadow
 (measurably right, and used by the fit), the seasons themselves (dormant on
 Earth but the machinery another world needs), and a snow test that asks a real
 question instead of standing in for one.
+
+## V0.8 stage 7.5 diagnosis and Teacher B
+
+Two rounds, both diagnosis-only — no climate-model code changed in either,
+and nothing new is drawn on screen in either. Full write-ups are
+`docs/climate-model-diagnosis-after-stage7_5.md` and
+`docs/teacher-b-climate-structure.md`; this is the short version for future
+sessions.
+
+**Round 1: is ~63% the model's ceiling, or the teacher's?** Measured three
+new ways, none of which existed before: a lookup table that memorises the
+teacher by latitude alone scores **62.86%**, half a point under the shipped
+model's 63.37% — a quarter of a million search trials across four rounds
+bought less than a latitude table already has. The ceiling on the model's
+*own internal state* (temperature × moisture) is **64.28%** — under a point
+of headroom left for any parameter or threshold change. And 70.6% of what
+the teacher's vegetation map varies by, within a single latitude band, is
+variation the model's moisture field does not explain (r = 0.18). Read
+together: the model is, in effect, a **zonal** (latitude-only) model, the
+search was never the wall, and the remaining error is almost entirely
+**longitudinal** structure — a monsoon coast look different from a desert
+at the same latitude, which nothing currently distinguishes. The document
+chose two next steps: making the ITCZ longitude-dependent (not yet
+implemented), and building a second teacher first, because Stage 7.5's own
+history (a correctly-implemented rain shadow that the search still switched
+off) showed that a mechanism the objective cannot see gets discarded no
+matter how right it is.
+
+**Round 2: Teacher B, a climate-*structure* teacher, independent of
+Teacher A.** Teacher A (植生/乾燥地/雪氷/海氷, an annual snapshot) is shown to
+barely see season, monsoon or a wet/dry cycle at all — switching the
+monsoon term off moves it by exactly 0.00. Teacher B is built from Beck et
+al. (2018)'s real, observed Köppen-Geiger classification (CC BY 4.0,
+fetched via GitHub Actions the way GEBCO is, since figshare is one of the
+hosts this sandbox cannot reach directly), reduced to eight structural
+classes using only the standard published group thresholds — never World
+Orogen's implementation of them, which was consulted only as a read-only,
+GPLv3-licensed methodology reference (see the diagnosis doc's own section 2
+for exactly what was and was not used from it). `js/climate.js` gained
+`STRUCTURE_CLASSES`, `classifyStructurePoint()` and
+`scoreAgainstStructureTeacher()` as pure additions (confirmed: zero lines
+removed from the file, Teacher A's score unchanged before and after);
+`tools/build_koppen_teacher.py` builds the data, `tools/score_koppen.mjs`
+scores it, kept entirely separate from Teacher A's own score by design —
+the two are never combined into one number.
+
+It works: reversing `seasonalSensitivityC` from 0 to the physically real
+Earth value (25) moves Teacher B from 9.8% to **17.6%**, a clean monotonic
+response Teacher A cannot produce. It also confirms the monsoon term is
+inert from a second, independent angle (10.2% → 10.3% switching it on),
+and gives a rain-shadow signal (9.9% → 10.2%) of the same size Teacher A
+already found. Per-class, the shipped model currently produces **zero**
+land area in three of the eight classes (熱帯季節性/温帯季節性/寒冷季節性) —
+it never paints a genuine seasonal climate at any temperature band — which
+is the concrete, measured version of "the model is zonal" from round 1.
+Nothing about the climate model was changed to fix this; that is next
+Opus's task (ITCZ longitude-dependence), with Teacher B now in place to
+measure whether it actually helps.
 
 ## The panel move (after Stage 6)
 
