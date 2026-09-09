@@ -107,8 +107,12 @@ continue.
   total, by a program. See "V0.8 stage 6: scoring". The user then asked for
   the 天体 and 軸/線 rows to move below the 2D/3D button — see "The panel
   move".
-- **V0.8 stage 7 (current, done — needs the user's Pixel 7a confirmation)**:
-  the automatic parameter search. See "V0.8 stage 7: the search".
+- **V0.8 stage 7 (done)**: the automatic parameter search. See "V0.8 stage 7:
+  the search".
+- **V0.8 stage 7.5 (current, done — needs the user's Pixel 7a confirmation)**:
+  the user inserted this stage after Stage 7 converged: add representational
+  power to the climate model rather than search harder. Seasons, seasonal
+  winds, rain shadow, and a summer-melt snow test. See "V0.8 stage 7.5".
 - **V0.9+**: cities, borders/territories, historical eras, and other
   過速世界-specific data. Several distinct features, not one version —
   treat each as its own sub-version. **Needs the user's own world-setting
@@ -2406,6 +2410,156 @@ direction the user asked for). The temperature sweep still peaks at 14 °C.
 **The top twenty sets are committed**, as asked, to
 `worlds/kasoku-sekai/climate-candidates.json` — rank 0 is what the world now
 carries, and the spread is where Stage 8 starts.
+
+## V0.8 stage 7.5: seasons, and what they cost
+
+The user's call after Stage 7 converged at 63.4%: stop searching a model that
+has no more to give and give it more to say. Four mechanisms, with one hard
+rule stated twice — **no Earth-specific correction of any kind**, no place
+names, no coordinate ranges. The point is "地球を教師にして、未知の惑星にも
+使える簡易気候生成器を育てる".
+
+All four are built, all four are verified to work, and **the search then
+switched three of them off.** That is the finding, and the evidence for it is
+strong enough to be worth more than the half point of agreement it did not buy.
+
+### What was added
+
+**A. Seasons** (`seasonalInsolationByLatitude`, and two new arrays out of
+`temperatureProfile`). The daily-mean insolation at each solstice, per
+latitude, each latitude taking its own warm and cold season — so the two
+hemispheres are warm at opposite times and a "warm season" field is a
+composite of two moments in the year. Done from the geometry rather than a
+fitted "seasons grow toward the poles" curve, which costs the same few
+thousand evaluations and works unchanged on a world tilted 80°. Carried as a
+*departure* from the annual mean, not an absolute temperature, so the sea can
+keep a fraction of it (`seaSeasonalDamping`) while the land keeps all of it —
+one number, and the land/sea contrast that drives a monsoon falls out of it.
+`orbit` is the seam for eccentricity: a real orbit scales each solstice by
+1/r², and a circular one reduces to the geometry.
+
+**B. Seasonal wind.** The whole cell structure hangs off the sub-solar
+latitude, so each hemisphere's rain belt moves poleward in its own summer;
+plus a land/sea inflow term that lengthens how far moisture rides the wind in
+the warm season and shortens it in the cold one.
+
+**C. Rain shadow.** A walk a fixed distance upwind keeping the highest ground
+on the way: ground far below that crest is dried, ground that rises out of its
+own upwind cell is wetted. Affordable for the same reason the advection sweep
+is — the wind is constant across a row, so the whole path is a per-row
+constant and the scan is eight reads per cell.
+
+**D. Permanent snow** is asked of the warm season directly: does the melt
+season melt it. That retires `permanentSnowOffsetC`, which was an annual-mean
+fudge standing in for exactly this question.
+
+Eight parameters added, one retired, every one `empirical` and every one
+carrying its own note. Cost measured: **490 ms** for model plus painter,
+against 486 ms before — two seasons cost nothing measurable, because the
+second pass reuses warm memory.
+
+### Each mechanism verified before any fitting
+
+Stated as directions the physics requires, not numbers that happened to come
+out:
+
+- the seasonal swing grows with latitude, is **0.0 on a world with no tilt**,
+  and grows on a more tilted one;
+- a monsoon-latitude coast swings **4.5×** in moisture between its seasons
+  where the Amazon swings **1.05×**;
+- windward/lee moisture ratio with the mechanism off → on: Southern Alps
+  **0.69 → 1.36** (it was *backwards* before), Cascades **1.08 → 2.41**,
+  Andes 1.04 → 1.15.
+
+### One real design error, found by measuring rather than by reading
+
+The monsoon inflow was first attached to the **isotropic** still-air term. It
+could never have worked there, and the measurement is unambiguous: every
+setting that lifted Indochina from 30% vegetated toward the teacher's 78%
+lifted the Sahara from **11% to 88%** with it. An isotropic term reaches a
+desert exactly as readily as a monsoon coast, and latitude alone cannot tell
+the two apart. What can is *where the sea sits relative to the seasonal wind*,
+and only the advection sweep knows that — so the term moved onto the
+wind-carried moisture, where it is directional by construction.
+
+After the move the Sahara no longer follows Indochina. It also stopped doing
+anything at all: sweeping `monsoonStrength` across its whole range moves
+Indochina by **one point**, because the wind-carried pathway is so weak at the
+fitted parameters that anything attached to it is inert. That is the same
+inert-term problem Stage 3 found in `evaporationHalfC` and the Stage 7 screen
+found in `advectionRangeKm`, for the third time.
+
+### The search's verdict, which is unanimous
+
+About 130,000 trials on the new model, in three rounds plus a pilot and a
+screen. Final: **63.4%**, level with the Stage 7 model it replaces.
+
+| | Stage 7 | Stage 7.5 |
+| --- | --- | --- |
+| 総合 | 63.4% | **63.4%** |
+| 植生 | 56.8% | **57.4%** |
+| 乾燥地 | 62.7% | **62.9%** |
+| 雪氷 | 80.0% | 79.3% |
+| 海氷 | 54.0% | 54.0% |
+| 地域一致 | 38.0% | **38.8%** |
+
+And the part that matters more than the table: **all twenty top candidates,
+from four independent seeds, put `seasonalSensitivityC` between 3.0 and 5.8
+out of 120, and every single one put `itczFollowFraction` at 0.000.** The
+search switched the seasons and the seasonal wind off and kept only the rain
+shadow. At `seasonalSensitivityC` = 4 a mid-latitude land cell swings 4.5 °C
+across the year, where the real Earth swings about 28.
+
+### What physical correctness costs, measured
+
+`--pin` was added to the search for this: hold a parameter and search the
+rest, which is the only way to tell "this mechanism does not help" from "the
+objective cannot see it". Pinned at each strength, refitted around it:
+
+| `seasonalSensitivityC` | 45°N swing | 総合 | 植生 | 乾燥地 | 雪氷 | 海氷 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 4 (what the search chose) | 4.5 °C | **63.4%** | 57.4 | 62.9 | **79.3** | 54.0 |
+| 10 | 11.2 °C | 62.7% | 57.8 | 62.3 | 76.8 | 54.0 |
+| 15 | 16.8 °C | 61.5% | 57.4 | 61.6 | 73.0 | 54.0 |
+| 20 | 22.4 °C | 61.1% | 56.9 | 61.0 | 72.6 | 54.0 |
+| 25 (Earth's real swing) | 28.0 °C | 59.1% | **57.5** | 59.1 | 65.7 | 54.0 |
+| 40 | 44.9 °C | 41.4% | — | — | — | — |
+
+A physically right Earth costs **4.3 points**, monotonically, with no sweet
+spot. And the cost is located precisely: **vegetation is flat (57.4 → 57.5)
+and sea ice is exactly flat; the whole loss is snow, 79.3 → 65.7.** Turning on
+a real melt season removes ice from ground the teacher says is permanently
+iced — the ice-sheet margins and the high mountains, where the model's
+warm-season temperature climbs above the melt point because nothing in it
+knows that a melting surface cannot rise past 0 °C while there is still ice to
+melt.
+
+That is the next real piece of physics, and it is one mechanism, not a
+parameter. It was **not** added: the user's instruction for this exact outcome
+was to stop rather than keep adding terms, and to report the limit.
+
+### The honest conclusion
+
+The stage did what it was asked and the result is a negative one worth having.
+The model is **not** limited by its parameters — three searches totalling over
+a quarter of a million trials have now confirmed that from four directions.
+Nor is it limited by lacking seasons: seasons are there, they work, and the
+score prefers them off.
+
+It is limited by two things that are mechanisms rather than numbers:
+
+1. **A melting surface has no temperature ceiling.** Without one, a real
+   summer melts ice the teacher says survives, which is why seasons cost 14
+   points of snow agreement.
+2. **The only moisture pathway that reaches an interior is isotropic.** The
+   directional one dies within a cell or two of any relief, so the model
+   cannot tell a monsoon coast from a desert at the same latitude, and no
+   amount of fitting will make it.
+
+What Stage 7.5 leaves behind that is worth keeping regardless: the rain shadow
+(measurably right, and used by the fit), the seasons themselves (dormant on
+Earth but the machinery another world needs), and a snow test that asks a real
+question instead of standing in for one.
 
 ## The panel move (after Stage 6)
 
