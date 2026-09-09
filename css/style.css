@@ -160,6 +160,20 @@ html, body {
   color: #c8d6ea;
 }
 
+/* How well the painted surface matches the teacher data. One line, same
+   quiet weight as the caption above -- it is there to be glanced at while
+   the temperature slider moves, not to compete with the controls. */
+#climate-score {
+  margin: 0 2px 1px;
+  font-size: 0.68rem;
+  font-weight: 400;
+  line-height: 1.25;
+  color: #c8d6ea;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* The axial-tilt and graticule buttons. Same visual family as the segmented
    controls, but each is a single button that cycles through its states. */
 .pill {

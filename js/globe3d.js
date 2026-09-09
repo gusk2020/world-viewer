@@ -24,6 +24,7 @@ import {
   paintClimate,
   computeClimate,
   resolveClimateSets,
+  scoreAgainstTeacher,
 } from "./climate.js";
 import {
   SEABED_RAMPS,
@@ -280,6 +281,15 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
   // climate colouring needs -- a world without them cannot show it either.
   const hasTeacher = Boolean(teacherImage) && usesPhoto;
   let teacherTexture = null;
+  // The teacher map's class numbers, decoded from the image the first time
+  // anything needs them. It is a paletted PNG, so what a canvas hands back is
+  // the palette's colours rather than the indices -- the world's config names
+  // those colours, so each pixel is matched to the nearest of them.
+  let teacherClasses = null;
+  // What the last climate paint scored against that teacher. Null when the
+  // climate colouring is not what is on screen, because the number would then
+  // describe a picture nobody is looking at.
+  let climateScore = null;
   if (hasTeacher) {
     teacherTexture = new THREE.Texture(teacherImage);
     teacherTexture.colorSpace = THREE.SRGBColorSpace;
@@ -378,6 +388,7 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
     // which is what an unknown name used to fall through to.
     const known = mode === "climate" || mode === "rock" || (mode === "teacher" && hasTeacher);
     surfaceMode = known ? mode : "standard";
+    if (surfaceMode !== "climate") climateScore = null;
     if (surfaceMode === "standard" || surfaceMode === "teacher") {
       globe.material.map = surfaceMode === "teacher" ? teacherTexture : texture;
       globe.material.needsUpdate = true;
@@ -389,6 +400,11 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
       // read once, on the next line. Holding them for the life of the globe
       // bought nothing.
       const values = climateValues();
+      // Sampling every second pixel in each direction. Measured against the
+      // full raster the agreement figures move by 0.03 of a percentage point
+      // and it costs a quarter of the time, which is what makes scoring
+      // affordable inside a repaint on a phone.
+      const scoreStep = 2;
       const fields = computeClimate({
         elevation,
         seaLevelMetres,
@@ -402,6 +418,13 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
         climatePixels.data, elevation, fields, seaLevelMetres,
         values, climate.palette
       );
+      if (hasTeacher) {
+        if (!teacherClasses) teacherClasses = decodeTeacherClasses(teacherImage, worldConfig.teacher);
+        climateScore = scoreAgainstTeacher({
+          elevation, climate: fields, teacher: teacherClasses,
+          seaLevelMetres, params: values, step: scoreStep,
+        });
+      }
     } else {
       paintBareRock(
         climatePixels.data, elevation, seaLevelMetres, climateValues(), climate.palette
@@ -636,6 +659,7 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
     setClimateSet,
     getMeanTemperature,
     setMeanTemperature,
+    getClimateScore: () => climateScore,
     setGraticule,
     getMetresPerPixel,
     dispose,
@@ -650,6 +674,43 @@ function requireNumber(value, name) {
     throw new Error(`${name} must be a number in the world's config.json`);
   }
   return value;
+}
+
+// The teacher map as one class number per pixel. Drawn once into a canvas and
+// matched against the colours the world's config declares -- nearest rather
+// than exact, because a browser is free to colour-manage a PNG and shift its
+// palette by a unit or two, while the five class colours are far enough apart
+// that nearest cannot pick the wrong one.
+function decodeTeacherClasses(image, teacher) {
+  const canvas = document.createElement("canvas");
+  canvas.width = image.naturalWidth || image.width;
+  canvas.height = image.naturalHeight || image.height;
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  context.drawImage(image, 0, 0);
+  const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+  const palette = teacher.colours.map((hex) => [
+    parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16),
+  ]);
+  const data = new Uint8Array(canvas.width * canvas.height);
+  for (let i = 0; i < data.length; i++) {
+    const r = pixels[i * 4];
+    const g = pixels[i * 4 + 1];
+    const b = pixels[i * 4 + 2];
+    let best = 0;
+    let bestDistance = Infinity;
+    for (let k = 0; k < palette.length; k++) {
+      const dr = r - palette[k][0];
+      const dg = g - palette[k][1];
+      const db = b - palette[k][2];
+      const distance = dr * dr + dg * dg + db * db;
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = k;
+      }
+    }
+    data[i] = best;
+  }
+  return { width: canvas.width, height: canvas.height, data };
 }
 
 // Which era's teacher map to show. A world with no teacher block has none,

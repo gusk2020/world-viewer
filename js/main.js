@@ -26,6 +26,7 @@ async function main() {
   const climateTempRow = document.getElementById("climate-temp-row");
   const climateTempSlider = document.getElementById("climate-temp-slider");
   const climateTempReadout = document.getElementById("climate-temp-readout");
+  const climateScoreLine = document.getElementById("climate-score");
   const axisButton = document.getElementById("axis-toggle");
   const axisReadout = document.getElementById("axis-readout");
   const graticuleButton = document.getElementById("graticule-toggle");
@@ -125,7 +126,10 @@ async function main() {
     button.addEventListener("click", () => {
       surfaceMode = button.dataset.surface;
       applySurfaceButtons();
-      requestAnimationFrame(() => globe3d.setSurfaceMode(surfaceMode));
+      requestAnimationFrame(() => {
+        globe3d.setSurfaceMode(surfaceMode);
+        applyClimateScore();
+      });
     });
   });
 
@@ -139,6 +143,25 @@ async function main() {
     const showsClimate = surfaceMode === "climate" && Boolean(globe3d && globe3d.supportsClimate);
     climateSetRow.hidden = !showsClimate || sets.length < 2;
     climateTempRow.hidden = !showsClimate;
+    applyClimateScore();
+  }
+
+  // The agreement with the teacher data, in one line. Worked out by the same
+  // code the command-line scorer uses, so what the phone shows and what the
+  // parameter search optimises cannot drift apart.
+  function applyClimateScore() {
+    const result = globe3d && globe3d.getClimateScore ? globe3d.getClimateScore() : null;
+    if (!result) {
+      climateScoreLine.hidden = true;
+      return;
+    }
+    const pc = (v) => (v === null ? "-" : Math.round(v * 100));
+    const c = result.classes;
+    climateScoreLine.textContent =
+      `教師データとの一致度 総合${pc(result.meanIou)}% ／ ` +
+      `植生${pc(c.vegetation.iou)} 乾燥地${pc(c.arid.iou)} ` +
+      `雪氷${pc(c.landIce.iou)} 海氷${pc(c.seaIce.iou)}`;
+    climateScoreLine.hidden = false;
   }
 
   // Mean temperature. The readout follows the finger, but a repaint is a pass
@@ -153,7 +176,10 @@ async function main() {
   climateTempSlider.addEventListener("change", () => {
     applyClimateTempReadout();
     const celsius = Number(climateTempSlider.value);
-    requestAnimationFrame(() => globe3d.setMeanTemperature(celsius));
+    requestAnimationFrame(() => {
+      globe3d.setMeanTemperature(celsius);
+      applyClimateScore();
+    });
   });
 
   // Rebuilt per world, because each one carries its own sets.
@@ -174,6 +200,7 @@ async function main() {
         requestAnimationFrame(() => {
           globe3d.setClimateSet(set.id);
           syncClimateTemp();
+          applyClimateScore();
         });
       });
       climateSetButtons.appendChild(button);

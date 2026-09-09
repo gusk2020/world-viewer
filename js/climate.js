@@ -828,6 +828,271 @@ export function classifyPoint(out, metres, seaLevelMetres, seaLevelC, moisture, 
   return out;
 }
 
+// ---------------------------------------------------------------------------
+// Scoring against the teacher data (Stage 6)
+//
+// The user asked for four agreement numbers -- 植生 / 乾燥地 / 雪氷 / 海氷 --
+// and a total, worked out by a program rather than by looking at pictures.
+//
+// The measure per class is **intersection over union**, which is the standard
+// way two land-cover maps are compared and the right one here for a reason
+// that matters: it weights every class equally. Land ice is a ninth of the
+// land and sea ice a seventieth of the sea, so a plain pixel-accuracy score
+// barely notices either -- a model that painted no ice at all would still
+// score well. IoU cannot be fooled that way: a class the model never produces
+// scores zero for that class.
+//
+// Two versions of each number come out, and they answer different questions:
+//
+//   hard  -- the model's colours resolved to one class per pixel, exactly the
+//            way the painter resolves them. This is what gets reported,
+//            because it is what the eye sees.
+//   soft  -- the same thing computed from the model's own memberships, which
+//            move continuously as a parameter moves. This is what the search
+//            in the next stage optimises, because a hard label only changes
+//            when a pixel flips and gives the search almost nothing to follow.
+//
+// Everything is area-weighted by cos(latitude): an equirectangular grid gives
+// a polar cell the same number of pixels as an equatorial one while it covers
+// a fraction of the ground, and without the weight Antarctica would count for
+// several times what it is.
+// ---------------------------------------------------------------------------
+
+// The teacher's class numbers. They are the bytes in the committed teacher
+// PNG, and tools/build_teacher.py writes them.
+export const TEACHER_SEA = 0;
+export const TEACHER_SEA_ICE = 1;
+export const TEACHER_VEGETATION = 2;
+export const TEACHER_ARID = 3;
+export const TEACHER_LAND_ICE = 4;
+
+// Scored classes, in the order the user listed them. Sea itself is not one of
+// them: where the sea is comes from the elevation raster, which the teacher
+// and the model read from the same file, so they agree by construction and
+// scoring it would only inflate every total.
+export const SCORED_CLASSES = [
+  { key: "vegetation", label: "植生", teacher: TEACHER_VEGETATION },
+  { key: "arid", label: "乾燥地", teacher: TEACHER_ARID },
+  { key: "landIce", label: "雪氷", teacher: TEACHER_LAND_ICE },
+  { key: "seaIce", label: "海氷", teacher: TEACHER_SEA_ICE },
+];
+
+// Regions: a plain 15x30 degree grid, kept from the Stage 3 repair of the
+// hand-drawn boxes that missed Indochina entirely. Every cell holding a real
+// amount of land is scored, so no part of the world is invisible to the
+// objective because nobody thought to draw a box round it.
+const REGION_LAT_STEP = 15;
+const REGION_LNG_STEP = 30;
+const REGION_MIN_LAND_FRACTION = 0.001;
+
+// How much the region term counts next to the global one. Half: the global
+// agreement is the headline, and the region term exists to stop one continent
+// being paid for by another, not to become the score itself.
+const REGION_WEIGHT = 0.5;
+
+// The model's memberships resolved to one class, matching what paintClimate
+// actually draws: it blends all the way to snow at 1, and dry grass is the
+// halfway point of the vegetation ramp.
+function hardClass(surface) {
+  if (surface[SURFACE_IS_SEA]) {
+    return surface[SURFACE_SEA_ICE] > 0.5 ? TEACHER_SEA_ICE : TEACHER_SEA;
+  }
+  if (surface[SURFACE_SNOW] > 0.5) return TEACHER_LAND_ICE;
+  return surface[SURFACE_VEGETATION] > 0.5 ? TEACHER_VEGETATION : TEACHER_ARID;
+}
+
+// The model's soft membership of each scored class. Snow is taken out of the
+// vegetation and bare shares first, the same order the painter mixes them in,
+// so the four always sum to at most one.
+function softMemberships(surface, out) {
+  if (surface[SURFACE_IS_SEA]) {
+    out[0] = 0;
+    out[1] = 0;
+    out[2] = 0;
+    out[3] = surface[SURFACE_SEA_ICE];
+    return;
+  }
+  const snow = surface[SURFACE_SNOW];
+  out[0] = (1 - snow) * surface[SURFACE_VEGETATION];
+  out[1] = (1 - snow) * (1 - surface[SURFACE_VEGETATION]);
+  out[2] = snow;
+  out[3] = 0;
+}
+
+function iou(intersection, union) {
+  return union > 0 ? intersection / union : null;
+}
+
+/**
+ * Compare a painted climate against a world's teacher data.
+ *
+ * `teacher` is { width, height, data } of class bytes; it does not have to
+ * match the elevation raster's size, though today it does.
+ *
+ * `step` samples every nth pixel in both directions. The classes are areas,
+ * so a quarter of the pixels gives the same fractions to well under a
+ * percentage point while costing a quarter of the time -- which is what makes
+ * this affordable on a phone during a repaint.
+ */
+export function scoreAgainstTeacher({
+  elevation, climate, teacher, seaLevelMetres, params, step = 1,
+}) {
+  const { width, height } = elevation;
+  const rowScale = climate.profileRows / height;
+  const coarseY = climate.height / height;
+  const column = coarseColumns(width, climate.width);
+  const field = climate.moisture;
+  const teacherScaleX = teacher.width / width;
+  const teacherScaleY = teacher.height / height;
+
+  const n = SCORED_CLASSES.length;
+  const hardHit = new Float64Array(n);
+  const hardModel = new Float64Array(n);
+  const hardTeacher = new Float64Array(n);
+  const softHit = new Float64Array(n);
+  const softUnion = new Float64Array(n);
+  let landWeight = 0;
+  let landCorrect = 0;
+  let totalWeight = 0;
+
+  const latRows = Math.ceil(180 / REGION_LAT_STEP);
+  const lngColumns = Math.ceil(360 / REGION_LNG_STEP);
+  const cells = latRows * lngColumns;
+  const cellHit = new Float64Array(cells * n);
+  const cellUnion = new Float64Array(cells * n);
+  const cellLand = new Float64Array(cells);
+
+  const surface = new Float64Array(5);
+  const soft = new Float64Array(n);
+
+  for (let y = 0; y < height; y += step) {
+    const latDeg = 90 - ((y + 0.5) / height) * 180;
+    const w = Math.cos((latDeg * Math.PI) / 180);
+    if (w <= 0) continue;
+    const seaLevelC = climate.seaLevelC[Math.min(climate.profileRows - 1, Math.floor(y * rowScale))];
+    const fy = (y + 0.5) * coarseY - 0.5;
+    const y0 = Math.floor(fy);
+    const ty = fy - y0;
+    const ya = Math.min(climate.height - 1, Math.max(0, y0)) * climate.width;
+    const yb = Math.min(climate.height - 1, Math.max(0, y0 + 1)) * climate.width;
+    const row = y * width;
+    const teacherRow = Math.min(teacher.height - 1, Math.floor(y * teacherScaleY)) * teacher.width;
+    const cellRow = Math.min(latRows - 1, Math.floor((90 - latDeg) / REGION_LAT_STEP)) * lngColumns;
+
+    for (let x = 0; x < width; x += step) {
+      const metres = elevation.metres[row + x];
+      let moisture = 0;
+      if (metres >= seaLevelMetres) {
+        const xa = column.a[x];
+        const xb = column.b[x];
+        const tx = column.t[x];
+        const top = field[ya + xa] * (1 - tx) + field[ya + xb] * tx;
+        const bottom = field[yb + xa] * (1 - tx) + field[yb + xb] * tx;
+        moisture = top * (1 - ty) + bottom * ty;
+      }
+      classifyPoint(surface, metres, seaLevelMetres, seaLevelC, moisture, params);
+
+      const want = teacher.data[teacherRow + Math.min(teacher.width - 1, Math.floor(x * teacherScaleX))];
+      const got = hardClass(surface);
+      softMemberships(surface, soft);
+      const cell = cellRow + Math.min(lngColumns - 1, Math.floor((x / width) * lngColumns));
+      totalWeight += w;
+      const isLand = metres >= seaLevelMetres;
+      if (isLand) {
+        landWeight += w;
+        if (got === want) landCorrect += w;
+        cellLand[cell] += w;
+      }
+
+      for (let k = 0; k < n; k++) {
+        const teacherIs = want === SCORED_CLASSES[k].teacher ? 1 : 0;
+        const modelIs = got === SCORED_CLASSES[k].teacher ? 1 : 0;
+        hardTeacher[k] += w * teacherIs;
+        hardModel[k] += w * modelIs;
+        hardHit[k] += w * teacherIs * modelIs;
+        // Soft IoU: the product is the overlap, and inclusion-exclusion gives
+        // the union, so both reduce to the hard numbers when the memberships
+        // are already 0 or 1.
+        const p = soft[k];
+        const hit = w * p * teacherIs;
+        const union = w * (p + teacherIs - p * teacherIs);
+        softHit[k] += hit;
+        softUnion[k] += union;
+        cellHit[cell * n + k] += hit;
+        cellUnion[cell * n + k] += union;
+      }
+    }
+  }
+
+  const classes = {};
+  let hardTotal = 0;
+  let softTotal = 0;
+  let counted = 0;
+  for (let k = 0; k < n; k++) {
+    const spec = SCORED_CLASSES[k];
+    const hard = iou(hardHit[k], hardModel[k] + hardTeacher[k] - hardHit[k]);
+    const softScore = iou(softHit[k], softUnion[k]);
+    classes[spec.key] = {
+      label: spec.label,
+      iou: hard,
+      softIou: softScore,
+      // Of the teacher's own area for this class, how much the model found.
+      recall: hardTeacher[k] > 0 ? hardHit[k] / hardTeacher[k] : null,
+      // Of what the model called this class, how much the teacher agrees with.
+      precision: hardModel[k] > 0 ? hardHit[k] / hardModel[k] : null,
+      teacherArea: hardTeacher[k],
+      modelArea: hardModel[k],
+    };
+    if (hard !== null) {
+      hardTotal += hard;
+      softTotal += softScore;
+      counted++;
+    }
+  }
+
+  const regions = [];
+  let regionPenalty = 0;
+  let regionCount = 0;
+  const totalLand = cellLand.reduce((a, b) => a + b, 0);
+  for (let cell = 0; cell < cells; cell++) {
+    if (cellLand[cell] < totalLand * REGION_MIN_LAND_FRACTION) continue;
+    let sum = 0;
+    let used = 0;
+    for (let k = 0; k < n; k++) {
+      if (cellUnion[cell * n + k] <= 0) continue;
+      sum += cellHit[cell * n + k] / cellUnion[cell * n + k];
+      used++;
+    }
+    const value = used ? sum / used : 0;
+    regionPenalty += 1 - value;
+    regionCount++;
+    const latIndex = Math.floor(cell / lngColumns);
+    const lngIndex = cell % lngColumns;
+    regions.push({
+      lat: 90 - latIndex * REGION_LAT_STEP,
+      lng: -180 + lngIndex * REGION_LNG_STEP,
+      softIou: value,
+      land: cellLand[cell] / totalLand,
+    });
+  }
+  regionPenalty = regionCount ? regionPenalty / regionCount : 0;
+
+  const meanIou = counted ? hardTotal / counted : 0;
+  const meanSoftIou = counted ? softTotal / counted : 0;
+  return {
+    classes,
+    meanIou,
+    meanSoftIou,
+    landAccuracy: landWeight > 0 ? landCorrect / landWeight : 0,
+    totalWeight,
+    regions,
+    regionPenalty,
+    regionCount,
+    // Lower is better, and this is the number the automatic search minimises.
+    score: 1 - meanSoftIou + REGION_WEIGHT * regionPenalty,
+  };
+}
+
 function mix(out, a, b, t) {
   out[0] = a[0] + (b[0] - a[0]) * t;
   out[1] = a[1] + (b[1] - a[1]) * t;

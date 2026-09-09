@@ -222,13 +222,18 @@ def summarise(classes):
     out = {}
     for value, name in enumerate(CLASS_NAMES):
         out[name] = round(float(w[classes == value].sum() / total), 4)
-    land = classes != SEA
-    land = land & (classes != SEA_ICE)
+    # Land-relative shares go in their own dict. They used to sit in the same
+    # one under a key that collided with the globe-relative "landIce" and
+    # silently overwrote it, so the committed summary read as if 11.4% of the
+    # *globe* were land ice. The map itself was always right.
+    land = (classes != SEA) & (classes != SEA_ICE)
     landw = w[land].sum()
-    out["landVegetation"] = round(float(w[classes == VEGETATION].sum() / landw), 4)
-    out["landArid"] = round(float(w[classes == ARID].sum() / landw), 4)
-    out["landIce"] = round(float(w[classes == LAND_ICE].sum() / landw), 4)
-    return out
+    share = {
+        "vegetation": round(float(w[classes == VEGETATION].sum() / landw), 4),
+        "arid": round(float(w[classes == ARID].sum() / landw), 4),
+        "ice": round(float(w[classes == LAND_ICE].sum() / landw), 4),
+    }
+    return out, share
 
 
 def at(classes, lng, lat):
@@ -261,8 +266,9 @@ def main():
     if failures:
         raise SystemExit("teacher data failed its own checks:\n  " + "\n  ".join(failures))
 
-    summary = summarise(classes)
-    print("  " + json.dumps(summary))
+    summary, landShare = summarise(classes)
+    print("  globe " + json.dumps(summary))
+    print("  land  " + json.dumps(landShare))
 
     # How far the mapped-ice layer and the photograph's own white disagree,
     # reported rather than hidden: they are independent sources and the gap
@@ -299,6 +305,7 @@ def main():
                 "height": HEIGHT,
                 "classes": CLASS_NAMES,
                 "areaFractions": summary,
+                "landShare": landShare,
                 "iceSourceAgreement": agreement,
                 "namedPlaceChecks": len(CHECKS),
             },

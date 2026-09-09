@@ -14,9 +14,12 @@
     "seaIce": 0.01,
     "vegetation": 0.1183,
     "arid": 0.1397,
-    "landIce": 0.1143,
-    "landVegetation": 0.4061,
-    "landArid": 0.4796
+    "landIce": 0.0333
+  },
+  "landShare": {
+    "vegetation": 0.4061,
+    "arid": 0.4796,
+    "ice": 0.1143
   },
   "iceSourceAgreement": {
     "mappedIceLandFraction": 0.1143,

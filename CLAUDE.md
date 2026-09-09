@@ -99,9 +99,12 @@ continue.
   See "V0.8 stage 4: named parameter sets". The user then asked for the mean
   temperature to be a **5–25 °C slider**, which replaced the three named sets
   it shipped with — same section, "The mean temperature became a slider".
-- **V0.8 stage 5 (current, done — needs the user's Pixel 7a confirmation)**:
+- **V0.8 stage 5 (done — needs the user's Pixel 7a confirmation)**:
   Earth's teacher data as a committed, regenerable repo artefact. See
   "V0.8 stage 5: the teacher data".
+- **V0.8 stage 6 (current, done — needs the user's Pixel 7a confirmation)**:
+  automatic scoring against that teacher — four agreement numbers and a
+  total, by a program. See "V0.8 stage 6: scoring".
 - **V0.9+**: cities, borders/territories, historical eras, and other
   過速世界-specific data. Several distinct features, not one version —
   treat each as its own sub-version. **Needs the user's own world-setting
@@ -160,6 +163,8 @@ straight by the browser — still no bundler and no build step.
 | `js/hypsometric.js` | The height-to-colour ramp for bodies with no photograph (Mars, the Moon). |
 | `js/graticule.js` | The terrain-following latitude/longitude lines. |
 | `js/climate.js` | The climate model: parameter schema, named parameter sets, insolation, wind, moisture, and the painter. No three.js, no DOM. |
+| `tools/score_climate.mjs` | Scores the climate colouring against the teacher data and prints the four agreement numbers. Runs the real `js/climate.js` on the real committed rasters. |
+| `tools/png.mjs` | A minimal PNG reader, so node can read the repo's own rasters without a dependency. |
 | `tools/build_teacher.py` | Builds a world's teacher data — what its surface really looks like — from the committed rasters plus Natural Earth's ice layers. The one file in the project whose job is to make sure nothing is invented. |
 | `js/map2d.js` | The OpenLayers 2D map. |
 | `js/geoConvert.js` | lng/lat ↔ 3D direction, and the approximate 3D-distance ↔ 2D-zoom correspondence. |
@@ -2251,6 +2256,131 @@ and Earth's real zonal-mean temperatures would be the obvious teacher for it —
 but no reachable host serves them, and writing the numbers down from memory
 would be inventing data in the one file that exists so that nothing is invented.
 Left as a stated gap with the same fix as sea ice: fetch a real one from a runner.
+
+## V0.8 stage 6: scoring
+
+The spec: compare what the model paints against the teacher data and put a
+number on **植生 / 乾燥地 / 雪氷 / 海氷** plus a total — by a program, explicitly
+not by anyone looking at pictures one at a time.
+
+### The measure is intersection over union, and that choice is the whole design
+
+Per class, IoU = the area both agree on, divided by the area either claims.
+
+The alternative — plain pixel accuracy — is useless here and it is worth
+saying why: land ice is a ninth of the land and sea ice a seventieth of the
+sea, so **a model that painted no ice at all would still score about 85%**.
+IoU cannot be fooled that way; a class the model never produces scores zero
+for that class, and the four are averaged with equal weight, which is exactly
+what the user asked for by naming four numbers rather than one.
+
+Sea itself is not scored. Where the sea is comes from the elevation raster,
+and the teacher and the model read it from the same file, so they agree by
+construction — scoring it would only inflate every total.
+
+Everything is weighted by cos(latitude). Without that, an equirectangular grid
+gives a polar cell as many pixels as an equatorial one while it covers a
+fraction of the ground, and Antarctica would count for several times its size.
+
+**Two versions of each number come out, and they answer different questions.**
+The *hard* one resolves the model's colours to one class per pixel exactly the
+way the painter resolves them, and it is what gets reported, because it is
+what the eye sees. The *soft* one is computed from the memberships themselves,
+so it moves continuously as a parameter moves — a hard label only changes when
+a pixel flips, which gives a search almost nothing to follow. **Stage 7
+minimises the soft one; the user reads the hard one**, and they are the same
+formula over the same pixels.
+
+`scoreAgainstTeacher` in `js/climate.js` is the only implementation, shared by
+the command-line tool, the app, and (next) the search — the same rule that
+keeps `classifyPoint` shared between the painter and the scorer.
+
+### Where the shipped model actually stands
+
+`node tools/score_climate.mjs` on the committed rasters, at the parameters the
+user has approved:
+
+| | 一致度 (IoU) | 再現率 | 適合率 | teacher | model |
+| --- | --- | --- | --- | --- | --- |
+| 植生 | 57.0% | 71.9% | 73.3% | 11.8% | 11.6% |
+| 乾燥地 | 62.3% | 77.1% | 76.4% | 14.0% | 14.1% |
+| 雪氷 | 78.6% | 89.3% | 86.7% | 3.3% | 3.4% |
+| 海氷 | 53.9% | 74.1% | 66.4% | 1.0% | 1.1% |
+
+Total (mean IoU) **62.9%**, land pixels on the right class **76.4%**, region
+term 34.1%, search score 0.8130. The teacher/model columns are each class's
+share of the globe, and they nearly match — so the model gets the *amounts*
+almost exactly right and loses its points on *placement*, which is the same
+conclusion the Stage 2 retune reached by a different route.
+
+### The scorer validated itself, and this is the strongest check in the project
+
+Run at every temperature the slider offers, with nothing telling it what Earth
+is:
+
+| 平均気温 | 5 | 8 | 11 | **14** | 17 | 20 | 25 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 総合 IoU | 39.9% | 44.6% | 50.8% | **63.0%** | 48.5% | 46.4% | 42.3% |
+
+**The peak is at 14 °C — Earth's own mean temperature.** The score was not
+told that and the model was not refitted; the curve has one maximum and it
+lands on the right answer. The collapse above 14 is sea ice going to exactly
+zero, which is also true of the model and worth knowing.
+
+### Reading it on the phone
+
+One quiet line under the 平均気温 slider, only while 陸地塗り分け is showing:
+
+    教師データとの一致度 総合63% ／ 植生57 乾燥地62 雪氷79 海氷54
+
+It is deliberately next to the temperature slider, because moving that slider
+and watching the number is the most useful thing the pair can do together.
+
+Numbers, measured: the browser scores at **step 2** (every second pixel in each
+direction), which costs **~60-80 ms** on top of a ~620 ms repaint and agrees
+with the full raster to **0.03 of a percentage point** — 62.96% against 62.93%.
+The whole 陸地塗り分け press measures 670-699 ms in the software renderer where
+it was 616 ms before. Note the region count shifts by one cell between step 1
+and step 2 (94 vs 95), because which cells clear the "holds a thousandth of the
+world's land" bar depends slightly on the sampling; the command-line tool's
+step 1 is the authoritative figure.
+
+**The panel is 250 px in 陸地塗り分け**, up from 233 — the score line costs
+17 px. 標準 is unchanged at 201 px and Mars at 167 px. That is back to the
+height the user objected to before V0.7.1 folded the panel, so it was flagged
+to them with an offer to remove or move the line rather than decided here.
+
+### Two implementations of the teacher, proved identical
+
+Node reads the committed PNG's class bytes directly; the browser draws the
+image and matches each pixel to the nearest of the five colours the config
+declares (nearest, not exact, because a browser may colour-manage a PNG and
+shift its palette by a unit). If those ever disagreed the phone would be
+scoring against a different teacher than the search. Counted per class, they
+match exactly: **1259364 / 122868 / 236658 / 237258 / 241004**.
+
+### A real bug in Stage 5's summary, found by this stage's numbers
+
+The committed `present-summary.json` said land ice was **11.4% of the globe**,
+which the scorer put at 3.3%. `summarise()` wrote the globe-relative share and
+then overwrote it with the land-relative one under the same key, so the file's
+own fractions summed to 1.081. The map was always right — only the summary read
+wrong. Land-relative shares now live in their own `landShare` block and the
+globe fractions sum to exactly 1.0. Worth recording as the general case: a set
+of fractions that should sum to 1 and does not is a bug you can see without
+knowing anything about the subject.
+
+### What it did not touch
+
+Earth's 標準 views are **byte-identical**, both painted textures hash the same
+(`f28ab2b0` / `6dbc6304`), and in 陸地塗り分け every differing pixel sits in the
+panel — **zero below row 266**, where the panel's rounded bottom edge ends.
+Mars and the Moon have no teacher data, so they get no line and no cost.
+
+`tools/png.mjs` is new: a small PNG reader so node can read the repo's own
+rasters without a dependency. Verified against the scratch decode of the
+terrain level — **zero mismatches over all 2,097,152 cells** — which also
+retires the scratch `.bin` the fitting harness used to depend on.
 
 ## The world-switch bug the user hit, and why it wedged the whole app
 
