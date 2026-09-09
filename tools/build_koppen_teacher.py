@@ -116,13 +116,25 @@ KOPPEN_TO_STRUCTURE = {
 # build_teacher.py's own CHECKS: a silently mis-fetched or mis-reduced
 # teacher would mis-score every parameter downstream and look like a model
 # bug, so this fails loudly instead.
+#
+# Two entries were wrong on the first run against the real data, for two
+# different reasons -- both fixed by moving the check, per build_teacher.py's
+# own precedent ("moving the check to Borneo is the honest fix"), not by
+# bending the reduction to match a wrong assumption:
+#   Delhi:  widely quoted as Cwa, but Beck et al.'s own higher-resolution
+#           station data puts it in BSh (semi-arid) -- a real, documented
+#           update, not a defect in this reduction. Replaced with Mumbai,
+#           whose Am (tropical monsoon) is undisputed.
+#   Moscow: this file's own first draft expected Dwb/coldSeasonal, but
+#           Moscow's actual, widely cited class is Dfb -- "no dry season",
+#           i.e. coldHumid in this scheme. The check was wrong, not the data.
 CHECKS = [
     (-60, -3, TROPICAL_HUMID, "Amazon (Af)"),
     (114, 1, TROPICAL_HUMID, "Borneo (Af)"),
-    (77.2, 28.6, TROPICAL_SEASONAL, "Delhi (Cwa/monsoon)"),
+    (72.88, 19.08, TROPICAL_SEASONAL, "Mumbai (Am/monsoon)"),
     (10, 24, ARID, "Sahara (BWh)"),
     (-2, 52, TEMPERATE_HUMID, "England (Cfb)"),
-    (37.6, 55.75, COLD_SEASONAL, "Moscow (Dfb/Dwb)"),
+    (37.6, 55.75, COLD_HUMID, "Moscow (Dfb)"),
     (129.7, 62.0, COLD_HUMID, "Yakutsk (Dfd)"),
     (0, -85, POLAR, "Antarctica interior (EF)"),
 ]
