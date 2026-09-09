@@ -1516,6 +1516,220 @@ export function scoreAgainstTeacher({
   };
 }
 
+// ---------------------------------------------------------------------------
+// Teacher B: climate structure (season / monsoon / precipitation seasonality)
+//
+// Teacher A (above) is an annual snapshot -- one class per pixel, no time
+// axis -- so Q1 of the Stage 7.5 diagnosis found it can barely see whether
+// seasons, a monsoon reversal, or a wet/dry cycle exist at all: switching the
+// monsoon term off moved Teacher A's score by exactly 0.00.
+//
+// Teacher B exists to see exactly that. It is scored completely separately
+// from Teacher A (never combined into one number -- see the diagnosis doc,
+// section 10) and it is not a step toward reproducing real Earth on screen;
+// it exists so a change to the season/wind/rain-shadow machinery can be
+// measured by something other than "the annual map didn't move".
+//
+// It is a *reduced* Köppen-Geiger structure, not the real 30-class system.
+// The real one needs monthly temperature and monthly precipitation in real
+// units (mm); this model has neither -- only two seasons (warm/cold) and an
+// arbitrary 0-1 moisture proxy, never an absolute depth of rain. Inventing
+// monthly millimetres to force a 30-class output would be inventing data in
+// the one place this project has always refused to (see build_teacher.py's
+// own framing), so instead of that, eight classes are used, each one a
+// well-known Köppen *group* boundary applied to what this model actually
+// has: two seasons instead of twelve months, and a moisture ratio instead of
+// a millimetre count. Both simplifications are named at the threshold they
+// replace.
+//
+// The four temperature thresholds (18C tropical floor, 10C forest/tundra
+// line, -3C continental line) are the standard Köppen-Geiger group
+// boundaries -- public climatological definitions, unrelated to any one
+// project's implementation of them (see Peel, Finlayson & McMahon 2007,
+// updated world map of the Koppen-Geiger classification, Hydrol. Earth Syst.
+// Sci. 11, 1633-1644). The 1/3 dry-season ratio is the same standard's own
+// test for a temperate/continental dry season (driest month under a third of
+// the wettest), reused here against the warm/cold *seasons* this model has
+// instead of twelve months -- an explicit approximation, not the literal
+// month-count rule.
+export const STRUCTURE_TROPICAL_HUMID = 0;
+export const STRUCTURE_TROPICAL_SEASONAL = 1;
+export const STRUCTURE_ARID = 2;
+export const STRUCTURE_TEMPERATE_HUMID = 3;
+export const STRUCTURE_TEMPERATE_SEASONAL = 4;
+export const STRUCTURE_COLD_HUMID = 5;
+export const STRUCTURE_COLD_SEASONAL = 6;
+export const STRUCTURE_POLAR = 7;
+
+export const STRUCTURE_CLASSES = [
+  { key: "tropicalHumid", id: STRUCTURE_TROPICAL_HUMID, label: "熱帯湿潤", koppen: ["Af"] },
+  { key: "tropicalSeasonal", id: STRUCTURE_TROPICAL_SEASONAL, label: "熱帯季節性", koppen: ["Am", "Aw"] },
+  { key: "arid", id: STRUCTURE_ARID, label: "乾燥", koppen: ["BW", "BS"] },
+  { key: "temperateHumid", id: STRUCTURE_TEMPERATE_HUMID, label: "温帯湿潤", koppen: ["Cf"] },
+  { key: "temperateSeasonal", id: STRUCTURE_TEMPERATE_SEASONAL, label: "温帯季節性", koppen: ["Cs", "Cw"] },
+  { key: "coldHumid", id: STRUCTURE_COLD_HUMID, label: "寒冷湿潤", koppen: ["Df"] },
+  { key: "coldSeasonal", id: STRUCTURE_COLD_SEASONAL, label: "寒冷季節性", koppen: ["Ds", "Dw"] },
+  { key: "polar", id: STRUCTURE_POLAR, label: "極域", koppen: ["ET", "EF"] },
+];
+
+// Standard Köppen-Geiger group boundaries (Peel/Finlayson/McMahon 2007).
+const STRUCTURE_TROPICAL_MIN_C = 18; // coldest month >= 18C => group A
+const STRUCTURE_WARM_MIN_C = 10; // warmest month >= 10C: below this is group E
+const STRUCTURE_CONTINENTAL_MAX_C = -3; // coldest month <= -3C => group D, not C
+// The standard's own dry-season test for the C/D groups: driest month under
+// a third of the wettest. Applied here to the warm/cold *seasons* this model
+// has, not twelve real months -- see the note above.
+const STRUCTURE_DRY_SEASON_RATIO = 1 / 3;
+// This model has no absolute precipitation, only a 0-1 moisture proxy, so the
+// real temperature-scaled aridity index (Peel et al.'s P < 2T, 2T+14, 2T+28
+// mm/year test) cannot be evaluated. The threshold below is calibrated
+// instead against an external, independent fact -- Peel, Finlayson &
+// McMahon (2007), Table 2's own reported global land fraction for Koppen
+// group B, 30.2% -- exactly the way V0.5's sea-level baseline was calibrated
+// against a real ocean-area fraction: it is picked to reproduce a fact about
+// Earth, not to raise this model's own score. 0.3454 is the (warm+cold)/2
+// moisture value at which the shipped Stage 7.5 model's own land area
+// crosses that 30.2% mark (measured directly from the committed elevation
+// raster and the shipped climate parameters); it will drift slightly if
+// those parameters are ever refitted, which is a known, disclosed
+// imprecision rather than an error -- see the diagnosis doc for why this is
+// not the same thing as tuning for agreement.
+export const STRUCTURE_ARID_MOISTURE_THRESHOLD = 0.3454;
+
+/**
+ * The model's own structural class at one point, from the same fields
+ * `classifyPoint` already reads -- no new state, only a different reading of
+ * it. Returns null over the sea: Koppen classifies land climate, not ocean.
+ */
+export function classifyStructurePoint(
+  metres, seaLevelMetres, seaLevelC, warmDeltaC, coldDeltaC, warmMoisture, coldMoisture, params
+) {
+  if (metres < seaLevelMetres) return null;
+  const annual = seaLevelC - params.lapseRateCPerKm * ((metres - seaLevelMetres) / 1000);
+  const warmT = annual + warmDeltaC;
+  const coldT = annual + coldDeltaC;
+  const hottest = Math.max(warmT, coldT);
+  const coldest = Math.min(warmT, coldT);
+  const wettest = Math.max(warmMoisture, coldMoisture);
+  const driest = Math.min(warmMoisture, coldMoisture);
+  const hasDrySeason = wettest > 0 && driest / wettest < STRUCTURE_DRY_SEASON_RATIO;
+
+  // Aridity overrides every temperature group, exactly as in the real
+  // definition (a hot desert and a cold desert are both group B, never A/C/D).
+  if ((warmMoisture + coldMoisture) / 2 < STRUCTURE_ARID_MOISTURE_THRESHOLD) {
+    return STRUCTURE_ARID;
+  }
+  if (coldest >= STRUCTURE_TROPICAL_MIN_C) {
+    return hasDrySeason ? STRUCTURE_TROPICAL_SEASONAL : STRUCTURE_TROPICAL_HUMID;
+  }
+  if (hottest < STRUCTURE_WARM_MIN_C) return STRUCTURE_POLAR;
+  if (coldest > STRUCTURE_CONTINENTAL_MAX_C) {
+    return hasDrySeason ? STRUCTURE_TEMPERATE_SEASONAL : STRUCTURE_TEMPERATE_HUMID;
+  }
+  return hasDrySeason ? STRUCTURE_COLD_SEASONAL : STRUCTURE_COLD_HUMID;
+}
+
+/**
+ * Compare the model's structural class against Teacher B (observed
+ * Köppen-Geiger structure, reduced to the same eight classes -- see
+ * tools/build_koppen_teacher.py). Land only; kept entirely separate from
+ * `scoreAgainstTeacher` and never combined into one number with it (see the
+ * diagnosis doc, section 10) -- the two answer different questions.
+ */
+export function scoreAgainstStructureTeacher({
+  elevation, climate, teacher, seaLevelMetres, params, step = 1,
+}) {
+  const { width, height } = elevation;
+  const rowScale = climate.profileRows / height;
+  const coarseY = climate.height / height;
+  const column = coarseColumns(width, climate.width);
+  const teacherScaleX = teacher.width / width;
+  const teacherScaleY = teacher.height / height;
+
+  const n = STRUCTURE_CLASSES.length;
+  const hit = new Float64Array(n);
+  const model = new Float64Array(n);
+  const truth = new Float64Array(n);
+  let landWeight = 0;
+  let landCorrect = 0;
+
+  for (let y = 0; y < height; y += step) {
+    const latDeg = 90 - ((y + 0.5) / height) * 180;
+    const w = Math.cos((latDeg * Math.PI) / 180);
+    if (w <= 0) continue;
+    const profileRow = Math.min(climate.profileRows - 1, Math.floor(y * rowScale));
+    const seaLevelC = climate.seaLevelC[profileRow];
+    const warmDeltaC = climate.warmDeltaC[profileRow];
+    const coldDeltaC = climate.coldDeltaC[profileRow];
+    const fy = (y + 0.5) * coarseY - 0.5;
+    const y0 = Math.floor(fy);
+    const ty = fy - y0;
+    const ya = Math.min(climate.height - 1, Math.max(0, y0)) * climate.width;
+    const yb = Math.min(climate.height - 1, Math.max(0, y0 + 1)) * climate.width;
+    const row = y * width;
+    const teacherRow = Math.min(teacher.height - 1, Math.floor(y * teacherScaleY)) * teacher.width;
+
+    for (let x = 0; x < width; x += step) {
+      const metres = elevation.metres[row + x];
+      if (metres < seaLevelMetres) continue; // land only, both sides
+
+      const xa = column.a[x];
+      const xb = column.b[x];
+      const tx = column.t[x];
+      const warmMoisture =
+        climate.warmMoisture[ya + xa] * (1 - tx) + climate.warmMoisture[ya + xb] * tx;
+      const warmMoistureB =
+        climate.warmMoisture[yb + xa] * (1 - tx) + climate.warmMoisture[yb + xb] * tx;
+      const wm = warmMoisture * (1 - ty) + warmMoistureB * ty;
+      const coldMoisture =
+        climate.coldMoisture[ya + xa] * (1 - tx) + climate.coldMoisture[ya + xb] * tx;
+      const coldMoistureB =
+        climate.coldMoisture[yb + xa] * (1 - tx) + climate.coldMoisture[yb + xb] * tx;
+      const cm = coldMoisture * (1 - ty) + coldMoistureB * ty;
+
+      const got = classifyStructurePoint(
+        metres, seaLevelMetres, seaLevelC, warmDeltaC, coldDeltaC, wm, cm, params
+      );
+      const teacherValue =
+        teacher.data[teacherRow + Math.min(teacher.width - 1, Math.floor(x * teacherScaleX))];
+      if (teacherValue >= n) continue; // sentinel: Teacher B has no class here (ocean)
+
+      landWeight += w;
+      if (got === teacherValue) landCorrect += w;
+      truth[teacherValue] += w;
+      if (got !== null) model[got] += w;
+      if (got === teacherValue) hit[teacherValue] += w;
+    }
+  }
+
+  const classes = {};
+  let total = 0;
+  let counted = 0;
+  for (let k = 0; k < n; k++) {
+    const spec = STRUCTURE_CLASSES[k];
+    const value = iou(hit[k], model[k] + truth[k] - hit[k]);
+    classes[spec.key] = {
+      label: spec.label,
+      iou: value,
+      recall: truth[k] > 0 ? hit[k] / truth[k] : null,
+      precision: model[k] > 0 ? hit[k] / model[k] : null,
+      teacherArea: truth[k],
+      modelArea: model[k],
+    };
+    if (value !== null) {
+      total += value;
+      counted++;
+    }
+  }
+
+  return {
+    classes,
+    meanIou: counted ? total / counted : 0,
+    landAccuracy: landWeight > 0 ? landCorrect / landWeight : 0,
+    landWeight,
+  };
+}
+
 function mix(out, a, b, t) {
   out[0] = a[0] + (b[0] - a[0]) * t;
   out[1] = a[1] + (b[1] - a[1]) * t;

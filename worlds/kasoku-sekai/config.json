@@ -225,5 +225,31 @@
         "height": 2048
       }
     ]
+  },
+  "teacherStructure": {
+    "_note": "Teacher B: the real Earth's climate structure (season / monsoon / wet-dry cycle), reduced to eight classes. Scored separately from 'teacher' (Teacher A, the annual vegetation/arid/ice map) and never combined into one number with it -- see docs/climate-model-diagnosis-after-stage7_5.md, section 10. Built by tools/build_koppen_teacher.py from Beck et al. (2018); see that file and worlds/kasoku-sekai/teacher/koppen-structure-summary.json for full provenance.",
+    "classes": [
+      "tropicalHumid",
+      "tropicalSeasonal",
+      "arid",
+      "temperateHumid",
+      "temperateSeasonal",
+      "coldHumid",
+      "coldSeasonal",
+      "polar"
+    ],
+    "labels": [
+      "熱帯湿潤",
+      "熱帯季節性",
+      "乾燥",
+      "温帯湿潤",
+      "温帯季節性",
+      "寒冷湿潤",
+      "寒冷季節性",
+      "極域"
+    ],
+    "map": "./worlds/kasoku-sekai/teacher/koppen-structure.png",
+    "summary": "./worlds/kasoku-sekai/teacher/koppen-structure-summary.json",
+    "source": "Beck et al. (2018) Koppen-Geiger climate classification, present-day, 0.5 degree"
   }
 }
