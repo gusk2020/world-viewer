@@ -38,12 +38,14 @@ Usage:  python3 tools/build_koppen_teacher.py worlds/kasoku-sekai [--cache DIR]
 """
 
 import argparse
+import fnmatch
 import hashlib
-import io
 import json
 import pathlib
+import re
 import sys
 import urllib.request
+import zipfile
 from datetime import datetime, timezone
 
 import numpy as np
@@ -127,33 +129,80 @@ CHECKS = [
 
 
 def fetch_source(cache: pathlib.Path) -> pathlib.Path:
+    """Return a local path to the present-day 0.5-degree GeoTIFF.
+
+    The figshare article's own file listing turned out not to offer that
+    file individually -- it bundles every resolution and every future
+    scenario into one archive (`Beck_KG_V1.zip`) -- so this downloads
+    whichever of the article's files looks like an archive, and pulls the
+    one member matching the target filename out of it. Written to tolerate
+    that shape change rather than assume the single-file layout the first
+    version of this function assumed, since this sandbox cannot reach
+    figshare to check the listing by hand before writing the fetch code.
+    """
     cache.mkdir(parents=True, exist_ok=True)
-    path = cache / SOURCE_FILENAME
-    if path.exists() and path.stat().st_size > 0:
-        return path
+    extracted = cache / SOURCE_FILENAME
+    if extracted.exists() and extracted.stat().st_size > 0:
+        return extracted
 
     print(f"  resolving figshare article {FIGSHARE_ARTICLE} ...")
     api_url = f"https://api.figshare.com/v2/articles/{FIGSHARE_ARTICLE}"
     with urllib.request.urlopen(api_url, timeout=60) as r:
         article = json.loads(r.read())
+    files = article.get("files", [])
+    print(f"  article files: {[f.get('name') for f in files]}")
 
-    download_url = None
-    for f in article.get("files", []):
-        if f.get("name") == SOURCE_FILENAME:
-            download_url = f["download_url"]
-            break
-    if download_url is None:
-        names = [f.get("name") for f in article.get("files", [])]
+    # Prefer an exact match (the layout this was first written against);
+    # otherwise fall back to whatever archive is offered and look inside it.
+    exact = next((f for f in files if f.get("name") == SOURCE_FILENAME), None)
+    if exact is not None:
+        print(f"  downloading {exact['download_url']}")
+        with urllib.request.urlopen(exact["download_url"], timeout=300) as r:
+            extracted.write_bytes(r.read())
+        return extracted
+
+    archive_entry = next(
+        (f for f in files if f.get("name", "").lower().endswith((".zip", ".tar.gz", ".tgz"))),
+        None,
+    )
+    if archive_entry is None:
         raise SystemExit(
-            f"could not find {SOURCE_FILENAME} in figshare article "
-            f"{FIGSHARE_ARTICLE}; files present: {names}"
+            f"could not find {SOURCE_FILENAME} or an archive containing it in "
+            f"figshare article {FIGSHARE_ARTICLE}; files present: "
+            f"{[f.get('name') for f in files]}"
         )
 
-    print(f"  downloading {download_url}")
-    with urllib.request.urlopen(download_url, timeout=300) as r:
-        data = r.read()
-    path.write_bytes(data)
-    return path
+    archive_path = cache / archive_entry["name"]
+    if not archive_path.exists() or archive_path.stat().st_size == 0:
+        print(f"  downloading {archive_entry['download_url']} ({archive_entry.get('size')} bytes)")
+        with urllib.request.urlopen(archive_entry["download_url"], timeout=1800) as r:
+            archive_path.write_bytes(r.read())
+
+    if not archive_path.name.lower().endswith(".zip"):
+        raise SystemExit(f"don't know how to open non-zip archive {archive_path.name}")
+
+    with zipfile.ZipFile(archive_path) as zf:
+        names = zf.namelist()
+        matches = [n for n in names if fnmatch.fnmatch(pathlib.Path(n).name, SOURCE_FILENAME)]
+        if not matches:
+            # Loosen the match if the exact filename isn't inside: any member
+            # whose name mentions both "present" and "0p5" (the resolution
+            # tag Beck et al.'s own naming convention uses).
+            matches = [
+                n for n in names
+                if re.search(r"present", n, re.I) and re.search(r"0p5", n, re.I)
+                and n.lower().endswith((".tif", ".tiff"))
+            ]
+        if not matches:
+            raise SystemExit(
+                f"{archive_path.name} does not contain {SOURCE_FILENAME} "
+                f"(or anything matching *present*0p5*.tif); members: {names[:40]}"
+            )
+        member = matches[0]
+        print(f"  extracting {member} from {archive_path.name}")
+        with zf.open(member) as src, open(extracted, "wb") as dst:
+            dst.write(src.read())
+    return extracted
 
 
 def read_koppen_raster(path: pathlib.Path):
