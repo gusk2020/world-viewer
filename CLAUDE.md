@@ -102,9 +102,13 @@ continue.
 - **V0.8 stage 5 (done — needs the user's Pixel 7a confirmation)**:
   Earth's teacher data as a committed, regenerable repo artefact. See
   "V0.8 stage 5: the teacher data".
-- **V0.8 stage 6 (current, done — needs the user's Pixel 7a confirmation)**:
+- **V0.8 stage 6 (done — needs the user's Pixel 7a confirmation)**:
   automatic scoring against that teacher — four agreement numbers and a
-  total, by a program. See "V0.8 stage 6: scoring".
+  total, by a program. See "V0.8 stage 6: scoring". The user then asked for
+  the 天体 and 軸/線 rows to move below the 2D/3D button — see "The panel
+  move".
+- **V0.8 stage 7 (current, done — needs the user's Pixel 7a confirmation)**:
+  the automatic parameter search. See "V0.8 stage 7: the search".
 - **V0.9+**: cities, borders/territories, historical eras, and other
   過速世界-specific data. Several distinct features, not one version —
   treat each as its own sub-version. **Needs the user's own world-setting
@@ -163,6 +167,8 @@ straight by the browser — still no bundler and no build step.
 | `js/hypsometric.js` | The height-to-colour ramp for bodies with no photograph (Mars, the Moon). |
 | `js/graticule.js` | The terrain-following latitude/longitude lines. |
 | `js/climate.js` | The climate model: parameter schema, named parameter sets, insolation, wind, moisture, and the painter. No three.js, no DOM. |
+| `tools/search_climate.mjs` | The automatic parameter search: an evolutionary search over the model's own searchable parameters, with checkpointing, resume, merge, and a screening mode. |
+| `tools/apply_climate.mjs` | Writes a candidate the search found into a world's config.json, either as its base climate or as a named set. |
 | `tools/score_climate.mjs` | Scores the climate colouring against the teacher data and prints the four agreement numbers. Runs the real `js/climate.js` on the real committed rasters. |
 | `tools/png.mjs` | A minimal PNG reader, so node can read the repo's own rasters without a dependency. |
 | `tools/build_teacher.py` | Builds a world's teacher data — what its surface really looks like — from the committed rasters plus Natural Earth's ice layers. The one file in the project whose job is to make sure nothing is invented. |
@@ -2256,6 +2262,150 @@ and Earth's real zonal-mean temperatures would be the obvious teacher for it —
 but no reachable host serves them, and writing the numbers down from memory
 would be inventing data in the one file that exists so that nothing is invented.
 Left as a stated gap with the same fix as sea ice: fetch a real one from a runner.
+
+## V0.8 stage 7: the search
+
+The user's rule for this stage is the one that shapes everything else about
+it: **Claude writes the search program and the algorithm; Claude does not run
+thousands of trials by inference.** So `tools/search_climate.mjs` is an
+ordinary program. It ran 130,000 trials in total across three attempts and
+cost no conversation at all while it did.
+
+Their three stopping conditions are implemented as given — six hours, ten
+thousand trials, or five hundred trials with no improvement — and it is worth
+saying which one fired: the first two attempts hit the **trial cap** still
+improving, and the third stopped on **patience**, four shards independently,
+after 1,295 to 4,351 trials. A search that runs out of patience has finished;
+one that runs out of trials has merely stopped.
+
+### The program
+
+A (μ+λ) evolutionary search: eight parents, sixteen children a generation,
+Gaussian steps sized as a fraction of each parameter's range, the step adapted
+by the usual 1/5th rule, and a restart when it stalls. Chosen over a grid
+because twenty dimensions make a grid hopeless, and over anything heavier
+because it has no dependencies, restarts from a checkpoint trivially, and an
+evaluation costs about 170 ms — sample efficiency is not the binding
+constraint here.
+
+- **Checkpoints every ten seconds**, written to a temporary file and renamed,
+  so killing it mid-write cannot leave a truncated file. `--resume` continues.
+  Nothing was lost across three restarts of the whole exercise.
+- **`--merge`** combines shards, and both it and the checkpoint keep the top
+  twenty **de-duplicated**: a candidate closer than 5% of the parameter space
+  to one already kept is dropped, because twenty copies of one optimum is
+  worth one entry and Stage 8 wants a spread.
+- **Four shards on four cores**, different seeds. Their agreement at the end
+  is the evidence that the answer is real rather than one lucky basin.
+
+### The screening pass, and what it found
+
+`--screen` moves each parameter alone across its range and reports the swing
+in the score — the "事前に小規模探索を行い、無意味な探索範囲を削ってください"
+the user asked for. 121 evaluations. The largest levers are `polarExtraC`
+(0.217), `insolationSensitivityC` (0.186) and `permanentSnowOffsetC` (0.178).
+
+**`advectionRangeKm` swings the score by 0.0001** — that is the wind-carried
+moisture range, one of Stage 2's headline mechanisms, and at the shipped
+parameters it does essentially nothing, because `stillAirMoisture` at 0.63
+supplies most of the moisture isotropically. It is the same inert-term problem
+Stage 3 found in `evaporationHalfC`, in a different place, and it is worth
+knowing before reading any result from this model.
+
+### Three faults, all in the setup rather than in the search
+
+This is the fourth, fifth and sixth time this project has recorded the same
+lesson, so it is now less a lesson than a law: **a search will find whatever
+the setup permits, and when the answer is wrong the setup is what to fix.**
+
+**1. The first attempt made no progress at all.** Four shards, 200 trials
+each, zero improvement over the seed. The step started at a quarter of each
+parameter's range *and every parameter moved at once*, which in twenty
+dimensions makes each child an essentially random point — nothing is ever a
+small improvement on its parent, so there is nothing to follow. Three changes
+together fixed it: a smaller starting step (0.08), only about a quarter of the
+parameters moved per child, and the 1/5th rule comparing a child with its own
+parent rather than with the worst of the population (which, while the
+population still held a random point, was no test at all). The population also
+starts near today's answer rather than uniformly at random, with two random
+members kept for exploration.
+
+**2. The first full run bought a third of its gain with hard edges.** 40,000
+trials, score 0.8123 → 0.6902, and every one of the four gradient widths had
+gone to its floor: `snowBlendC` 6.4 → 1.5, `seaIceBlendC` 1.9 → 1,
+`vegetationMoistureWidth` 0.57 → 0.17, `vegetationWarmthWidthC` 5.9 → 3.1.
+That is not tuning, it is the objective's shape — the teacher says one class
+per pixel, so a hard boundary always scores at least as well as a soft one
+through it. What it produces is exactly the hard snow line, hard ice edge and
+hard desert margin the user ruled out in the first sentence of this whole
+feature ("境界はできるだけ自然なグラデーションに"). Nothing in the score can
+see softness, so those four are now `search: false`, beside the colour
+parameters.
+
+That also exposed a smaller thing worth recording: `vegetationMoistureWidth`'s
+bounds read 0.15–0.35 while the value that actually ships is **0.568**. Those
+were the *search's* bounds written into the model's own range, and nothing
+clamps, so the shipped model had been outside its documented range since the
+cap was added. The range now says what the model will really accept.
+
+**3. The second full run made the user's own number worse.** With the widths
+frozen, another 40,000 trials improved the search's score by 5% and returned
+twenty candidates of which **every single one scored below the shipped model
+on the mean IoU** — the total the user's specification names and the phone
+displays. Two separate causes, both mine:
+
+- **The region term was weighted 0.5**, which let it decide the answer rather
+  than guard it. Its original job was to stop Africa's error paying for
+  Eurasia's, but that cancellation was possible because the global measure
+  then was a *mean vegetated fraction*. IoU is per pixel and cannot cancel
+  that way, so the term is now a guard at **0.15**.
+- **The search optimised the *soft* IoU** while the report used the hard one,
+  on the reasoning that a hard label only changes when a pixel flips. With the
+  widths fixed the two turn out to disagree in *direction*: a model that
+  hedges, keeping its memberships mid-range, scores better softly and worse
+  once the colours are resolved. The premise was wrong anyway — at two million
+  pixels a small parameter change flips thousands. The score is now built from
+  the hard figures, so **nothing can improve it while making the reported
+  total worse**.
+
+### What the search actually bought
+
+Four shards, seeds 6001–6004, all stopping on patience, all landing within
+0.0005 of each other:
+
+| | shipped | after |
+| --- | --- | --- |
+| 総合 (mean IoU) | 62.9% | **63.4%** |
+| 植生 | 57.0% | 56.8% |
+| 乾燥地 | 62.3% | 62.7% |
+| 雪氷 | 78.6% | **80.0%** |
+| 海氷 | 53.9% | 54.0% |
+| 陸地の一致率 | 76.4% | 76.5% |
+| 地域一致 | 37.4% | 38.0% |
+| search score | 0.4645 | 0.4588 |
+
+**Half a percentage point.** That is the honest size of it, and it is what
+Stage 2 predicted in as many words: "region errors bottom out around 0.35 and
+several more rounds of searching moved the score by under 3%, which is the
+model's ceiling rather than the search's." Three independent searches
+totalling 130,000 trials have now confirmed that from three different
+directions. **The remaining error is a missing mechanism, not a mis-set
+number** — an annual-mean wind cannot represent a monsoon, and the two worst
+regions on the globe are both monsoon climates.
+
+The single largest parameter move is `evaporationHalfC`, **−9.865 → −2.879** —
+which is Stage 3's inert-term diagnosis finally acted on. Everything else
+moves by a few percent.
+
+What it looks like: 標準 is **byte-identical** across all seven views, and the
+陸地塗り分け surface changes by 0.0% to 16% depending on the view, concentrated
+where the ice line is — the poles, Tibet — which is where the 雪氷 figure
+improved. Greenness barely moves (Africa 9.5 → 8.7 on the G−R measure, in the
+direction the user asked for). The temperature sweep still peaks at 14 °C.
+
+**The top twenty sets are committed**, as asked, to
+`worlds/kasoku-sekai/climate-candidates.json` — rank 0 is what the world now
+carries, and the spread is where Stage 8 starts.
 
 ## The panel move (after Stage 6)
 

@@ -26,24 +26,24 @@
   },
   "climate": {
     "_note": "Overrides for js/climate.js, which holds the schema (default, physical/empirical, range, meaning). Missing entries take the default; unknown ones are ignored. Fitted by a program, never by hand, against this world's own satellite photograph: the photo is classified pixel by pixel into vegetation, bare ground and snow, and the model is scored against that -- globally, per region (so one continent's excess cannot pay for another's shortfall), and at twenty named places.",
-    "insolationSensitivityC": 81.698,
-    "polarExtraC": 11.516,
-    "oceanModeration": 0.584,
-    "coastalMoisture": 0.919,
-    "moistureDecayKm": 2880,
-    "stillAirMoisture": 0.627,
-    "evaporationHalfC": -9.865,
-    "evaporationWidthC": 4.798,
-    "circulationCellEdgeDeg": 28.535,
-    "advectionRangeKm": 8000,
-    "orographicRiseM": 100,
-    "subtropicalDryStrength": 0.301,
-    "convergenceWetBonus": 1.229,
+    "insolationSensitivityC": 82.773,
+    "polarExtraC": 12,
+    "oceanModeration": 0.58,
+    "coastalMoisture": 0.933,
+    "moistureDecayKm": 2811.955,
+    "stillAirMoisture": 0.602,
+    "evaporationHalfC": -2.879,
+    "evaporationWidthC": 3.071,
+    "circulationCellEdgeDeg": 28.978,
+    "advectionRangeKm": 7051.349,
+    "orographicRiseM": 136.281,
+    "subtropicalDryStrength": 0.292,
+    "convergenceWetBonus": 1.222,
     "vegetationWarmthC": -12,
     "vegetationWarmthWidthC": 5.902,
-    "vegetationMoistureHalf": 0.611,
+    "vegetationMoistureHalf": 0.608,
     "vegetationMoistureWidth": 0.568,
-    "permanentSnowOffsetC": -12.89,
+    "permanentSnowOffsetC": -13.539,
     "snowBlendC": 6.448,
     "seaIceBlendC": 1.948,
     "_paletteNote": "Measured from this world's own photograph, not chosen: each swatch is the mean of the pixels at one end of a class's real range -- the greenest vegetated ground, the brightest hot bare ground, the darkest cold bare ground, the veg/bare transition, and snow.",
@@ -89,9 +89,27 @@
   },
   "teacher": {
     "_note": "What this world's surface really looks like, for the climate model to be scored against. Built by tools/build_teacher.py; see that file for what each class is sourced from and how far to trust it. One byte per cell: 0 sea, 1 sea ice, 2 vegetation, 3 arid, 4 land ice. Adding a past or future era means adding an entry here and a builder in that tool -- nothing else in the project knows how many eras there are.",
-    "classes": ["sea", "seaIce", "vegetation", "arid", "landIce"],
-    "labels": ["海", "海氷", "植生", "乾燥地", "雪氷"],
-    "colours": ["#183e6e", "#b0d0e2", "#608448", "#ccb68a", "#eef0f4"],
+    "classes": [
+      "sea",
+      "seaIce",
+      "vegetation",
+      "arid",
+      "landIce"
+    ],
+    "labels": [
+      "海",
+      "海氷",
+      "植生",
+      "乾燥地",
+      "雪氷"
+    ],
+    "colours": [
+      "#183e6e",
+      "#b0d0e2",
+      "#608448",
+      "#ccb68a",
+      "#eef0f4"
+    ],
     "default": "present",
     "eras": [
       {
@@ -142,28 +160,28 @@
           "maxMetres": -4000
         },
         {
-          "lon": -160.0,
-          "lat": 0.0,
+          "lon": -160,
+          "lat": 0,
           "label": "mid-Pacific abyssal plain",
           "minMetres": -6500,
           "maxMetres": -3000
         },
         {
-          "lon": 10.0,
-          "lat": 23.0,
+          "lon": 10,
+          "lat": 23,
           "label": "Sahara",
           "minMetres": 100,
           "maxMetres": 1200
         },
         {
-          "lon": 0.0,
+          "lon": 0,
           "lat": -89.5,
           "label": "South Pole (ice surface)",
           "minMetres": 1500,
           "maxMetres": 4500
         },
         {
-          "lon": 0.0,
+          "lon": 0,
           "lat": 89.5,
           "label": "North Pole (Arctic Ocean)",
           "minMetres": -5000,
