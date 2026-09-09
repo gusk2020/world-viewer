@@ -95,6 +95,47 @@
 
 **[事実]** 61本の引用のうち主要なもの: LeCun (2022) JEPA提唱論文、Kahneman (2011) Thinking Fast and Slow、EPICA Community Members (2004) Nature、Petit et al. (1999) Nature（Vostok）、Marcott et al. (2013) Science、Spratt & Lisiecki (2016) Climate of the Past、Diamond (1997) Guns Germs and Steel、Tinbergen (1962) 交易重力モデル、Bremer (1992)・Russett (1993)・Oneal & Russett (1999)（紛争・平和理論）、Whittaker (1975)（生物群系）。
 
+## Pass 3 深掘り: 因果グラフ
+
+**[Sonnetによる整理。コードの長い転載ではなく「入力→計算→状態変化→次ステップへの影響」として再構成]**
+
+```mermaid
+flowchart TD
+    PC[古気候データ<br/>EPICA/Vostok/Marcott/Spratt-Lisiecki] --> CO2[CO2・気温・海面基準値<br/>年代ごとに補間]
+    CO2 --> ICE[氷期効果<br/>食料再生率-40%等]
+    CO2 --> SEA[海面変動<br/>ベーリンジア陸橋の開閉]
+    LAND[Natural Earth陸地マスク] --> ISLAND[is_land判定]
+    SEA --> ISLAND
+    RES[資源グリッド<br/>food/minerals/freshwater/fossilfuels] --> LOCALSCAN[エージェントの5x5近傍走査]
+    ICE --> RES
+    LOCALSCAN --> NEEDEAT{食料が十分か}
+    NEEDEAT -->|Yes| EAT[eat目標選択]
+    NEEDEAT -->|No/近隣で不足| SCARCITY[semantic memory:<br/>resource_scarcity]
+    CONFLICT_NEARBY[semantic memory:<br/>conflict_nearby] --> MIGNEED[migrate need<br/>= conflict×0.5+scarcity×0.3-0.3]
+    SCARCITY --> MIGNEED
+    RESIL[resilience trait] -->|1-resilience倍| MIGNEED
+    MIGNEED --> GOALSEL{argmax needs<br/>=目標選択}
+    GOALSEL -->|migrateが最大| MIGRATE[migrate行動発火]
+    MIGRATE --> RANDDIR[ランダム方角<br/>+curiosity依存距離2-5度]
+    RANDDIR --> LANDCHECK{陸地か}
+    LANDCHECK -->|No, 最大8回まで| RANDDIR
+    LANDCHECK -->|Yes| MOVE[新しいlat/lng]
+    MOVE --> ENERGY[エネルギー消費<br/>成功10/失敗5]
+    ENERGY --> DEATH{energy<=0}
+    DEATH -->|Yes| DIE[餓死]
+    MOVE --> CLUSTER[近傍エージェント密度]
+    CLUSTER -->|閾値超| SETTLEMENT[集落形成]
+    SETTLEMENT -->|人口閾値超| NATION[有機的な国家形成<br/>シナリオA]
+    NATION --> RELATIONS[対国家関係値]
+    BORDER[国境隣接] --> RELATIONS
+    RELATIONS -->|閾値以下| CONFLICTPROB[紛争確率<br/>ロジスティック回帰:<br/>資源競合+パワーパリティ<br/>+社会的緊張-交易依存-同盟]
+    TRADE[交易量<br/>重力モデル GDP_A×GDP_B/dist^2] -->|交易依存↑| CONFLICTPROB
+    CONFLICTPROB --> WAR[戦争発生]
+    WAR --> CONFLICT_NEARBY
+```
+
+**読み方**: 古気候データが「資源の量」と「陸地の形（海面変動によるベーリンジア開閉）」の両方に効き、資源不足と近隣紛争がMaslow型欲求階層を通じて移住トリガーになる。ただし移住"先"の選択は資源・気候を一切参照しないランダムウォークであり、この一点だけがOikoumeneの因果連鎖から意図的に切り離されている（コード上確認済みの弱点）。集落→国家→交易→紛争→(近隣への)紛争認知→さらなる移住、という閉じたフィードバックループが成立している点が本プロジェクトの核心的価値。
+
 ## 確信度
 
 高。Haikuエージェントが行番号付きで数式を抽出しており、また「未確認事項」を10項目具体的に洗い出している点で信頼性が高い一次調査。

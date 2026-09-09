@@ -88,6 +88,47 @@
 - Kolb, J.J. (2020). Python再実装。DOI: 10.18452/22147（学位論文と推定、未確認）
 - CITATION.cff記載: "MayaSim: An agent-based model of the ancient Maya social-ecological system", v1.3.0, Zenodo DOI 10.5281/zenodo.13734595
 
+## Pass 3 深掘り: 因果グラフ
+
+**[Sonnetによる整理]**
+
+```mermaid
+flowchart TD
+    CLIM[気候: 周期変動+干ばつイベント] --> PRECIP[降水 cel_precip]
+    CLEARED[伐採地セル数] -->|veg_rainfall負のフィードバック| PRECIP
+    PRECIP --> NPP["NPP = min(降水関数, 気温関数)"]
+    TEMP[気温 cel_temp] --> NPP
+    NPP --> FORESTCA[森林状態CA<br/>3=極相/2=二次林/1=伐採地]
+    POPGRAD[人口勾配 cel_pop_gradient] -->|劣化確率×(1+2×勾配)| FORESTCA
+    NPP -->|相対NPP低いと再生遅延| FORESTCA
+    FORESTCA --> AGPROD["農業生産性<br/>=a_npp×NPP+a_sp×土壌生産性<br/>-a_s×傾斜-a_wf×水流-土壌劣化"]
+    SOILDEG[土壌劣化 cel_soil_deg] --> AGPROD
+    AGPROD --> BCA["便益コスト分析 BCA<br/>=max_yield×(1-shift×exp(-slope×ag))"]
+    BCA --> CROPDECIDE{セル効用<br/>=BCA-設立コスト-移動コスト/√人口}
+    CROPDECIDE -->|効用>0かつ人口密度>閾値| CROP[新規セルを作付け]
+    CROPDECIDE -->|効用<0または人口密度<閾値| ABANDON[セルを放棄]
+    CROP --> SOILDEG
+    FORESTCA -->|極相林で再生| SOILDEG
+    CROP --> ESVALUE[生態系サービス<br/>waterflow+forest state+ag]
+    AGPROD --> INCOME["実質所得per capita<br/>=(作物収入+生態系収入+交易収入)/人口"]
+    ESVALUE --> INCOME
+    TRADE[交易ランク・リンク数] --> TRADEINCOME[交易収入]
+    TRADEINCOME --> INCOME
+    INCOME -->|高いほど↓| DEATHRATE[死亡率]
+    INCOME -->|高いほど↓| MIGRATE_RATE[移住率]
+    DEATHRATE --> POP[集落人口]
+    MIGRATE_RATE --> POP
+    POP -->|べき関数 pop^0.8/60| INFLUENCE[影響圏半径]
+    INFLUENCE --> POPGRAD
+    INFLUENCE -->|人口密度が閾値超| CROP
+    MIGRATE_RATE -->|流出人口>400、50%確率| NEWSETTLE[新規集落創設]
+    NEWSETTLE --> POP
+    POP -->|人口<閾値| KILL[集落消滅]
+    POP -->|人口閾値でランク決定| TRADE
+```
+
+**読み方**: このモデルの核心は「農業生産性→集落収入→人口動態→影響圏拡大→再び農業生産性へ」という単一の閉じたループが、環境劣化（土壌劣化・森林減少・降水フィードバック）を介して負の側面も同時に運ぶ点。人口が増えるほど影響圏が拡大し、より多くのセルが作付けされ、それが土壌を劣化させ森林を減らし、NPPと降水を減らして将来の生産性を下げる——この「成長がやがて自分の基盤を掘り崩す」フィードバック構造が、マヤ文明の興隆と崩壊という物語をコードレベルで具体化している。今回のアプリで「なぜ繁栄した文明が崩壊するのか」を数値的に表現する際の最良のminimal working exampleと言える。
+
 ## 確信度
 
 高。コード規模・因果構造ともにHaikuエージェントが行単位で詳細抽出しており、数式・デフォルト値が具体的に記録されている。

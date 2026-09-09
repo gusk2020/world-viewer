@@ -107,6 +107,43 @@ LLMがOllamaに到達できない場合、決定論的な「オフラインspiri
 
 **[事実]** コード・ドキュメント内に学術論文の引用は見つからず。独立系ラボ（Éthiqueia）による自主研究プロジェクトと位置付けられている。
 
+## Pass 3 深掘り: 因果グラフ
+
+**[Sonnetによる整理]**
+
+```mermaid
+flowchart TD
+    TERRAIN[地形グリッド<br/>value noise+河川彫刻] --> CLIMATE[気候グリッド<br/>緯度+標高ベース気温、湿度移流、降水]
+    CLIMATE --> FOOD[食料グリッド<br/>ロジスティック再生×plant_growth]
+    CLIMATE --> SUIT[都市適地性<br/>食料+淡水+温暖+低標高]
+    SUIT --> CITYBIRTH[都市発生]
+    CITYBIRTH --> CITYGROWTH[都市成長<br/>影響圏内食料収穫]
+    FOOD --> CITYGROWTH
+    CITYGROWTH --> POP[市民LOD実体化<br/>materialize-on-focus, 上限4000]
+    POP --> BIGFIVE[個体: Big Five性格+ideology5軸]
+    BIGFIVE --> GRIEVANCE[恨み<br/>飢饉/疫病/貧困/内乱で上昇]
+    CITYGROWTH -->|famine/plague/unrest| GRIEVANCE
+    GRIEVANCE --> CONVERT[改宗性向<br/>piety+neuroticism+grievance]
+    CHARISMA[高piety+高status+高extraversion個体] --> FOUND[信仰創設]
+    FOUND --> RELIGION[宗教: 信条+聖地+都市別share]
+    RELIGION -->|近接/交易で| SPREAD[伝播]
+    CONVERT --> SPREAD
+    SPREAD -->|5都市以上で確率的| SCHISM[分裂<br/>離反者が改革派を率いる]
+    RELIGION -->|一方の文明>50%都市を支配| HOLYWARCHECK{隣接文明が<br/>別宗教優勢か}
+    HOLYWARCHECK -->|Yes| WARINTENT[聖戦意図]
+    READY[個体の生涯適性スコア] --> FACTIONFOUND[派閥創設<br/>種類は確率的に重み付け選択]
+    FACTIONFOUND --> INFLUENCE[派閥影響力<br/>メンバー数×都市気分の一致]
+    INFLUENCE -->|revolutionary型、影響力>0.6かつ都市unrest>0.5| REVOLUTION[革命<br/>都市が離反し新文明樹立]
+    RELATIONS[文明間関係] -->|国境侵食で低下| WARPROP{war_propensity roll}
+    WARPROP --> WARINTENT
+    WARINTENT --> ARMY[軍隊ユニット発生]
+    ARMY --> CONQUER[都市征服<br/>文明所有者変更]
+    GOV[統治者LLM directive] -.->|clamped WorldParams経由のみ| CLIMATE
+    GOV -.->|clamped WorldParams経由のみ| FOOD
+```
+
+**読み方**: 地形・気候→食料→都市成長という決定論的な連鎖の上に、個体の恨み（グリーバンス）が信仰・派閥という「文化的創発構造」へ橋渡しされ、それが革命・聖戦という政治的帰結にループバックする。統治者LLM（`governor`）は図中で点線として示した通り、`WorldParams`という単一のクランプ済みパラメータ集合を経由してのみ間接的に世界に影響でき、都市人口・宗教シェア・派閥影響力といった「客観的事実」には直接書き込めない。この「LLMは環境ノブだけを回せる」という制約が、今回のアプリが目指す「LLMは事実を決めない」設計の最も具体的な実装テンプレートになる。
+
 ## 確信度
 
 高。「シミュレーション対LLM境界」というユーザーの最重要関心事について、Haikuエージェントがコード引用付きで極めて具体的に抽出している。
