@@ -222,25 +222,26 @@ export const CLIMATE_PARAMETERS = {
       "by this same warmth, that also paints the Arctic's gravel as sand.",
   },
   vegetationWarmthWidthC: {
-    value: 8, kind: "empirical", min: 3, max: 15,
-    note: "How gradually plant cover fades out as it gets colder.",
+    value: 8, kind: "empirical", min: 3, max: 15, search: false,
+    note:
+      "How gradually plant cover fades out as it gets colder. Not searched, " +
+      "and for the same reason as the three widths below it: see the note on " +
+      "snowBlendC.",
   },
   vegetationMoistureHalf: {
     value: 0.34, kind: "empirical", min: 0, max: 1,
     note: "Moisture at which plant cover is half of what warmth allows.",
   },
   vegetationMoistureWidth: {
-    value: 0.22, kind: "empirical", min: 0.15, max: 0.35,
+    value: 0.22, kind: "empirical", min: 0.01, max: 1, search: false,
     note:
-      "How gradually plant cover fades out as it gets drier. Floored well " +
-      "above zero because the user asked for natural gradients and the search " +
-      "will otherwise collapse this into a hard desert/forest edge -- it goes " +
-      "straight to the floor every time, so where the floor sits is where the " +
-      "gradient ends up. Capped at the top for the opposite reason: a ramp " +
-      "this wide needs the moisture to swing across nearly its whole range " +
-      "before ground is fully green, so almost nothing ever is, and the " +
-      "continent turns to mush. Smooth gradients come from the moisture field " +
-      "being smooth in space, not from the ramp being wide.",
+      "How gradually plant cover fades out as it gets drier. Not searched: " +
+      "see snowBlendC. Its bounds used to read 0.15 to 0.35, which were the " +
+      "*search*'s bounds written into the model's own range -- and the value " +
+      "that actually shipped, 0.568, sits outside them, because it predates " +
+      "the cap and nothing clamps. The range here is now what the model will " +
+      "genuinely accept, and how wide the ramp should be is a judgement about " +
+      "how the globe looks, not something the score can decide.",
   },
 
   sandTemperatureC: {
@@ -268,12 +269,23 @@ export const CLIMATE_PARAMETERS = {
       "model cannot know that, so this stands in for the seasonal cycle.",
   },
   snowBlendC: {
-    value: 4, kind: "empirical", min: 1.5, max: 20,
-    note: "Width of the snow line, so it is a gradient rather than a hard edge.",
+    value: 4, kind: "empirical", min: 1.5, max: 20, search: false,
+    note:
+      "Width of the snow line, so it is a gradient rather than a hard edge. " +
+      "**Not searched, and this was learned the hard way in Stage 7.** The " +
+      "teacher data says one class per pixel, so a sharp boundary always " +
+      "scores at least as well as a soft one through it -- a soft edge can " +
+      "only ever be partly right. Given the freedom, the search drove all " +
+      "four gradient widths to their floors at once and bought about a third " +
+      "of its total gain that way, producing exactly the hard snow line, hard " +
+      "ice edge and hard desert margin the user ruled out in the first " +
+      "sentence of this whole feature. Nothing in the objective can see " +
+      "softness, so this belongs with the colour parameters: chosen by eye, " +
+      "left alone by the search.",
   },
   seaIceBlendC: {
-    value: 2.5, kind: "empirical", min: 1, max: 20,
-    note: "Width of the sea-ice edge.",
+    value: 2.5, kind: "empirical", min: 1, max: 20, search: false,
+    note: "Width of the sea-ice edge. Not searched: see snowBlendC.",
   },
   seaDepthShadingM: {
     value: 4000, kind: "empirical", min: 100, max: 12000, search: false,
