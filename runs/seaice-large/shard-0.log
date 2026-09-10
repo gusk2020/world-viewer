@@ -125,3 +125,5 @@ shard 0: trial 4072/10000, front 8, rejected 1973
 shard 0: trial 4105/10000, front 9, rejected 1990
 shard 0: trial 4138/10000, front 8, rejected 2002
 shard 0: trial 4172/10000, front 8, rejected 2024
+shard 0: stopping at patience 500
+shard 0 done: trial 4188, front 8, rejected 2036. Wrote runs/seaice-large/shard-0.json
