@@ -97,3 +97,18 @@ shard 3: trial 3128/10000, front 2, rejected 1445
 shard 3: trial 3161/10000, front 2, rejected 1456
 shard 3: trial 3193/10000, front 2, rejected 1470
 shard 3: trial 3225/10000, front 2, rejected 1485
+shard 3: trial 3258/10000, front 2, rejected 1496
+shard 3: trial 3289/10000, front 2, rejected 1510
+shard 3: trial 3322/10000, front 2, rejected 1527
+shard 3: trial 3355/10000, front 2, rejected 1544
+shard 3: trial 3389/10000, front 2, rejected 1558
+shard 3: trial 3422/10000, front 2, rejected 1575
+shard 3: trial 3455/10000, front 2, rejected 1588
+shard 3: trial 3489/10000, front 2, rejected 1601
+shard 3: trial 3523/10000, front 2, rejected 1618
+shard 3: trial 3557/10000, front 2, rejected 1633
+shard 3: trial 3591/10000, front 2, rejected 1647
+shard 3: trial 3625/10000, front 2, rejected 1661
+shard 3: trial 3659/10000, front 2, rejected 1679
+shard 3: stopping at patience 500
+shard 3 done: trial 3671, front 2, rejected 1684. Wrote runs/seaice-large/shard-3.json
