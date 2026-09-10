@@ -1,0 +1,3182 @@
+{
+ "source": "runs/seaice-large/merged-step2.json",
+ "constraintsFrom": "runs/seaice-large/shard-0.json",
+ "totalRescored": 13,
+ "validAtStep1": 13,
+ "rescored": [
+  {
+   "params": {
+    "meanTemperatureC": 14,
+    "lapseRateCPerKm": 6.5,
+    "freezeTemperatureC": 0,
+    "seaIceTemperatureC": -1.8,
+    "insolationSensitivityC": 84.924,
+    "polarExtraC": 10.763,
+    "oceanModeration": 0.568,
+    "seasonalSensitivityC": 16.25798021396622,
+    "seaSeasonalDamping": 0.222,
+    "itczFollowFraction": 0.001,
+    "monsoonStrength": 0.029,
+    "itczLandPullDeg": 26.19503921479918,
+    "itczPullRangeDeg": 46.121896451339126,
+    "itczSmoothDeg": 3.5894559269770983,
+    "itczElevationPullM": 35755.03727560863,
+    "snowBalanceWeight": 0.2,
+    "snowMeltDegreeDay": 0.7727715174667537,
+    "snowBalanceRequiredM": 0.26520592605229465,
+    "snowBalanceWidth": 0.15,
+    "seaIceBalanceWeight": 0.8314719806239009,
+    "seaIceMeltDegreeDay": 0.8994018396828324,
+    "seaIceBalanceRequired": -0.31561550744809214,
+    "seaIceBalanceWidth": 0.15,
+    "growingSeasonWeight": 0.847,
+    "coastalMoisture": 0.892,
+    "moistureDecayKm": 3232.679,
+    "evaporationHalfC": -3,
+    "evaporationWidthC": 3.083,
+    "stillAirMoisture": 0.564,
+    "coriolisStrength": 4,
+    "circulationCellEdgeDeg": 28.557,
+    "cellRotationExponent": 0.33,
+    "advectionRangeKm": 6494.654,
+    "orographicLiftM": 1146.915,
+    "rainShadowM": 3443.136,
+    "orographicRiseM": 180.397,
+    "subtropicalDryStrength": 0.282,
+    "convergenceWetBonus": 1.577,
+    "vegetationWarmthC": -12,
+    "vegetationWarmthWidthC": 5.902,
+    "vegetationMoistureHalf": 0.611,
+    "vegetationMoistureWidth": 0.568,
+    "sandTemperatureC": 10,
+    "sandWidthC": 10,
+    "snowSummerMeltC": -2.366202841512859,
+    "snowBlendC": 6.448,
+    "seaIceBlendC": 1.948,
+    "seaDepthShadingM": 4000
+   },
+   "step2": {
+    "a": 0.5853041125595717,
+    "b": 0.14129153485514445
+   },
+   "a": 0.5851998203747024,
+   "b": 0.14119058968822137,
+   "teacherA": {
+    "total": 0.5851998203747024,
+    "vegetation": 0.519174156454005,
+    "arid": 0.5783926788597054,
+    "landIce": 0.7031625033168422,
+    "landIceRecall": 0.7995777259543961,
+    "landIcePrecision": 0.8536165311168743,
+    "landIceArea": 0.031174838551550305,
+    "seaIce": 0.5400699428682572,
+    "seaIceRecall": 0.7190178155293422,
+    "seaIcePrecision": 0.6845442699974821,
+    "seaIceArea": 0.010521890582758582,
+    "region": 0.3361913797897864
+   },
+   "teacherB": {
+    "total": 0.14119058968822137,
+    "classes": {
+     "tropicalHumid": 0.18682886916391844,
+     "tropicalSeasonal": 0.020833267307734684,
+     "arid": 0.3264201128538546,
+     "temperateHumid": 0.1168568583695693,
+     "temperateSeasonal": 0.0015526985552335056,
+     "coldHumid": 0.2159032838254167,
+     "coldSeasonal": 0,
+     "polar": 0.2611296274300437
+    },
+    "seasonalClassSum": 0.02238596586296819
+   },
+   "longitudinalShare": 0.24426025469078505,
+   "places": {
+    "インドシナ": {
+     "modelVegetatedPct": 66.3,
+     "teacherVegetatedPct": 74.4
+    },
+    "華中・華南": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 98.2
+    },
+    "インド": {
+     "modelVegetatedPct": 10.4,
+     "teacherVegetatedPct": 4.9
+    },
+    "米中西部": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 64.6
+    },
+    "パタゴニア風下": {
+     "modelVegetatedPct": 60.7,
+     "teacherVegetatedPct": 4.2
+    },
+    "サハラ": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 0
+    },
+    "ヒマラヤ・チベット": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 7.2
+    },
+    "サヘル": {
+     "modelVegetatedPct": 43.7,
+     "teacherVegetatedPct": 6
+    }
+   },
+   "valid": true
+  },
+  {
+   "params": {
+    "meanTemperatureC": 14,
+    "lapseRateCPerKm": 6.5,
+    "freezeTemperatureC": 0,
+    "seaIceTemperatureC": -1.8,
+    "insolationSensitivityC": 84.924,
+    "polarExtraC": 10.763,
+    "oceanModeration": 0.568,
+    "seasonalSensitivityC": 17.840018221875653,
+    "seaSeasonalDamping": 0.222,
+    "itczFollowFraction": 0.001,
+    "monsoonStrength": 0.029,
+    "itczLandPullDeg": 15,
+    "itczPullRangeDeg": 20.721063572214916,
+    "itczSmoothDeg": 6.079295366536826,
+    "itczElevationPullM": 3586.5043856669217,
+    "snowBalanceWeight": 0.2,
+    "snowMeltDegreeDay": 0.7197505168616771,
+    "snowBalanceRequiredM": 1,
+    "snowBalanceWidth": 0.15,
+    "seaIceBalanceWeight": 0.6625191335007549,
+    "seaIceMeltDegreeDay": 0.60284437360242,
+    "seaIceBalanceRequired": -0.18972767437808216,
+    "seaIceBalanceWidth": 0.15,
+    "growingSeasonWeight": 0.847,
+    "coastalMoisture": 0.892,
+    "moistureDecayKm": 3232.679,
+    "evaporationHalfC": -3,
+    "evaporationWidthC": 3.083,
+    "stillAirMoisture": 0.564,
+    "coriolisStrength": 4,
+    "circulationCellEdgeDeg": 28.557,
+    "cellRotationExponent": 0.33,
+    "advectionRangeKm": 6494.654,
+    "orographicLiftM": 1146.915,
+    "rainShadowM": 3443.136,
+    "orographicRiseM": 180.397,
+    "subtropicalDryStrength": 0.282,
+    "convergenceWetBonus": 1.577,
+    "vegetationWarmthC": -12,
+    "vegetationWarmthWidthC": 5.902,
+    "vegetationMoistureHalf": 0.611,
+    "vegetationMoistureWidth": 0.568,
+    "sandTemperatureC": 10,
+    "sandWidthC": 10,
+    "snowSummerMeltC": 0,
+    "snowBlendC": 6.448,
+    "seaIceBlendC": 1.948,
+    "seaDepthShadingM": 4000
+   },
+   "step2": {
+    "a": 0.5841433839801693,
+    "b": 0.14928366764404044
+   },
+   "a": 0.5842131557532132,
+   "b": 0.1487969833310779,
+   "teacherA": {
+    "total": 0.5842131557532132,
+    "vegetation": 0.5246954310959758,
+    "arid": 0.5793487493795542,
+    "landIce": 0.6927384996690656,
+    "landIceRecall": 0.7799017715512417,
+    "landIcePrecision": 0.8610791681349129,
+    "landIceArea": 0.03014415865936839,
+    "seaIce": 0.5400699428682572,
+    "seaIceRecall": 0.7190178155293422,
+    "seaIcePrecision": 0.6845442699974821,
+    "seaIceArea": 0.010521890582758582,
+    "region": 0.3315440970707123
+   },
+   "teacherB": {
+    "total": 0.1487969833310779,
+    "classes": {
+     "tropicalHumid": 0.19023129058374783,
+     "tropicalSeasonal": 0.021640956245928215,
+     "arid": 0.32577230186793654,
+     "temperateHumid": 0.11575194129471952,
+     "temperateSeasonal": 0.0012202663760908967,
+     "coldHumid": 0.26810036084649624,
+     "coldSeasonal": 0,
+     "polar": 0.26765874943370405
+    },
+    "seasonalClassSum": 0.02286122262201911
+   },
+   "longitudinalShare": 0.24091667175264603,
+   "places": {
+    "インドシナ": {
+     "modelVegetatedPct": 44.4,
+     "teacherVegetatedPct": 74.4
+    },
+    "華中・華南": {
+     "modelVegetatedPct": 1.2,
+     "teacherVegetatedPct": 98.2
+    },
+    "インド": {
+     "modelVegetatedPct": 5.3,
+     "teacherVegetatedPct": 4.9
+    },
+    "米中西部": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 64.6
+    },
+    "パタゴニア風下": {
+     "modelVegetatedPct": 60.7,
+     "teacherVegetatedPct": 4.2
+    },
+    "サハラ": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 0
+    },
+    "ヒマラヤ・チベット": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 7.2
+    },
+    "サヘル": {
+     "modelVegetatedPct": 41.8,
+     "teacherVegetatedPct": 6
+    }
+   },
+   "valid": true
+  },
+  {
+   "params": {
+    "meanTemperatureC": 14,
+    "lapseRateCPerKm": 6.5,
+    "freezeTemperatureC": 0,
+    "seaIceTemperatureC": -1.8,
+    "insolationSensitivityC": 84.924,
+    "polarExtraC": 10.763,
+    "oceanModeration": 0.568,
+    "seasonalSensitivityC": 18.300763764884323,
+    "seaSeasonalDamping": 0.222,
+    "itczFollowFraction": 0.001,
+    "monsoonStrength": 0.029,
+    "itczLandPullDeg": 27.668298160191625,
+    "itczPullRangeDeg": 52.452341192634776,
+    "itczSmoothDeg": 7.484853761736304,
+    "itczElevationPullM": 37075.90249683708,
+    "snowBalanceWeight": 0.21948798410594464,
+    "snowMeltDegreeDay": 0.7422508903779089,
+    "snowBalanceRequiredM": 0.18020000224933025,
+    "snowBalanceWidth": 0.15,
+    "seaIceBalanceWeight": 0.93208862118423,
+    "seaIceMeltDegreeDay": 0.813668733695522,
+    "seaIceBalanceRequired": -0.3606549102580175,
+    "seaIceBalanceWidth": 0.15,
+    "growingSeasonWeight": 0.847,
+    "coastalMoisture": 0.892,
+    "moistureDecayKm": 3232.679,
+    "evaporationHalfC": -3,
+    "evaporationWidthC": 3.083,
+    "stillAirMoisture": 0.564,
+    "coriolisStrength": 4,
+    "circulationCellEdgeDeg": 28.557,
+    "cellRotationExponent": 0.33,
+    "advectionRangeKm": 6494.654,
+    "orographicLiftM": 1146.915,
+    "rainShadowM": 3443.136,
+    "orographicRiseM": 180.397,
+    "subtropicalDryStrength": 0.282,
+    "convergenceWetBonus": 1.577,
+    "vegetationWarmthC": -12,
+    "vegetationWarmthWidthC": 5.902,
+    "vegetationMoistureHalf": 0.611,
+    "vegetationMoistureWidth": 0.568,
+    "sandTemperatureC": 10,
+    "sandWidthC": 10,
+    "snowSummerMeltC": -1.4026311985217033,
+    "snowBlendC": 6.448,
+    "seaIceBlendC": 1.948,
+    "seaDepthShadingM": 4000
+   },
+   "step2": {
+    "a": 0.5805404581443162,
+    "b": 0.15158741433172038
+   },
+   "a": 0.5806218289445664,
+   "b": 0.15126208844218234,
+   "teacherA": {
+    "total": 0.5806218289445664,
+    "vegetation": 0.5148782727839166,
+    "arid": 0.5742636182500463,
+    "landIce": 0.6936724990897573,
+    "landIceRecall": 0.7847330655184218,
+    "landIcePrecision": 0.8566896835459107,
+    "landIceArea": 0.030486302744169528,
+    "seaIce": 0.5396729256545452,
+    "seaIceRecall": 0.6969122646359943,
+    "seaIcePrecision": 0.7051821466910062,
+    "seaIceArea": 0.00989993785557273,
+    "region": 0.3372937100381459
+   },
+   "teacherB": {
+    "total": 0.15126208844218234,
+    "classes": {
+     "tropicalHumid": 0.1912287272493523,
+     "tropicalSeasonal": 0.024269606957759236,
+     "arid": 0.32424842750974003,
+     "temperateHumid": 0.11497774171330698,
+     "temperateSeasonal": 0.0029045543811557968,
+     "coldHumid": 0.28272649311065545,
+     "coldSeasonal": 0,
+     "polar": 0.269741156615489
+    },
+    "seasonalClassSum": 0.027174161338915034
+   },
+   "longitudinalShare": 0.24301996112940308,
+   "places": {
+    "インドシナ": {
+     "modelVegetatedPct": 69.8,
+     "teacherVegetatedPct": 74.4
+    },
+    "華中・華南": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 98.2
+    },
+    "インド": {
+     "modelVegetatedPct": 11.2,
+     "teacherVegetatedPct": 4.9
+    },
+    "米中西部": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 64.6
+    },
+    "パタゴニア風下": {
+     "modelVegetatedPct": 60.7,
+     "teacherVegetatedPct": 4.2
+    },
+    "サハラ": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 0
+    },
+    "ヒマラヤ・チベット": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 7.2
+    },
+    "サヘル": {
+     "modelVegetatedPct": 45.4,
+     "teacherVegetatedPct": 6
+    }
+   },
+   "valid": true
+  },
+  {
+   "params": {
+    "meanTemperatureC": 14,
+    "lapseRateCPerKm": 6.5,
+    "freezeTemperatureC": 0,
+    "seaIceTemperatureC": -1.8,
+    "insolationSensitivityC": 84.924,
+    "polarExtraC": 10.763,
+    "oceanModeration": 0.568,
+    "seasonalSensitivityC": 18.300763764884323,
+    "seaSeasonalDamping": 0.222,
+    "itczFollowFraction": 0.001,
+    "monsoonStrength": 0.029,
+    "itczLandPullDeg": 28.56649408908561,
+    "itczPullRangeDeg": 52.452341192634776,
+    "itczSmoothDeg": 5.680924015026539,
+    "itczElevationPullM": 37075.90249683708,
+    "snowBalanceWeight": 0.2,
+    "snowMeltDegreeDay": 0.7422508903779089,
+    "snowBalanceRequiredM": 0.26520592605229465,
+    "snowBalanceWidth": 0.15,
+    "seaIceBalanceWeight": 0.8527033248916269,
+    "seaIceMeltDegreeDay": 0.9131117998156697,
+    "seaIceBalanceRequired": -0.492313117464073,
+    "seaIceBalanceWidth": 0.15,
+    "growingSeasonWeight": 0.847,
+    "coastalMoisture": 0.892,
+    "moistureDecayKm": 3232.679,
+    "evaporationHalfC": -3,
+    "evaporationWidthC": 3.083,
+    "stillAirMoisture": 0.564,
+    "coriolisStrength": 4,
+    "circulationCellEdgeDeg": 28.557,
+    "cellRotationExponent": 0.33,
+    "advectionRangeKm": 6494.654,
+    "orographicLiftM": 1146.915,
+    "rainShadowM": 3443.136,
+    "orographicRiseM": 180.397,
+    "subtropicalDryStrength": 0.282,
+    "convergenceWetBonus": 1.577,
+    "vegetationWarmthC": -12,
+    "vegetationWarmthWidthC": 5.902,
+    "vegetationMoistureHalf": 0.611,
+    "vegetationMoistureWidth": 0.568,
+    "sandTemperatureC": 10,
+    "sandWidthC": 10,
+    "snowSummerMeltC": -1.4026311985217033,
+    "snowBlendC": 6.448,
+    "seaIceBlendC": 1.948,
+    "seaDepthShadingM": 4000
+   },
+   "step2": {
+    "a": 0.5787753864076275,
+    "b": 0.15251823912879697
+   },
+   "a": 0.5786974758053546,
+   "b": 0.15220523096802901,
+   "teacherA": {
+    "total": 0.5786974758053546,
+    "vegetation": 0.509685515976774,
+    "arid": 0.5723974344760806,
+    "landIce": 0.6926370099003065,
+    "landIceRecall": 0.7727013581595092,
+    "landIcePrecision": 0.8698703318180566,
+    "landIceArea": 0.029564020819367404,
+    "seaIce": 0.5400699428682572,
+    "seaIceRecall": 0.7190178155293422,
+    "seaIcePrecision": 0.6845442699974821,
+    "seaIceArea": 0.010521890582758582,
+    "region": 0.33525480350310144
+   },
+   "teacherB": {
+    "total": 0.15220523096802901,
+    "classes": {
+     "tropicalHumid": 0.19002616790893878,
+     "tropicalSeasonal": 0.033196650344648755,
+     "arid": 0.3227782831036094,
+     "temperateHumid": 0.11497489627984467,
+     "temperateSeasonal": 0.004203164942573656,
+     "coldHumid": 0.28272649311065545,
+     "coldSeasonal": 0,
+     "polar": 0.26973619205396143
+    },
+    "seasonalClassSum": 0.03739981528722241
+   },
+   "longitudinalShare": 0.24690037263856113,
+   "places": {
+    "インドシナ": {
+     "modelVegetatedPct": 71.3,
+     "teacherVegetatedPct": 74.4
+    },
+    "華中・華南": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 98.2
+    },
+    "インド": {
+     "modelVegetatedPct": 11.6,
+     "teacherVegetatedPct": 4.9
+    },
+    "米中西部": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 64.6
+    },
+    "パタゴニア風下": {
+     "modelVegetatedPct": 60.7,
+     "teacherVegetatedPct": 4.2
+    },
+    "サハラ": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 0
+    },
+    "ヒマラヤ・チベット": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 7.2
+    },
+    "サヘル": {
+     "modelVegetatedPct": 46.7,
+     "teacherVegetatedPct": 6
+    }
+   },
+   "valid": true
+  },
+  {
+   "params": {
+    "meanTemperatureC": 14,
+    "lapseRateCPerKm": 6.5,
+    "freezeTemperatureC": 0,
+    "seaIceTemperatureC": -1.8,
+    "insolationSensitivityC": 84.924,
+    "polarExtraC": 10.763,
+    "oceanModeration": 0.568,
+    "seasonalSensitivityC": 19.551100300624967,
+    "seaSeasonalDamping": 0.222,
+    "itczFollowFraction": 0.001,
+    "monsoonStrength": 0.029,
+    "itczLandPullDeg": 16.222802464384586,
+    "itczPullRangeDeg": 20.721063572214916,
+    "itczSmoothDeg": 10.031647539138794,
+    "itczElevationPullM": 4190.164288505912,
+    "snowBalanceWeight": 0.2,
+    "snowMeltDegreeDay": 0.6472464065998792,
+    "snowBalanceRequiredM": 0.99684016876854,
+    "snowBalanceWidth": 0.15,
+    "seaIceBalanceWeight": 0.6776157993078231,
+    "seaIceMeltDegreeDay": 0.5399755138903856,
+    "seaIceBalanceRequired": -0.18972767437808216,
+    "seaIceBalanceWidth": 0.15,
+    "growingSeasonWeight": 0.847,
+    "coastalMoisture": 0.892,
+    "moistureDecayKm": 3232.679,
+    "evaporationHalfC": -3,
+    "evaporationWidthC": 3.083,
+    "stillAirMoisture": 0.564,
+    "coriolisStrength": 4,
+    "circulationCellEdgeDeg": 28.557,
+    "cellRotationExponent": 0.33,
+    "advectionRangeKm": 6494.654,
+    "orographicLiftM": 1146.915,
+    "rainShadowM": 3443.136,
+    "orographicRiseM": 180.397,
+    "subtropicalDryStrength": 0.282,
+    "convergenceWetBonus": 1.577,
+    "vegetationWarmthC": -12,
+    "vegetationWarmthWidthC": 5.902,
+    "vegetationMoistureHalf": 0.611,
+    "vegetationMoistureWidth": 0.568,
+    "sandTemperatureC": 10,
+    "sandWidthC": 10,
+    "snowSummerMeltC": 0,
+    "snowBlendC": 6.448,
+    "seaIceBlendC": 1.948,
+    "seaDepthShadingM": 4000
+   },
+   "step2": {
+    "a": 0.5782084455010399,
+    "b": 0.1569789302311378
+   },
+   "a": 0.5780218604837637,
+   "b": 0.1563760405736822,
+   "teacherA": {
+    "total": 0.5780218604837637,
+    "vegetation": 0.52381231630395,
+    "arid": 0.5768802122936776,
+    "landIce": 0.67132497046917,
+    "landIceRecall": 0.732525015618757,
+    "landIcePrecision": 0.8893233113059457,
+    "landIceArea": 0.027413792847644204,
+    "seaIce": 0.5400699428682572,
+    "seaIceRecall": 0.7190178155293422,
+    "seaIcePrecision": 0.6845442699974821,
+    "seaIceArea": 0.010521890582758582,
+    "region": 0.32619534500992353
+   },
+   "teacherB": {
+    "total": 0.1563760405736822,
+    "classes": {
+     "tropicalHumid": 0.19370161789262827,
+     "tropicalSeasonal": 0.022144296985687168,
+     "arid": 0.3239188013546323,
+     "temperateHumid": 0.11292992804962303,
+     "temperateSeasonal": 0.002252272605610356,
+     "coldHumid": 0.32066094317642524,
+     "coldSeasonal": 0,
+     "polar": 0.2754004645248513
+    },
+    "seasonalClassSum": 0.024396569591297525
+   },
+   "longitudinalShare": 0.24015593816940783,
+   "places": {
+    "インドシナ": {
+     "modelVegetatedPct": 44.8,
+     "teacherVegetatedPct": 74.4
+    },
+    "華中・華南": {
+     "modelVegetatedPct": 1.2,
+     "teacherVegetatedPct": 98.2
+    },
+    "インド": {
+     "modelVegetatedPct": 5.4,
+     "teacherVegetatedPct": 4.9
+    },
+    "米中西部": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 64.6
+    },
+    "パタゴニア風下": {
+     "modelVegetatedPct": 60.7,
+     "teacherVegetatedPct": 4.2
+    },
+    "サハラ": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 0
+    },
+    "ヒマラヤ・チベット": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 7.2
+    },
+    "サヘル": {
+     "modelVegetatedPct": 43.9,
+     "teacherVegetatedPct": 6
+    }
+   },
+   "valid": true
+  },
+  {
+   "params": {
+    "meanTemperatureC": 14,
+    "lapseRateCPerKm": 6.5,
+    "freezeTemperatureC": 0,
+    "seaIceTemperatureC": -1.8,
+    "insolationSensitivityC": 84.924,
+    "polarExtraC": 10.763,
+    "oceanModeration": 0.568,
+    "seasonalSensitivityC": 24.366660403087735,
+    "seaSeasonalDamping": 0.222,
+    "itczFollowFraction": 0.001,
+    "monsoonStrength": 0.029,
+    "itczLandPullDeg": 29.03465532674454,
+    "itczPullRangeDeg": 23.430242274189368,
+    "itczSmoothDeg": 28.83809607839212,
+    "itczElevationPullM": 24376.161981513724,
+    "snowBalanceWeight": 0.8286676036566498,
+    "snowMeltDegreeDay": 0.9399341273587195,
+    "snowBalanceRequiredM": -0.45978575570043173,
+    "snowBalanceWidth": 0.15,
+    "seaIceBalanceWeight": 0.8742974274978041,
+    "seaIceMeltDegreeDay": 0.4335265804547816,
+    "seaIceBalanceRequired": -0.2007835707627237,
+    "seaIceBalanceWidth": 0.15,
+    "growingSeasonWeight": 0.847,
+    "coastalMoisture": 0.892,
+    "moistureDecayKm": 3232.679,
+    "evaporationHalfC": -3,
+    "evaporationWidthC": 3.083,
+    "stillAirMoisture": 0.564,
+    "coriolisStrength": 4,
+    "circulationCellEdgeDeg": 28.557,
+    "cellRotationExponent": 0.33,
+    "advectionRangeKm": 6494.654,
+    "orographicLiftM": 1146.915,
+    "rainShadowM": 3443.136,
+    "orographicRiseM": 180.397,
+    "subtropicalDryStrength": 0.282,
+    "convergenceWetBonus": 1.577,
+    "vegetationWarmthC": -12,
+    "vegetationWarmthWidthC": 5.902,
+    "vegetationMoistureHalf": 0.611,
+    "vegetationMoistureWidth": 0.568,
+    "sandTemperatureC": 10,
+    "sandWidthC": 10,
+    "snowSummerMeltC": -22.552788452943787,
+    "snowBlendC": 6.448,
+    "seaIceBlendC": 1.948,
+    "seaDepthShadingM": 4000
+   },
+   "step2": {
+    "a": 0.5663480053480765,
+    "b": 0.18221225353560283
+   },
+   "a": 0.5667009463016126,
+   "b": 0.18208560285219935,
+   "teacherA": {
+    "total": 0.5667009463016126,
+    "vegetation": 0.5099742782605327,
+    "arid": 0.5675677500452228,
+    "landIce": 0.6528717241071545,
+    "landIceRecall": 0.7810400404006547,
+    "landIcePrecision": 0.7991366988458021,
+    "landIceArea": 0.03252809024515792,
+    "seaIce": 0.5363900327935406,
+    "seaIceRecall": 0.6740699549438377,
+    "seaIcePrecision": 0.7242233619945345,
+    "seaIceArea": 0.0093236960941649,
+    "region": 0.32894654558456726
+   },
+   "teacherB": {
+    "total": 0.18208560285219935,
+    "classes": {
+     "tropicalHumid": 0.20480095691775885,
+     "tropicalSeasonal": 0.03944230271429622,
+     "arid": 0.3158414663223544,
+     "temperateHumid": 0.10534865017428001,
+     "temperateSeasonal": 0.013650120159873167,
+     "coldHumid": 0.4810632034349241,
+     "coldSeasonal": 0,
+     "polar": 0.296538123094108
+    },
+    "seasonalClassSum": 0.05309242287416938
+   },
+   "longitudinalShare": 0.24199577732668484,
+   "places": {
+    "インドシナ": {
+     "modelVegetatedPct": 60.4,
+     "teacherVegetatedPct": 74.4
+    },
+    "華中・華南": {
+     "modelVegetatedPct": 1.2,
+     "teacherVegetatedPct": 98.2
+    },
+    "インド": {
+     "modelVegetatedPct": 10.4,
+     "teacherVegetatedPct": 4.9
+    },
+    "米中西部": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 64.6
+    },
+    "パタゴニア風下": {
+     "modelVegetatedPct": 60.7,
+     "teacherVegetatedPct": 4.2
+    },
+    "サハラ": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 0
+    },
+    "ヒマラヤ・チベット": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 7.2
+    },
+    "サヘル": {
+     "modelVegetatedPct": 56.4,
+     "teacherVegetatedPct": 6
+    }
+   },
+   "valid": true
+  },
+  {
+   "params": {
+    "meanTemperatureC": 14,
+    "lapseRateCPerKm": 6.5,
+    "freezeTemperatureC": 0,
+    "seaIceTemperatureC": -1.8,
+    "insolationSensitivityC": 84.924,
+    "polarExtraC": 10.763,
+    "oceanModeration": 0.568,
+    "seasonalSensitivityC": 24.46552784414962,
+    "seaSeasonalDamping": 0.222,
+    "itczFollowFraction": 0.001,
+    "monsoonStrength": 0.029,
+    "itczLandPullDeg": 29.84658544510603,
+    "itczPullRangeDeg": 24.780541700078174,
+    "itczSmoothDeg": 16.626023451425134,
+    "itczElevationPullM": 26561.64866941981,
+    "snowBalanceWeight": 0.8308310402929784,
+    "snowMeltDegreeDay": 0.9348509188275783,
+    "snowBalanceRequiredM": -0.22356967213563617,
+    "snowBalanceWidth": 0.15,
+    "seaIceBalanceWeight": 0.6349755752831697,
+    "seaIceMeltDegreeDay": 0.4891474755480885,
+    "seaIceBalanceRequired": -0.3925297735491768,
+    "seaIceBalanceWidth": 0.15,
+    "growingSeasonWeight": 0.847,
+    "coastalMoisture": 0.892,
+    "moistureDecayKm": 3232.679,
+    "evaporationHalfC": -3,
+    "evaporationWidthC": 3.083,
+    "stillAirMoisture": 0.564,
+    "coriolisStrength": 4,
+    "circulationCellEdgeDeg": 28.557,
+    "cellRotationExponent": 0.33,
+    "advectionRangeKm": 6494.654,
+    "orographicLiftM": 1146.915,
+    "rainShadowM": 3443.136,
+    "orographicRiseM": 180.397,
+    "subtropicalDryStrength": 0.282,
+    "convergenceWetBonus": 1.577,
+    "vegetationWarmthC": -12,
+    "vegetationWarmthWidthC": 5.902,
+    "vegetationMoistureHalf": 0.611,
+    "vegetationMoistureWidth": 0.568,
+    "sandTemperatureC": 10,
+    "sandWidthC": 10,
+    "snowSummerMeltC": -21.63960198336281,
+    "snowBlendC": 6.448,
+    "seaIceBlendC": 1.948,
+    "seaDepthShadingM": 4000
+   },
+   "step2": {
+    "a": 0.5586973115296687,
+    "b": 0.18647111928197127
+   },
+   "a": 0.5591601641309645,
+   "b": 0.18605091092651327,
+   "teacherA": {
+    "total": 0.5591601641309645,
+    "vegetation": 0.49267403730442566,
+    "arid": 0.5583738118047632,
+    "landIce": 0.6493139219121536,
+    "landIceRecall": 0.7477810873935276,
+    "landIcePrecision": 0.8313952570820712,
+    "landIceArea": 0.029934587437338334,
+    "seaIce": 0.5362788855025155,
+    "seaIceRecall": 0.7621842425336718,
+    "seaIcePrecision": 0.6440465936772968,
+    "seaIceArea": 0.011854912361527206,
+    "region": 0.32583165119176805
+   },
+   "teacherB": {
+    "total": 0.18605091092651327,
+    "classes": {
+     "tropicalHumid": 0.20092091531481024,
+     "tropicalSeasonal": 0.051373630228578424,
+     "arid": 0.3081960464204007,
+     "temperateHumid": 0.10618419353667105,
+     "temperateSeasonal": 0.04430908035205081,
+     "coldHumid": 0.48306719365292194,
+     "coldSeasonal": 0,
+     "polar": 0.2943562279066728
+    },
+    "seasonalClassSum": 0.09568271058062924
+   },
+   "longitudinalShare": 0.2601187401186474,
+   "places": {
+    "インドシナ": {
+     "modelVegetatedPct": 64.2,
+     "teacherVegetatedPct": 74.4
+    },
+    "華中・華南": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 98.2
+    },
+    "インド": {
+     "modelVegetatedPct": 9.7,
+     "teacherVegetatedPct": 4.9
+    },
+    "米中西部": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 64.6
+    },
+    "パタゴニア風下": {
+     "modelVegetatedPct": 60.7,
+     "teacherVegetatedPct": 4.2
+    },
+    "サハラ": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 0
+    },
+    "ヒマラヤ・チベット": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 7.2
+    },
+    "サヘル": {
+     "modelVegetatedPct": 61,
+     "teacherVegetatedPct": 6
+    }
+   },
+   "valid": true
+  },
+  {
+   "params": {
+    "meanTemperatureC": 14,
+    "lapseRateCPerKm": 6.5,
+    "freezeTemperatureC": 0,
+    "seaIceTemperatureC": -1.8,
+    "insolationSensitivityC": 84.924,
+    "polarExtraC": 10.763,
+    "oceanModeration": 0.568,
+    "seasonalSensitivityC": 24.317161203129217,
+    "seaSeasonalDamping": 0.222,
+    "itczFollowFraction": 0.001,
+    "monsoonStrength": 0.029,
+    "itczLandPullDeg": 29.03659539995715,
+    "itczPullRangeDeg": 19.044686414767057,
+    "itczSmoothDeg": 15.290100694354622,
+    "itczElevationPullM": 14282.18328137882,
+    "snowBalanceWeight": 0.8615954234451055,
+    "snowMeltDegreeDay": 0.8169880283996461,
+    "snowBalanceRequiredM": -0.20954160953406245,
+    "snowBalanceWidth": 0.15,
+    "seaIceBalanceWeight": 0.7707084333151578,
+    "seaIceMeltDegreeDay": 0.45544935395009817,
+    "seaIceBalanceRequired": -0.2794261277420446,
+    "seaIceBalanceWidth": 0.15,
+    "growingSeasonWeight": 0.847,
+    "coastalMoisture": 0.892,
+    "moistureDecayKm": 3232.679,
+    "evaporationHalfC": -3,
+    "evaporationWidthC": 3.083,
+    "stillAirMoisture": 0.564,
+    "coriolisStrength": 4,
+    "circulationCellEdgeDeg": 28.557,
+    "cellRotationExponent": 0.33,
+    "advectionRangeKm": 6494.654,
+    "orographicLiftM": 1146.915,
+    "rainShadowM": 3443.136,
+    "orographicRiseM": 180.397,
+    "subtropicalDryStrength": 0.282,
+    "convergenceWetBonus": 1.577,
+    "vegetationWarmthC": -12,
+    "vegetationWarmthWidthC": 5.902,
+    "vegetationMoistureHalf": 0.611,
+    "vegetationMoistureWidth": 0.568,
+    "sandTemperatureC": 10,
+    "sandWidthC": 10,
+    "snowSummerMeltC": -23.61574611836113,
+    "snowBlendC": 6.448,
+    "seaIceBlendC": 1.948,
+    "seaDepthShadingM": 4000
+   },
+   "step2": {
+    "a": 0.5567388660198135,
+    "b": 0.18830909012686398
+   },
+   "a": 0.557050177027661,
+   "b": 0.18793920659914218,
+   "teacherA": {
+    "total": 0.557050177027661,
+    "vegetation": 0.4830681693403725,
+    "arid": 0.5559567422685575,
+    "landIce": 0.6491058536334567,
+    "landIceRecall": 0.7607297299129949,
+    "landIcePrecision": 0.8156251105305163,
+    "landIceArea": 0.03104174621604076,
+    "seaIce": 0.5400699428682572,
+    "seaIceRecall": 0.7190178155293422,
+    "seaIcePrecision": 0.6845442699974821,
+    "seaIceArea": 0.010521890582758582,
+    "region": 0.3243340874228786
+   },
+   "teacherB": {
+    "total": 0.18793920659914218,
+    "classes": {
+     "tropicalHumid": 0.20401570376484202,
+     "tropicalSeasonal": 0.06044053142305807,
+     "arid": 0.3074058072657427,
+     "temperateHumid": 0.10643144966553453,
+     "temperateSeasonal": 0.04835231342715488,
+     "coldHumid": 0.47960433471391795,
+     "coldSeasonal": 0,
+     "polar": 0.29726351253288746
+    },
+    "seasonalClassSum": 0.10879284485021296
+   },
+   "longitudinalShare": 0.265333041985927,
+   "places": {
+    "インドシナ": {
+     "modelVegetatedPct": 58.2,
+     "teacherVegetatedPct": 74.4
+    },
+    "華中・華南": {
+     "modelVegetatedPct": 1.2,
+     "teacherVegetatedPct": 98.2
+    },
+    "インド": {
+     "modelVegetatedPct": 7.3,
+     "teacherVegetatedPct": 4.9
+    },
+    "米中西部": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 64.6
+    },
+    "パタゴニア風下": {
+     "modelVegetatedPct": 60.7,
+     "teacherVegetatedPct": 4.2
+    },
+    "サハラ": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 0
+    },
+    "ヒマラヤ・チベット": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 7.2
+    },
+    "サヘル": {
+     "modelVegetatedPct": 63.3,
+     "teacherVegetatedPct": 6
+    }
+   },
+   "valid": true
+  },
+  {
+   "params": {
+    "meanTemperatureC": 14,
+    "lapseRateCPerKm": 6.5,
+    "freezeTemperatureC": 0,
+    "seaIceTemperatureC": -1.8,
+    "insolationSensitivityC": 84.924,
+    "polarExtraC": 10.763,
+    "oceanModeration": 0.568,
+    "seasonalSensitivityC": 24.317161203129217,
+    "seaSeasonalDamping": 0.222,
+    "itczFollowFraction": 0.001,
+    "monsoonStrength": 0.029,
+    "itczLandPullDeg": 30,
+    "itczPullRangeDeg": 19.044686414767057,
+    "itczSmoothDeg": 12.839077859278767,
+    "itczElevationPullM": 15633.756481064484,
+    "snowBalanceWeight": 0.8615954234451055,
+    "snowMeltDegreeDay": 0.881570790056139,
+    "snowBalanceRequiredM": -0.3759761133929715,
+    "snowBalanceWidth": 0.15,
+    "seaIceBalanceWeight": 0.6476048507541418,
+    "seaIceMeltDegreeDay": 0.45544935395009817,
+    "seaIceBalanceRequired": -0.30756200060714034,
+    "seaIceBalanceWidth": 0.15,
+    "growingSeasonWeight": 0.847,
+    "coastalMoisture": 0.892,
+    "moistureDecayKm": 3232.679,
+    "evaporationHalfC": -3,
+    "evaporationWidthC": 3.083,
+    "stillAirMoisture": 0.564,
+    "coriolisStrength": 4,
+    "circulationCellEdgeDeg": 28.557,
+    "cellRotationExponent": 0.33,
+    "advectionRangeKm": 6494.654,
+    "orographicLiftM": 1146.915,
+    "rainShadowM": 3443.136,
+    "orographicRiseM": 180.397,
+    "subtropicalDryStrength": 0.282,
+    "convergenceWetBonus": 1.577,
+    "vegetationWarmthC": -12,
+    "vegetationWarmthWidthC": 5.902,
+    "vegetationMoistureHalf": 0.611,
+    "vegetationMoistureWidth": 0.568,
+    "sandTemperatureC": 10,
+    "sandWidthC": 10,
+    "snowSummerMeltC": -24.078184862388298,
+    "snowBlendC": 6.448,
+    "seaIceBlendC": 1.948,
+    "seaDepthShadingM": 4000
+   },
+   "step2": {
+    "a": 0.5555567468020897,
+    "b": 0.19139426626538905
+   },
+   "a": 0.5559847826323308,
+   "b": 0.19096624502775109,
+   "teacherA": {
+    "total": 0.5559847826323308,
+    "vegetation": 0.4774538994900886,
+    "arid": 0.5547394245054537,
+    "landIce": 0.6516758636655238,
+    "landIceRecall": 0.7779914210193548,
+    "landIcePrecision": 0.8005482280137145,
+    "landIceArea": 0.032343994178017595,
+    "seaIce": 0.5400699428682572,
+    "seaIceRecall": 0.7190178155293422,
+    "seaIcePrecision": 0.6845442699974821,
+    "seaIceArea": 0.010521890582758582,
+    "region": 0.32548955505124466
+   },
+   "teacherB": {
+    "total": 0.19096624502775109,
+    "classes": {
+     "tropicalHumid": 0.2071002542655062,
+     "tropicalSeasonal": 0.08053790435100186,
+     "arid": 0.3075833214068307,
+     "temperateHumid": 0.10645228423258735,
+     "temperateSeasonal": 0.049192723668910136,
+     "coldHumid": 0.4795999597642847,
+     "coldSeasonal": 0,
+     "polar": 0.29726351253288746
+    },
+    "seasonalClassSum": 0.129730628019912
+   },
+   "longitudinalShare": 0.26582194300446493,
+   "places": {
+    "インドシナ": {
+     "modelVegetatedPct": 59.4,
+     "teacherVegetatedPct": 74.4
+    },
+    "華中・華南": {
+     "modelVegetatedPct": 1.2,
+     "teacherVegetatedPct": 98.2
+    },
+    "インド": {
+     "modelVegetatedPct": 7.3,
+     "teacherVegetatedPct": 4.9
+    },
+    "米中西部": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 64.6
+    },
+    "パタゴニア風下": {
+     "modelVegetatedPct": 60.7,
+     "teacherVegetatedPct": 4.2
+    },
+    "サハラ": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 0
+    },
+    "ヒマラヤ・チベット": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 7.2
+    },
+    "サヘル": {
+     "modelVegetatedPct": 63.8,
+     "teacherVegetatedPct": 6
+    }
+   },
+   "valid": true
+  },
+  {
+   "params": {
+    "meanTemperatureC": 14,
+    "lapseRateCPerKm": 6.5,
+    "freezeTemperatureC": 0,
+    "seaIceTemperatureC": -1.8,
+    "insolationSensitivityC": 84.924,
+    "polarExtraC": 10.763,
+    "oceanModeration": 0.568,
+    "seasonalSensitivityC": 24.317161203129217,
+    "seaSeasonalDamping": 0.222,
+    "itczFollowFraction": 0.001,
+    "monsoonStrength": 0.029,
+    "itczLandPullDeg": 30,
+    "itczPullRangeDeg": 19.014168804278597,
+    "itczSmoothDeg": 8.88822427764535,
+    "itczElevationPullM": 19409.305131435394,
+    "snowBalanceWeight": 0.6463135990872979,
+    "snowMeltDegreeDay": 1,
+    "snowBalanceRequiredM": -0.5,
+    "snowBalanceWidth": 0.15,
+    "seaIceBalanceWeight": 0.9240856085717677,
+    "seaIceMeltDegreeDay": 0.4891474755480885,
+    "seaIceBalanceRequired": -0.3045086438534782,
+    "seaIceBalanceWidth": 0.15,
+    "growingSeasonWeight": 0.847,
+    "coastalMoisture": 0.892,
+    "moistureDecayKm": 3232.679,
+    "evaporationHalfC": -3,
+    "evaporationWidthC": 3.083,
+    "stillAirMoisture": 0.564,
+    "coriolisStrength": 4,
+    "circulationCellEdgeDeg": 28.557,
+    "cellRotationExponent": 0.33,
+    "advectionRangeKm": 6494.654,
+    "orographicLiftM": 1146.915,
+    "rainShadowM": 3443.136,
+    "orographicRiseM": 180.397,
+    "subtropicalDryStrength": 0.282,
+    "convergenceWetBonus": 1.577,
+    "vegetationWarmthC": -12,
+    "vegetationWarmthWidthC": 5.902,
+    "vegetationMoistureHalf": 0.611,
+    "vegetationMoistureWidth": 0.568,
+    "sandTemperatureC": 10,
+    "sandWidthC": 10,
+    "snowSummerMeltC": -21.086819899035618,
+    "snowBlendC": 6.448,
+    "seaIceBlendC": 1.948,
+    "seaDepthShadingM": 4000
+   },
+   "step2": {
+    "a": 0.5550361252458593,
+    "b": 0.19368588488938376
+   },
+   "a": 0.5554433031790895,
+   "b": 0.1932843935473549,
+   "teacherA": {
+    "total": 0.5554433031790895,
+    "vegetation": 0.4741614850486563,
+    "arid": 0.5532400620752576,
+    "landIce": 0.6543017227241871,
+    "landIceRecall": 0.7768241741817896,
+    "landIcePrecision": 0.8057665168057756,
+    "landIceArea": 0.03208631613817177,
+    "seaIce": 0.5400699428682572,
+    "seaIceRecall": 0.7190178155293422,
+    "seaIcePrecision": 0.6845442699974821,
+    "seaIceArea": 0.010521890582758582,
+    "region": 0.3242574582902561
+   },
+   "teacherB": {
+    "total": 0.1932843935473549,
+    "classes": {
+     "tropicalHumid": 0.2067744847927817,
+     "tropicalSeasonal": 0.09961716213589464,
+     "arid": 0.30738816902577565,
+     "temperateHumid": 0.10639110788105502,
+     "temperateSeasonal": 0.04924075224615983,
+     "coldHumid": 0.4795999597642847,
+     "coldSeasonal": 0,
+     "polar": 0.29726351253288746
+    },
+    "seasonalClassSum": 0.14885791438205448
+   },
+   "longitudinalShare": 0.26701814200479984,
+   "places": {
+    "インドシナ": {
+     "modelVegetatedPct": 60.4,
+     "teacherVegetatedPct": 74.4
+    },
+    "華中・華南": {
+     "modelVegetatedPct": 1.2,
+     "teacherVegetatedPct": 98.2
+    },
+    "インド": {
+     "modelVegetatedPct": 7.2,
+     "teacherVegetatedPct": 4.9
+    },
+    "米中西部": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 64.6
+    },
+    "パタゴニア風下": {
+     "modelVegetatedPct": 60.7,
+     "teacherVegetatedPct": 4.2
+    },
+    "サハラ": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 0
+    },
+    "ヒマラヤ・チベット": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 7.2
+    },
+    "サヘル": {
+     "modelVegetatedPct": 63.5,
+     "teacherVegetatedPct": 6
+    }
+   },
+   "valid": true
+  },
+  {
+   "params": {
+    "meanTemperatureC": 14,
+    "lapseRateCPerKm": 6.5,
+    "freezeTemperatureC": 0,
+    "seaIceTemperatureC": -1.8,
+    "insolationSensitivityC": 84.924,
+    "polarExtraC": 10.763,
+    "oceanModeration": 0.568,
+    "seasonalSensitivityC": 24.360374815994874,
+    "seaSeasonalDamping": 0.222,
+    "itczFollowFraction": 0.001,
+    "monsoonStrength": 0.029,
+    "itczLandPullDeg": 30,
+    "itczPullRangeDeg": 16.414042330579832,
+    "itczSmoothDeg": 11.256844757683576,
+    "itczElevationPullM": 17870.53840626031,
+    "snowBalanceWeight": 0.6841907497495414,
+    "snowMeltDegreeDay": 1,
+    "snowBalanceRequiredM": -0.5,
+    "snowBalanceWidth": 0.15,
+    "seaIceBalanceWeight": 0.9869040894135831,
+    "seaIceMeltDegreeDay": 0.48197034159675234,
+    "seaIceBalanceRequired": -0.2949648313457147,
+    "seaIceBalanceWidth": 0.15,
+    "growingSeasonWeight": 0.847,
+    "coastalMoisture": 0.892,
+    "moistureDecayKm": 3232.679,
+    "evaporationHalfC": -3,
+    "evaporationWidthC": 3.083,
+    "stillAirMoisture": 0.564,
+    "coriolisStrength": 4,
+    "circulationCellEdgeDeg": 28.557,
+    "cellRotationExponent": 0.33,
+    "advectionRangeKm": 6494.654,
+    "orographicLiftM": 1146.915,
+    "rainShadowM": 3443.136,
+    "orographicRiseM": 180.397,
+    "subtropicalDryStrength": 0.282,
+    "convergenceWetBonus": 1.577,
+    "vegetationWarmthC": -12,
+    "vegetationWarmthWidthC": 5.902,
+    "vegetationMoistureHalf": 0.611,
+    "vegetationMoistureWidth": 0.568,
+    "sandTemperatureC": 10,
+    "sandWidthC": 10,
+    "snowSummerMeltC": -14.144493473460898,
+    "snowBlendC": 6.448,
+    "seaIceBlendC": 1.948,
+    "seaDepthShadingM": 4000
+   },
+   "step2": {
+    "a": 0.5546634337440752,
+    "b": 0.1941238607305802
+   },
+   "a": 0.5550603409279977,
+   "b": 0.19376252189429632,
+   "teacherA": {
+    "total": 0.5550603409279977,
+    "vegetation": 0.47272632381204205,
+    "arid": 0.5532380720460266,
+    "landIce": 0.6542070249856653,
+    "landIceRecall": 0.7769211273941365,
+    "landIcePrecision": 0.8055186573870303,
+    "landIceArea": 0.03210019498448043,
+    "seaIce": 0.5400699428682572,
+    "seaIceRecall": 0.7190178155293422,
+    "seaIcePrecision": 0.6845442699974821,
+    "seaIceArea": 0.010521890582758582,
+    "region": 0.32410594093185574
+   },
+   "teacherB": {
+    "total": 0.19376252189429632,
+    "classes": {
+     "tropicalHumid": 0.20789095982431732,
+     "tropicalSeasonal": 0.10187780444659388,
+     "arid": 0.3071676449769268,
+     "temperateHumid": 0.10629069770081531,
+     "temperateSeasonal": 0.04941279284000715,
+     "coldHumid": 0.48085380787692217,
+     "coldSeasonal": 0,
+     "polar": 0.296606467488788
+    },
+    "seasonalClassSum": 0.15129059728660102
+   },
+   "longitudinalShare": 0.26847100508813465,
+   "places": {
+    "インドシナ": {
+     "modelVegetatedPct": 55.7,
+     "teacherVegetatedPct": 74.4
+    },
+    "華中・華南": {
+     "modelVegetatedPct": 1.2,
+     "teacherVegetatedPct": 98.2
+    },
+    "インド": {
+     "modelVegetatedPct": 5.9,
+     "teacherVegetatedPct": 4.9
+    },
+    "米中西部": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 64.6
+    },
+    "パタゴニア風下": {
+     "modelVegetatedPct": 60.7,
+     "teacherVegetatedPct": 4.2
+    },
+    "サハラ": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 0
+    },
+    "ヒマラヤ・チベット": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 7.2
+    },
+    "サヘル": {
+     "modelVegetatedPct": 63.7,
+     "teacherVegetatedPct": 6
+    }
+   },
+   "valid": true
+  },
+  {
+   "params": {
+    "meanTemperatureC": 14,
+    "lapseRateCPerKm": 6.5,
+    "freezeTemperatureC": 0,
+    "seaIceTemperatureC": -1.8,
+    "insolationSensitivityC": 84.924,
+    "polarExtraC": 10.763,
+    "oceanModeration": 0.568,
+    "seasonalSensitivityC": 24.317161203129217,
+    "seaSeasonalDamping": 0.222,
+    "itczFollowFraction": 0.001,
+    "monsoonStrength": 0.029,
+    "itczLandPullDeg": 30,
+    "itczPullRangeDeg": 13.934018697589636,
+    "itczSmoothDeg": 12.425943868048488,
+    "itczElevationPullM": 27582.41438558325,
+    "snowBalanceWeight": 0.8912666373699905,
+    "snowMeltDegreeDay": 1,
+    "snowBalanceRequiredM": -0.49478491451591256,
+    "snowBalanceWidth": 0.15,
+    "seaIceBalanceWeight": 0.5445287857577203,
+    "seaIceMeltDegreeDay": 0.5621107043232768,
+    "seaIceBalanceRequired": -0.5,
+    "seaIceBalanceWidth": 0.15,
+    "growingSeasonWeight": 0.847,
+    "coastalMoisture": 0.892,
+    "moistureDecayKm": 3232.679,
+    "evaporationHalfC": -3,
+    "evaporationWidthC": 3.083,
+    "stillAirMoisture": 0.564,
+    "coriolisStrength": 4,
+    "circulationCellEdgeDeg": 28.557,
+    "cellRotationExponent": 0.33,
+    "advectionRangeKm": 6494.654,
+    "orographicLiftM": 1146.915,
+    "rainShadowM": 3443.136,
+    "orographicRiseM": 180.397,
+    "subtropicalDryStrength": 0.282,
+    "convergenceWetBonus": 1.577,
+    "vegetationWarmthC": -12,
+    "vegetationWarmthWidthC": 5.902,
+    "vegetationMoistureHalf": 0.611,
+    "vegetationMoistureWidth": 0.568,
+    "sandTemperatureC": 10,
+    "sandWidthC": 10,
+    "snowSummerMeltC": -25.263444637181237,
+    "snowBlendC": 6.448,
+    "seaIceBlendC": 1.948,
+    "seaDepthShadingM": 4000
+   },
+   "step2": {
+    "a": 0.5538830269531527,
+    "b": 0.19414280548449897
+   },
+   "a": 0.554280177222841,
+   "b": 0.19379602417966252,
+   "teacherA": {
+    "total": 0.554280177222841,
+    "vegetation": 0.4701728101356872,
+    "arid": 0.5529576822538302,
+    "landIce": 0.6543172908473014,
+    "landIceRecall": 0.7816324221891082,
+    "landIcePrecision": 0.8006810429862061,
+    "landIceArea": 0.03248997387574664,
+    "seaIce": 0.5396729256545452,
+    "seaIceRecall": 0.6969122646359943,
+    "seaIcePrecision": 0.7051821466910062,
+    "seaIceArea": 0.00989993785557273,
+    "region": 0.3247656079049194
+   },
+   "teacherB": {
+    "total": 0.19379602417966252,
+    "classes": {
+     "tropicalHumid": 0.20586028493179978,
+     "tropicalSeasonal": 0.10512334889821227,
+     "arid": 0.30696019579467004,
+     "temperateHumid": 0.10636949709008851,
+     "temperateSeasonal": 0.04919500095786473,
+     "coldHumid": 0.4795999597642847,
+     "coldSeasonal": 0,
+     "polar": 0.29725990600038005
+    },
+    "seasonalClassSum": 0.154318349856077
+   },
+   "longitudinalShare": 0.27025593440592693,
+   "places": {
+    "インドシナ": {
+     "modelVegetatedPct": 47.9,
+     "teacherVegetatedPct": 74.4
+    },
+    "華中・華南": {
+     "modelVegetatedPct": 1.2,
+     "teacherVegetatedPct": 98.2
+    },
+    "インド": {
+     "modelVegetatedPct": 5.1,
+     "teacherVegetatedPct": 4.9
+    },
+    "米中西部": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 64.6
+    },
+    "パタゴニア風下": {
+     "modelVegetatedPct": 60.7,
+     "teacherVegetatedPct": 4.2
+    },
+    "サハラ": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 0
+    },
+    "ヒマラヤ・チベット": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 7.2
+    },
+    "サヘル": {
+     "modelVegetatedPct": 63.5,
+     "teacherVegetatedPct": 6
+    }
+   },
+   "valid": true
+  },
+  {
+   "params": {
+    "meanTemperatureC": 14,
+    "lapseRateCPerKm": 6.5,
+    "freezeTemperatureC": 0,
+    "seaIceTemperatureC": -1.8,
+    "insolationSensitivityC": 84.924,
+    "polarExtraC": 10.763,
+    "oceanModeration": 0.568,
+    "seasonalSensitivityC": 24.317161203129217,
+    "seaSeasonalDamping": 0.222,
+    "itczFollowFraction": 0.001,
+    "monsoonStrength": 0.029,
+    "itczLandPullDeg": 30,
+    "itczPullRangeDeg": 13.611330828163773,
+    "itczSmoothDeg": 12.839077859278767,
+    "itczElevationPullM": 15633.756481064484,
+    "snowBalanceWeight": 0.900721348002553,
+    "snowMeltDegreeDay": 0.9726890457794068,
+    "snowBalanceRequiredM": -0.3344425710150972,
+    "snowBalanceWidth": 0.15,
+    "seaIceBalanceWeight": 0.6934141205251216,
+    "seaIceMeltDegreeDay": 0.5318603003397584,
+    "seaIceBalanceRequired": -0.4059265677817166,
+    "seaIceBalanceWidth": 0.15,
+    "growingSeasonWeight": 0.847,
+    "coastalMoisture": 0.892,
+    "moistureDecayKm": 3232.679,
+    "evaporationHalfC": -3,
+    "evaporationWidthC": 3.083,
+    "stillAirMoisture": 0.564,
+    "coriolisStrength": 4,
+    "circulationCellEdgeDeg": 28.557,
+    "cellRotationExponent": 0.33,
+    "advectionRangeKm": 6494.654,
+    "orographicLiftM": 1146.915,
+    "rainShadowM": 3443.136,
+    "orographicRiseM": 180.397,
+    "subtropicalDryStrength": 0.282,
+    "convergenceWetBonus": 1.577,
+    "vegetationWarmthC": -12,
+    "vegetationWarmthWidthC": 5.902,
+    "vegetationMoistureHalf": 0.611,
+    "vegetationMoistureWidth": 0.568,
+    "sandTemperatureC": 10,
+    "sandWidthC": 10,
+    "snowSummerMeltC": -21.433983608381823,
+    "snowBlendC": 6.448,
+    "seaIceBlendC": 1.948,
+    "seaDepthShadingM": 4000
+   },
+   "step2": {
+    "a": 0.5533322616355771,
+    "b": 0.19419752921300887
+   },
+   "a": 0.5537495425789595,
+   "b": 0.19385814295446352,
+   "teacherA": {
+    "total": 0.5537495425789595,
+    "vegetation": 0.4699433612201639,
+    "arid": 0.5523303716685996,
+    "landIce": 0.6526544945588174,
+    "landIceRecall": 0.7645164063390403,
+    "landIcePrecision": 0.8168680897476337,
+    "landIceArea": 0.031148792908872774,
+    "seaIce": 0.5400699428682572,
+    "seaIceRecall": 0.7190178155293422,
+    "seaIcePrecision": 0.6845442699974821,
+    "seaIceArea": 0.010521890582758582,
+    "region": 0.32215673135415923
+   },
+   "teacherB": {
+    "total": 0.19385814295446352,
+    "classes": {
+     "tropicalHumid": 0.20452862956932824,
+     "tropicalSeasonal": 0.10726095589212117,
+     "arid": 0.30661825533873216,
+     "temperateHumid": 0.10635668482470208,
+     "temperateSeasonal": 0.04924075224615983,
+     "coldHumid": 0.4795999597642847,
+     "coldSeasonal": 0,
+     "polar": 0.29725990600038005
+    },
+    "seasonalClassSum": 0.15650170813828101
+   },
+   "longitudinalShare": 0.27033601409223895,
+   "places": {
+    "インドシナ": {
+     "modelVegetatedPct": 47.3,
+     "teacherVegetatedPct": 74.4
+    },
+    "華中・華南": {
+     "modelVegetatedPct": 1.2,
+     "teacherVegetatedPct": 98.2
+    },
+    "インド": {
+     "modelVegetatedPct": 5.1,
+     "teacherVegetatedPct": 4.9
+    },
+    "米中西部": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 64.6
+    },
+    "パタゴニア風下": {
+     "modelVegetatedPct": 60.7,
+     "teacherVegetatedPct": 4.2
+    },
+    "サハラ": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 0
+    },
+    "ヒマラヤ・チベット": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 7.2
+    },
+    "サヘル": {
+     "modelVegetatedPct": 63.6,
+     "teacherVegetatedPct": 6
+    }
+   },
+   "valid": true
+  }
+ ],
+ "finalFrontStep1": [
+  {
+   "params": {
+    "meanTemperatureC": 14,
+    "lapseRateCPerKm": 6.5,
+    "freezeTemperatureC": 0,
+    "seaIceTemperatureC": -1.8,
+    "insolationSensitivityC": 84.924,
+    "polarExtraC": 10.763,
+    "oceanModeration": 0.568,
+    "seasonalSensitivityC": 16.25798021396622,
+    "seaSeasonalDamping": 0.222,
+    "itczFollowFraction": 0.001,
+    "monsoonStrength": 0.029,
+    "itczLandPullDeg": 26.19503921479918,
+    "itczPullRangeDeg": 46.121896451339126,
+    "itczSmoothDeg": 3.5894559269770983,
+    "itczElevationPullM": 35755.03727560863,
+    "snowBalanceWeight": 0.2,
+    "snowMeltDegreeDay": 0.7727715174667537,
+    "snowBalanceRequiredM": 0.26520592605229465,
+    "snowBalanceWidth": 0.15,
+    "seaIceBalanceWeight": 0.8314719806239009,
+    "seaIceMeltDegreeDay": 0.8994018396828324,
+    "seaIceBalanceRequired": -0.31561550744809214,
+    "seaIceBalanceWidth": 0.15,
+    "growingSeasonWeight": 0.847,
+    "coastalMoisture": 0.892,
+    "moistureDecayKm": 3232.679,
+    "evaporationHalfC": -3,
+    "evaporationWidthC": 3.083,
+    "stillAirMoisture": 0.564,
+    "coriolisStrength": 4,
+    "circulationCellEdgeDeg": 28.557,
+    "cellRotationExponent": 0.33,
+    "advectionRangeKm": 6494.654,
+    "orographicLiftM": 1146.915,
+    "rainShadowM": 3443.136,
+    "orographicRiseM": 180.397,
+    "subtropicalDryStrength": 0.282,
+    "convergenceWetBonus": 1.577,
+    "vegetationWarmthC": -12,
+    "vegetationWarmthWidthC": 5.902,
+    "vegetationMoistureHalf": 0.611,
+    "vegetationMoistureWidth": 0.568,
+    "sandTemperatureC": 10,
+    "sandWidthC": 10,
+    "snowSummerMeltC": -2.366202841512859,
+    "snowBlendC": 6.448,
+    "seaIceBlendC": 1.948,
+    "seaDepthShadingM": 4000
+   },
+   "step2": {
+    "a": 0.5853041125595717,
+    "b": 0.14129153485514445
+   },
+   "a": 0.5851998203747024,
+   "b": 0.14119058968822137,
+   "teacherA": {
+    "total": 0.5851998203747024,
+    "vegetation": 0.519174156454005,
+    "arid": 0.5783926788597054,
+    "landIce": 0.7031625033168422,
+    "landIceRecall": 0.7995777259543961,
+    "landIcePrecision": 0.8536165311168743,
+    "landIceArea": 0.031174838551550305,
+    "seaIce": 0.5400699428682572,
+    "seaIceRecall": 0.7190178155293422,
+    "seaIcePrecision": 0.6845442699974821,
+    "seaIceArea": 0.010521890582758582,
+    "region": 0.3361913797897864
+   },
+   "teacherB": {
+    "total": 0.14119058968822137,
+    "classes": {
+     "tropicalHumid": 0.18682886916391844,
+     "tropicalSeasonal": 0.020833267307734684,
+     "arid": 0.3264201128538546,
+     "temperateHumid": 0.1168568583695693,
+     "temperateSeasonal": 0.0015526985552335056,
+     "coldHumid": 0.2159032838254167,
+     "coldSeasonal": 0,
+     "polar": 0.2611296274300437
+    },
+    "seasonalClassSum": 0.02238596586296819
+   },
+   "longitudinalShare": 0.24426025469078505,
+   "places": {
+    "インドシナ": {
+     "modelVegetatedPct": 66.3,
+     "teacherVegetatedPct": 74.4
+    },
+    "華中・華南": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 98.2
+    },
+    "インド": {
+     "modelVegetatedPct": 10.4,
+     "teacherVegetatedPct": 4.9
+    },
+    "米中西部": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 64.6
+    },
+    "パタゴニア風下": {
+     "modelVegetatedPct": 60.7,
+     "teacherVegetatedPct": 4.2
+    },
+    "サハラ": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 0
+    },
+    "ヒマラヤ・チベット": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 7.2
+    },
+    "サヘル": {
+     "modelVegetatedPct": 43.7,
+     "teacherVegetatedPct": 6
+    }
+   },
+   "valid": true
+  },
+  {
+   "params": {
+    "meanTemperatureC": 14,
+    "lapseRateCPerKm": 6.5,
+    "freezeTemperatureC": 0,
+    "seaIceTemperatureC": -1.8,
+    "insolationSensitivityC": 84.924,
+    "polarExtraC": 10.763,
+    "oceanModeration": 0.568,
+    "seasonalSensitivityC": 17.840018221875653,
+    "seaSeasonalDamping": 0.222,
+    "itczFollowFraction": 0.001,
+    "monsoonStrength": 0.029,
+    "itczLandPullDeg": 15,
+    "itczPullRangeDeg": 20.721063572214916,
+    "itczSmoothDeg": 6.079295366536826,
+    "itczElevationPullM": 3586.5043856669217,
+    "snowBalanceWeight": 0.2,
+    "snowMeltDegreeDay": 0.7197505168616771,
+    "snowBalanceRequiredM": 1,
+    "snowBalanceWidth": 0.15,
+    "seaIceBalanceWeight": 0.6625191335007549,
+    "seaIceMeltDegreeDay": 0.60284437360242,
+    "seaIceBalanceRequired": -0.18972767437808216,
+    "seaIceBalanceWidth": 0.15,
+    "growingSeasonWeight": 0.847,
+    "coastalMoisture": 0.892,
+    "moistureDecayKm": 3232.679,
+    "evaporationHalfC": -3,
+    "evaporationWidthC": 3.083,
+    "stillAirMoisture": 0.564,
+    "coriolisStrength": 4,
+    "circulationCellEdgeDeg": 28.557,
+    "cellRotationExponent": 0.33,
+    "advectionRangeKm": 6494.654,
+    "orographicLiftM": 1146.915,
+    "rainShadowM": 3443.136,
+    "orographicRiseM": 180.397,
+    "subtropicalDryStrength": 0.282,
+    "convergenceWetBonus": 1.577,
+    "vegetationWarmthC": -12,
+    "vegetationWarmthWidthC": 5.902,
+    "vegetationMoistureHalf": 0.611,
+    "vegetationMoistureWidth": 0.568,
+    "sandTemperatureC": 10,
+    "sandWidthC": 10,
+    "snowSummerMeltC": 0,
+    "snowBlendC": 6.448,
+    "seaIceBlendC": 1.948,
+    "seaDepthShadingM": 4000
+   },
+   "step2": {
+    "a": 0.5841433839801693,
+    "b": 0.14928366764404044
+   },
+   "a": 0.5842131557532132,
+   "b": 0.1487969833310779,
+   "teacherA": {
+    "total": 0.5842131557532132,
+    "vegetation": 0.5246954310959758,
+    "arid": 0.5793487493795542,
+    "landIce": 0.6927384996690656,
+    "landIceRecall": 0.7799017715512417,
+    "landIcePrecision": 0.8610791681349129,
+    "landIceArea": 0.03014415865936839,
+    "seaIce": 0.5400699428682572,
+    "seaIceRecall": 0.7190178155293422,
+    "seaIcePrecision": 0.6845442699974821,
+    "seaIceArea": 0.010521890582758582,
+    "region": 0.3315440970707123
+   },
+   "teacherB": {
+    "total": 0.1487969833310779,
+    "classes": {
+     "tropicalHumid": 0.19023129058374783,
+     "tropicalSeasonal": 0.021640956245928215,
+     "arid": 0.32577230186793654,
+     "temperateHumid": 0.11575194129471952,
+     "temperateSeasonal": 0.0012202663760908967,
+     "coldHumid": 0.26810036084649624,
+     "coldSeasonal": 0,
+     "polar": 0.26765874943370405
+    },
+    "seasonalClassSum": 0.02286122262201911
+   },
+   "longitudinalShare": 0.24091667175264603,
+   "places": {
+    "インドシナ": {
+     "modelVegetatedPct": 44.4,
+     "teacherVegetatedPct": 74.4
+    },
+    "華中・華南": {
+     "modelVegetatedPct": 1.2,
+     "teacherVegetatedPct": 98.2
+    },
+    "インド": {
+     "modelVegetatedPct": 5.3,
+     "teacherVegetatedPct": 4.9
+    },
+    "米中西部": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 64.6
+    },
+    "パタゴニア風下": {
+     "modelVegetatedPct": 60.7,
+     "teacherVegetatedPct": 4.2
+    },
+    "サハラ": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 0
+    },
+    "ヒマラヤ・チベット": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 7.2
+    },
+    "サヘル": {
+     "modelVegetatedPct": 41.8,
+     "teacherVegetatedPct": 6
+    }
+   },
+   "valid": true
+  },
+  {
+   "params": {
+    "meanTemperatureC": 14,
+    "lapseRateCPerKm": 6.5,
+    "freezeTemperatureC": 0,
+    "seaIceTemperatureC": -1.8,
+    "insolationSensitivityC": 84.924,
+    "polarExtraC": 10.763,
+    "oceanModeration": 0.568,
+    "seasonalSensitivityC": 18.300763764884323,
+    "seaSeasonalDamping": 0.222,
+    "itczFollowFraction": 0.001,
+    "monsoonStrength": 0.029,
+    "itczLandPullDeg": 27.668298160191625,
+    "itczPullRangeDeg": 52.452341192634776,
+    "itczSmoothDeg": 7.484853761736304,
+    "itczElevationPullM": 37075.90249683708,
+    "snowBalanceWeight": 0.21948798410594464,
+    "snowMeltDegreeDay": 0.7422508903779089,
+    "snowBalanceRequiredM": 0.18020000224933025,
+    "snowBalanceWidth": 0.15,
+    "seaIceBalanceWeight": 0.93208862118423,
+    "seaIceMeltDegreeDay": 0.813668733695522,
+    "seaIceBalanceRequired": -0.3606549102580175,
+    "seaIceBalanceWidth": 0.15,
+    "growingSeasonWeight": 0.847,
+    "coastalMoisture": 0.892,
+    "moistureDecayKm": 3232.679,
+    "evaporationHalfC": -3,
+    "evaporationWidthC": 3.083,
+    "stillAirMoisture": 0.564,
+    "coriolisStrength": 4,
+    "circulationCellEdgeDeg": 28.557,
+    "cellRotationExponent": 0.33,
+    "advectionRangeKm": 6494.654,
+    "orographicLiftM": 1146.915,
+    "rainShadowM": 3443.136,
+    "orographicRiseM": 180.397,
+    "subtropicalDryStrength": 0.282,
+    "convergenceWetBonus": 1.577,
+    "vegetationWarmthC": -12,
+    "vegetationWarmthWidthC": 5.902,
+    "vegetationMoistureHalf": 0.611,
+    "vegetationMoistureWidth": 0.568,
+    "sandTemperatureC": 10,
+    "sandWidthC": 10,
+    "snowSummerMeltC": -1.4026311985217033,
+    "snowBlendC": 6.448,
+    "seaIceBlendC": 1.948,
+    "seaDepthShadingM": 4000
+   },
+   "step2": {
+    "a": 0.5805404581443162,
+    "b": 0.15158741433172038
+   },
+   "a": 0.5806218289445664,
+   "b": 0.15126208844218234,
+   "teacherA": {
+    "total": 0.5806218289445664,
+    "vegetation": 0.5148782727839166,
+    "arid": 0.5742636182500463,
+    "landIce": 0.6936724990897573,
+    "landIceRecall": 0.7847330655184218,
+    "landIcePrecision": 0.8566896835459107,
+    "landIceArea": 0.030486302744169528,
+    "seaIce": 0.5396729256545452,
+    "seaIceRecall": 0.6969122646359943,
+    "seaIcePrecision": 0.7051821466910062,
+    "seaIceArea": 0.00989993785557273,
+    "region": 0.3372937100381459
+   },
+   "teacherB": {
+    "total": 0.15126208844218234,
+    "classes": {
+     "tropicalHumid": 0.1912287272493523,
+     "tropicalSeasonal": 0.024269606957759236,
+     "arid": 0.32424842750974003,
+     "temperateHumid": 0.11497774171330698,
+     "temperateSeasonal": 0.0029045543811557968,
+     "coldHumid": 0.28272649311065545,
+     "coldSeasonal": 0,
+     "polar": 0.269741156615489
+    },
+    "seasonalClassSum": 0.027174161338915034
+   },
+   "longitudinalShare": 0.24301996112940308,
+   "places": {
+    "インドシナ": {
+     "modelVegetatedPct": 69.8,
+     "teacherVegetatedPct": 74.4
+    },
+    "華中・華南": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 98.2
+    },
+    "インド": {
+     "modelVegetatedPct": 11.2,
+     "teacherVegetatedPct": 4.9
+    },
+    "米中西部": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 64.6
+    },
+    "パタゴニア風下": {
+     "modelVegetatedPct": 60.7,
+     "teacherVegetatedPct": 4.2
+    },
+    "サハラ": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 0
+    },
+    "ヒマラヤ・チベット": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 7.2
+    },
+    "サヘル": {
+     "modelVegetatedPct": 45.4,
+     "teacherVegetatedPct": 6
+    }
+   },
+   "valid": true
+  },
+  {
+   "params": {
+    "meanTemperatureC": 14,
+    "lapseRateCPerKm": 6.5,
+    "freezeTemperatureC": 0,
+    "seaIceTemperatureC": -1.8,
+    "insolationSensitivityC": 84.924,
+    "polarExtraC": 10.763,
+    "oceanModeration": 0.568,
+    "seasonalSensitivityC": 18.300763764884323,
+    "seaSeasonalDamping": 0.222,
+    "itczFollowFraction": 0.001,
+    "monsoonStrength": 0.029,
+    "itczLandPullDeg": 28.56649408908561,
+    "itczPullRangeDeg": 52.452341192634776,
+    "itczSmoothDeg": 5.680924015026539,
+    "itczElevationPullM": 37075.90249683708,
+    "snowBalanceWeight": 0.2,
+    "snowMeltDegreeDay": 0.7422508903779089,
+    "snowBalanceRequiredM": 0.26520592605229465,
+    "snowBalanceWidth": 0.15,
+    "seaIceBalanceWeight": 0.8527033248916269,
+    "seaIceMeltDegreeDay": 0.9131117998156697,
+    "seaIceBalanceRequired": -0.492313117464073,
+    "seaIceBalanceWidth": 0.15,
+    "growingSeasonWeight": 0.847,
+    "coastalMoisture": 0.892,
+    "moistureDecayKm": 3232.679,
+    "evaporationHalfC": -3,
+    "evaporationWidthC": 3.083,
+    "stillAirMoisture": 0.564,
+    "coriolisStrength": 4,
+    "circulationCellEdgeDeg": 28.557,
+    "cellRotationExponent": 0.33,
+    "advectionRangeKm": 6494.654,
+    "orographicLiftM": 1146.915,
+    "rainShadowM": 3443.136,
+    "orographicRiseM": 180.397,
+    "subtropicalDryStrength": 0.282,
+    "convergenceWetBonus": 1.577,
+    "vegetationWarmthC": -12,
+    "vegetationWarmthWidthC": 5.902,
+    "vegetationMoistureHalf": 0.611,
+    "vegetationMoistureWidth": 0.568,
+    "sandTemperatureC": 10,
+    "sandWidthC": 10,
+    "snowSummerMeltC": -1.4026311985217033,
+    "snowBlendC": 6.448,
+    "seaIceBlendC": 1.948,
+    "seaDepthShadingM": 4000
+   },
+   "step2": {
+    "a": 0.5787753864076275,
+    "b": 0.15251823912879697
+   },
+   "a": 0.5786974758053546,
+   "b": 0.15220523096802901,
+   "teacherA": {
+    "total": 0.5786974758053546,
+    "vegetation": 0.509685515976774,
+    "arid": 0.5723974344760806,
+    "landIce": 0.6926370099003065,
+    "landIceRecall": 0.7727013581595092,
+    "landIcePrecision": 0.8698703318180566,
+    "landIceArea": 0.029564020819367404,
+    "seaIce": 0.5400699428682572,
+    "seaIceRecall": 0.7190178155293422,
+    "seaIcePrecision": 0.6845442699974821,
+    "seaIceArea": 0.010521890582758582,
+    "region": 0.33525480350310144
+   },
+   "teacherB": {
+    "total": 0.15220523096802901,
+    "classes": {
+     "tropicalHumid": 0.19002616790893878,
+     "tropicalSeasonal": 0.033196650344648755,
+     "arid": 0.3227782831036094,
+     "temperateHumid": 0.11497489627984467,
+     "temperateSeasonal": 0.004203164942573656,
+     "coldHumid": 0.28272649311065545,
+     "coldSeasonal": 0,
+     "polar": 0.26973619205396143
+    },
+    "seasonalClassSum": 0.03739981528722241
+   },
+   "longitudinalShare": 0.24690037263856113,
+   "places": {
+    "インドシナ": {
+     "modelVegetatedPct": 71.3,
+     "teacherVegetatedPct": 74.4
+    },
+    "華中・華南": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 98.2
+    },
+    "インド": {
+     "modelVegetatedPct": 11.6,
+     "teacherVegetatedPct": 4.9
+    },
+    "米中西部": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 64.6
+    },
+    "パタゴニア風下": {
+     "modelVegetatedPct": 60.7,
+     "teacherVegetatedPct": 4.2
+    },
+    "サハラ": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 0
+    },
+    "ヒマラヤ・チベット": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 7.2
+    },
+    "サヘル": {
+     "modelVegetatedPct": 46.7,
+     "teacherVegetatedPct": 6
+    }
+   },
+   "valid": true
+  },
+  {
+   "params": {
+    "meanTemperatureC": 14,
+    "lapseRateCPerKm": 6.5,
+    "freezeTemperatureC": 0,
+    "seaIceTemperatureC": -1.8,
+    "insolationSensitivityC": 84.924,
+    "polarExtraC": 10.763,
+    "oceanModeration": 0.568,
+    "seasonalSensitivityC": 19.551100300624967,
+    "seaSeasonalDamping": 0.222,
+    "itczFollowFraction": 0.001,
+    "monsoonStrength": 0.029,
+    "itczLandPullDeg": 16.222802464384586,
+    "itczPullRangeDeg": 20.721063572214916,
+    "itczSmoothDeg": 10.031647539138794,
+    "itczElevationPullM": 4190.164288505912,
+    "snowBalanceWeight": 0.2,
+    "snowMeltDegreeDay": 0.6472464065998792,
+    "snowBalanceRequiredM": 0.99684016876854,
+    "snowBalanceWidth": 0.15,
+    "seaIceBalanceWeight": 0.6776157993078231,
+    "seaIceMeltDegreeDay": 0.5399755138903856,
+    "seaIceBalanceRequired": -0.18972767437808216,
+    "seaIceBalanceWidth": 0.15,
+    "growingSeasonWeight": 0.847,
+    "coastalMoisture": 0.892,
+    "moistureDecayKm": 3232.679,
+    "evaporationHalfC": -3,
+    "evaporationWidthC": 3.083,
+    "stillAirMoisture": 0.564,
+    "coriolisStrength": 4,
+    "circulationCellEdgeDeg": 28.557,
+    "cellRotationExponent": 0.33,
+    "advectionRangeKm": 6494.654,
+    "orographicLiftM": 1146.915,
+    "rainShadowM": 3443.136,
+    "orographicRiseM": 180.397,
+    "subtropicalDryStrength": 0.282,
+    "convergenceWetBonus": 1.577,
+    "vegetationWarmthC": -12,
+    "vegetationWarmthWidthC": 5.902,
+    "vegetationMoistureHalf": 0.611,
+    "vegetationMoistureWidth": 0.568,
+    "sandTemperatureC": 10,
+    "sandWidthC": 10,
+    "snowSummerMeltC": 0,
+    "snowBlendC": 6.448,
+    "seaIceBlendC": 1.948,
+    "seaDepthShadingM": 4000
+   },
+   "step2": {
+    "a": 0.5782084455010399,
+    "b": 0.1569789302311378
+   },
+   "a": 0.5780218604837637,
+   "b": 0.1563760405736822,
+   "teacherA": {
+    "total": 0.5780218604837637,
+    "vegetation": 0.52381231630395,
+    "arid": 0.5768802122936776,
+    "landIce": 0.67132497046917,
+    "landIceRecall": 0.732525015618757,
+    "landIcePrecision": 0.8893233113059457,
+    "landIceArea": 0.027413792847644204,
+    "seaIce": 0.5400699428682572,
+    "seaIceRecall": 0.7190178155293422,
+    "seaIcePrecision": 0.6845442699974821,
+    "seaIceArea": 0.010521890582758582,
+    "region": 0.32619534500992353
+   },
+   "teacherB": {
+    "total": 0.1563760405736822,
+    "classes": {
+     "tropicalHumid": 0.19370161789262827,
+     "tropicalSeasonal": 0.022144296985687168,
+     "arid": 0.3239188013546323,
+     "temperateHumid": 0.11292992804962303,
+     "temperateSeasonal": 0.002252272605610356,
+     "coldHumid": 0.32066094317642524,
+     "coldSeasonal": 0,
+     "polar": 0.2754004645248513
+    },
+    "seasonalClassSum": 0.024396569591297525
+   },
+   "longitudinalShare": 0.24015593816940783,
+   "places": {
+    "インドシナ": {
+     "modelVegetatedPct": 44.8,
+     "teacherVegetatedPct": 74.4
+    },
+    "華中・華南": {
+     "modelVegetatedPct": 1.2,
+     "teacherVegetatedPct": 98.2
+    },
+    "インド": {
+     "modelVegetatedPct": 5.4,
+     "teacherVegetatedPct": 4.9
+    },
+    "米中西部": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 64.6
+    },
+    "パタゴニア風下": {
+     "modelVegetatedPct": 60.7,
+     "teacherVegetatedPct": 4.2
+    },
+    "サハラ": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 0
+    },
+    "ヒマラヤ・チベット": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 7.2
+    },
+    "サヘル": {
+     "modelVegetatedPct": 43.9,
+     "teacherVegetatedPct": 6
+    }
+   },
+   "valid": true
+  },
+  {
+   "params": {
+    "meanTemperatureC": 14,
+    "lapseRateCPerKm": 6.5,
+    "freezeTemperatureC": 0,
+    "seaIceTemperatureC": -1.8,
+    "insolationSensitivityC": 84.924,
+    "polarExtraC": 10.763,
+    "oceanModeration": 0.568,
+    "seasonalSensitivityC": 24.366660403087735,
+    "seaSeasonalDamping": 0.222,
+    "itczFollowFraction": 0.001,
+    "monsoonStrength": 0.029,
+    "itczLandPullDeg": 29.03465532674454,
+    "itczPullRangeDeg": 23.430242274189368,
+    "itczSmoothDeg": 28.83809607839212,
+    "itczElevationPullM": 24376.161981513724,
+    "snowBalanceWeight": 0.8286676036566498,
+    "snowMeltDegreeDay": 0.9399341273587195,
+    "snowBalanceRequiredM": -0.45978575570043173,
+    "snowBalanceWidth": 0.15,
+    "seaIceBalanceWeight": 0.8742974274978041,
+    "seaIceMeltDegreeDay": 0.4335265804547816,
+    "seaIceBalanceRequired": -0.2007835707627237,
+    "seaIceBalanceWidth": 0.15,
+    "growingSeasonWeight": 0.847,
+    "coastalMoisture": 0.892,
+    "moistureDecayKm": 3232.679,
+    "evaporationHalfC": -3,
+    "evaporationWidthC": 3.083,
+    "stillAirMoisture": 0.564,
+    "coriolisStrength": 4,
+    "circulationCellEdgeDeg": 28.557,
+    "cellRotationExponent": 0.33,
+    "advectionRangeKm": 6494.654,
+    "orographicLiftM": 1146.915,
+    "rainShadowM": 3443.136,
+    "orographicRiseM": 180.397,
+    "subtropicalDryStrength": 0.282,
+    "convergenceWetBonus": 1.577,
+    "vegetationWarmthC": -12,
+    "vegetationWarmthWidthC": 5.902,
+    "vegetationMoistureHalf": 0.611,
+    "vegetationMoistureWidth": 0.568,
+    "sandTemperatureC": 10,
+    "sandWidthC": 10,
+    "snowSummerMeltC": -22.552788452943787,
+    "snowBlendC": 6.448,
+    "seaIceBlendC": 1.948,
+    "seaDepthShadingM": 4000
+   },
+   "step2": {
+    "a": 0.5663480053480765,
+    "b": 0.18221225353560283
+   },
+   "a": 0.5667009463016126,
+   "b": 0.18208560285219935,
+   "teacherA": {
+    "total": 0.5667009463016126,
+    "vegetation": 0.5099742782605327,
+    "arid": 0.5675677500452228,
+    "landIce": 0.6528717241071545,
+    "landIceRecall": 0.7810400404006547,
+    "landIcePrecision": 0.7991366988458021,
+    "landIceArea": 0.03252809024515792,
+    "seaIce": 0.5363900327935406,
+    "seaIceRecall": 0.6740699549438377,
+    "seaIcePrecision": 0.7242233619945345,
+    "seaIceArea": 0.0093236960941649,
+    "region": 0.32894654558456726
+   },
+   "teacherB": {
+    "total": 0.18208560285219935,
+    "classes": {
+     "tropicalHumid": 0.20480095691775885,
+     "tropicalSeasonal": 0.03944230271429622,
+     "arid": 0.3158414663223544,
+     "temperateHumid": 0.10534865017428001,
+     "temperateSeasonal": 0.013650120159873167,
+     "coldHumid": 0.4810632034349241,
+     "coldSeasonal": 0,
+     "polar": 0.296538123094108
+    },
+    "seasonalClassSum": 0.05309242287416938
+   },
+   "longitudinalShare": 0.24199577732668484,
+   "places": {
+    "インドシナ": {
+     "modelVegetatedPct": 60.4,
+     "teacherVegetatedPct": 74.4
+    },
+    "華中・華南": {
+     "modelVegetatedPct": 1.2,
+     "teacherVegetatedPct": 98.2
+    },
+    "インド": {
+     "modelVegetatedPct": 10.4,
+     "teacherVegetatedPct": 4.9
+    },
+    "米中西部": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 64.6
+    },
+    "パタゴニア風下": {
+     "modelVegetatedPct": 60.7,
+     "teacherVegetatedPct": 4.2
+    },
+    "サハラ": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 0
+    },
+    "ヒマラヤ・チベット": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 7.2
+    },
+    "サヘル": {
+     "modelVegetatedPct": 56.4,
+     "teacherVegetatedPct": 6
+    }
+   },
+   "valid": true
+  },
+  {
+   "params": {
+    "meanTemperatureC": 14,
+    "lapseRateCPerKm": 6.5,
+    "freezeTemperatureC": 0,
+    "seaIceTemperatureC": -1.8,
+    "insolationSensitivityC": 84.924,
+    "polarExtraC": 10.763,
+    "oceanModeration": 0.568,
+    "seasonalSensitivityC": 24.46552784414962,
+    "seaSeasonalDamping": 0.222,
+    "itczFollowFraction": 0.001,
+    "monsoonStrength": 0.029,
+    "itczLandPullDeg": 29.84658544510603,
+    "itczPullRangeDeg": 24.780541700078174,
+    "itczSmoothDeg": 16.626023451425134,
+    "itczElevationPullM": 26561.64866941981,
+    "snowBalanceWeight": 0.8308310402929784,
+    "snowMeltDegreeDay": 0.9348509188275783,
+    "snowBalanceRequiredM": -0.22356967213563617,
+    "snowBalanceWidth": 0.15,
+    "seaIceBalanceWeight": 0.6349755752831697,
+    "seaIceMeltDegreeDay": 0.4891474755480885,
+    "seaIceBalanceRequired": -0.3925297735491768,
+    "seaIceBalanceWidth": 0.15,
+    "growingSeasonWeight": 0.847,
+    "coastalMoisture": 0.892,
+    "moistureDecayKm": 3232.679,
+    "evaporationHalfC": -3,
+    "evaporationWidthC": 3.083,
+    "stillAirMoisture": 0.564,
+    "coriolisStrength": 4,
+    "circulationCellEdgeDeg": 28.557,
+    "cellRotationExponent": 0.33,
+    "advectionRangeKm": 6494.654,
+    "orographicLiftM": 1146.915,
+    "rainShadowM": 3443.136,
+    "orographicRiseM": 180.397,
+    "subtropicalDryStrength": 0.282,
+    "convergenceWetBonus": 1.577,
+    "vegetationWarmthC": -12,
+    "vegetationWarmthWidthC": 5.902,
+    "vegetationMoistureHalf": 0.611,
+    "vegetationMoistureWidth": 0.568,
+    "sandTemperatureC": 10,
+    "sandWidthC": 10,
+    "snowSummerMeltC": -21.63960198336281,
+    "snowBlendC": 6.448,
+    "seaIceBlendC": 1.948,
+    "seaDepthShadingM": 4000
+   },
+   "step2": {
+    "a": 0.5586973115296687,
+    "b": 0.18647111928197127
+   },
+   "a": 0.5591601641309645,
+   "b": 0.18605091092651327,
+   "teacherA": {
+    "total": 0.5591601641309645,
+    "vegetation": 0.49267403730442566,
+    "arid": 0.5583738118047632,
+    "landIce": 0.6493139219121536,
+    "landIceRecall": 0.7477810873935276,
+    "landIcePrecision": 0.8313952570820712,
+    "landIceArea": 0.029934587437338334,
+    "seaIce": 0.5362788855025155,
+    "seaIceRecall": 0.7621842425336718,
+    "seaIcePrecision": 0.6440465936772968,
+    "seaIceArea": 0.011854912361527206,
+    "region": 0.32583165119176805
+   },
+   "teacherB": {
+    "total": 0.18605091092651327,
+    "classes": {
+     "tropicalHumid": 0.20092091531481024,
+     "tropicalSeasonal": 0.051373630228578424,
+     "arid": 0.3081960464204007,
+     "temperateHumid": 0.10618419353667105,
+     "temperateSeasonal": 0.04430908035205081,
+     "coldHumid": 0.48306719365292194,
+     "coldSeasonal": 0,
+     "polar": 0.2943562279066728
+    },
+    "seasonalClassSum": 0.09568271058062924
+   },
+   "longitudinalShare": 0.2601187401186474,
+   "places": {
+    "インドシナ": {
+     "modelVegetatedPct": 64.2,
+     "teacherVegetatedPct": 74.4
+    },
+    "華中・華南": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 98.2
+    },
+    "インド": {
+     "modelVegetatedPct": 9.7,
+     "teacherVegetatedPct": 4.9
+    },
+    "米中西部": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 64.6
+    },
+    "パタゴニア風下": {
+     "modelVegetatedPct": 60.7,
+     "teacherVegetatedPct": 4.2
+    },
+    "サハラ": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 0
+    },
+    "ヒマラヤ・チベット": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 7.2
+    },
+    "サヘル": {
+     "modelVegetatedPct": 61,
+     "teacherVegetatedPct": 6
+    }
+   },
+   "valid": true
+  },
+  {
+   "params": {
+    "meanTemperatureC": 14,
+    "lapseRateCPerKm": 6.5,
+    "freezeTemperatureC": 0,
+    "seaIceTemperatureC": -1.8,
+    "insolationSensitivityC": 84.924,
+    "polarExtraC": 10.763,
+    "oceanModeration": 0.568,
+    "seasonalSensitivityC": 24.317161203129217,
+    "seaSeasonalDamping": 0.222,
+    "itczFollowFraction": 0.001,
+    "monsoonStrength": 0.029,
+    "itczLandPullDeg": 29.03659539995715,
+    "itczPullRangeDeg": 19.044686414767057,
+    "itczSmoothDeg": 15.290100694354622,
+    "itczElevationPullM": 14282.18328137882,
+    "snowBalanceWeight": 0.8615954234451055,
+    "snowMeltDegreeDay": 0.8169880283996461,
+    "snowBalanceRequiredM": -0.20954160953406245,
+    "snowBalanceWidth": 0.15,
+    "seaIceBalanceWeight": 0.7707084333151578,
+    "seaIceMeltDegreeDay": 0.45544935395009817,
+    "seaIceBalanceRequired": -0.2794261277420446,
+    "seaIceBalanceWidth": 0.15,
+    "growingSeasonWeight": 0.847,
+    "coastalMoisture": 0.892,
+    "moistureDecayKm": 3232.679,
+    "evaporationHalfC": -3,
+    "evaporationWidthC": 3.083,
+    "stillAirMoisture": 0.564,
+    "coriolisStrength": 4,
+    "circulationCellEdgeDeg": 28.557,
+    "cellRotationExponent": 0.33,
+    "advectionRangeKm": 6494.654,
+    "orographicLiftM": 1146.915,
+    "rainShadowM": 3443.136,
+    "orographicRiseM": 180.397,
+    "subtropicalDryStrength": 0.282,
+    "convergenceWetBonus": 1.577,
+    "vegetationWarmthC": -12,
+    "vegetationWarmthWidthC": 5.902,
+    "vegetationMoistureHalf": 0.611,
+    "vegetationMoistureWidth": 0.568,
+    "sandTemperatureC": 10,
+    "sandWidthC": 10,
+    "snowSummerMeltC": -23.61574611836113,
+    "snowBlendC": 6.448,
+    "seaIceBlendC": 1.948,
+    "seaDepthShadingM": 4000
+   },
+   "step2": {
+    "a": 0.5567388660198135,
+    "b": 0.18830909012686398
+   },
+   "a": 0.557050177027661,
+   "b": 0.18793920659914218,
+   "teacherA": {
+    "total": 0.557050177027661,
+    "vegetation": 0.4830681693403725,
+    "arid": 0.5559567422685575,
+    "landIce": 0.6491058536334567,
+    "landIceRecall": 0.7607297299129949,
+    "landIcePrecision": 0.8156251105305163,
+    "landIceArea": 0.03104174621604076,
+    "seaIce": 0.5400699428682572,
+    "seaIceRecall": 0.7190178155293422,
+    "seaIcePrecision": 0.6845442699974821,
+    "seaIceArea": 0.010521890582758582,
+    "region": 0.3243340874228786
+   },
+   "teacherB": {
+    "total": 0.18793920659914218,
+    "classes": {
+     "tropicalHumid": 0.20401570376484202,
+     "tropicalSeasonal": 0.06044053142305807,
+     "arid": 0.3074058072657427,
+     "temperateHumid": 0.10643144966553453,
+     "temperateSeasonal": 0.04835231342715488,
+     "coldHumid": 0.47960433471391795,
+     "coldSeasonal": 0,
+     "polar": 0.29726351253288746
+    },
+    "seasonalClassSum": 0.10879284485021296
+   },
+   "longitudinalShare": 0.265333041985927,
+   "places": {
+    "インドシナ": {
+     "modelVegetatedPct": 58.2,
+     "teacherVegetatedPct": 74.4
+    },
+    "華中・華南": {
+     "modelVegetatedPct": 1.2,
+     "teacherVegetatedPct": 98.2
+    },
+    "インド": {
+     "modelVegetatedPct": 7.3,
+     "teacherVegetatedPct": 4.9
+    },
+    "米中西部": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 64.6
+    },
+    "パタゴニア風下": {
+     "modelVegetatedPct": 60.7,
+     "teacherVegetatedPct": 4.2
+    },
+    "サハラ": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 0
+    },
+    "ヒマラヤ・チベット": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 7.2
+    },
+    "サヘル": {
+     "modelVegetatedPct": 63.3,
+     "teacherVegetatedPct": 6
+    }
+   },
+   "valid": true
+  },
+  {
+   "params": {
+    "meanTemperatureC": 14,
+    "lapseRateCPerKm": 6.5,
+    "freezeTemperatureC": 0,
+    "seaIceTemperatureC": -1.8,
+    "insolationSensitivityC": 84.924,
+    "polarExtraC": 10.763,
+    "oceanModeration": 0.568,
+    "seasonalSensitivityC": 24.317161203129217,
+    "seaSeasonalDamping": 0.222,
+    "itczFollowFraction": 0.001,
+    "monsoonStrength": 0.029,
+    "itczLandPullDeg": 30,
+    "itczPullRangeDeg": 19.044686414767057,
+    "itczSmoothDeg": 12.839077859278767,
+    "itczElevationPullM": 15633.756481064484,
+    "snowBalanceWeight": 0.8615954234451055,
+    "snowMeltDegreeDay": 0.881570790056139,
+    "snowBalanceRequiredM": -0.3759761133929715,
+    "snowBalanceWidth": 0.15,
+    "seaIceBalanceWeight": 0.6476048507541418,
+    "seaIceMeltDegreeDay": 0.45544935395009817,
+    "seaIceBalanceRequired": -0.30756200060714034,
+    "seaIceBalanceWidth": 0.15,
+    "growingSeasonWeight": 0.847,
+    "coastalMoisture": 0.892,
+    "moistureDecayKm": 3232.679,
+    "evaporationHalfC": -3,
+    "evaporationWidthC": 3.083,
+    "stillAirMoisture": 0.564,
+    "coriolisStrength": 4,
+    "circulationCellEdgeDeg": 28.557,
+    "cellRotationExponent": 0.33,
+    "advectionRangeKm": 6494.654,
+    "orographicLiftM": 1146.915,
+    "rainShadowM": 3443.136,
+    "orographicRiseM": 180.397,
+    "subtropicalDryStrength": 0.282,
+    "convergenceWetBonus": 1.577,
+    "vegetationWarmthC": -12,
+    "vegetationWarmthWidthC": 5.902,
+    "vegetationMoistureHalf": 0.611,
+    "vegetationMoistureWidth": 0.568,
+    "sandTemperatureC": 10,
+    "sandWidthC": 10,
+    "snowSummerMeltC": -24.078184862388298,
+    "snowBlendC": 6.448,
+    "seaIceBlendC": 1.948,
+    "seaDepthShadingM": 4000
+   },
+   "step2": {
+    "a": 0.5555567468020897,
+    "b": 0.19139426626538905
+   },
+   "a": 0.5559847826323308,
+   "b": 0.19096624502775109,
+   "teacherA": {
+    "total": 0.5559847826323308,
+    "vegetation": 0.4774538994900886,
+    "arid": 0.5547394245054537,
+    "landIce": 0.6516758636655238,
+    "landIceRecall": 0.7779914210193548,
+    "landIcePrecision": 0.8005482280137145,
+    "landIceArea": 0.032343994178017595,
+    "seaIce": 0.5400699428682572,
+    "seaIceRecall": 0.7190178155293422,
+    "seaIcePrecision": 0.6845442699974821,
+    "seaIceArea": 0.010521890582758582,
+    "region": 0.32548955505124466
+   },
+   "teacherB": {
+    "total": 0.19096624502775109,
+    "classes": {
+     "tropicalHumid": 0.2071002542655062,
+     "tropicalSeasonal": 0.08053790435100186,
+     "arid": 0.3075833214068307,
+     "temperateHumid": 0.10645228423258735,
+     "temperateSeasonal": 0.049192723668910136,
+     "coldHumid": 0.4795999597642847,
+     "coldSeasonal": 0,
+     "polar": 0.29726351253288746
+    },
+    "seasonalClassSum": 0.129730628019912
+   },
+   "longitudinalShare": 0.26582194300446493,
+   "places": {
+    "インドシナ": {
+     "modelVegetatedPct": 59.4,
+     "teacherVegetatedPct": 74.4
+    },
+    "華中・華南": {
+     "modelVegetatedPct": 1.2,
+     "teacherVegetatedPct": 98.2
+    },
+    "インド": {
+     "modelVegetatedPct": 7.3,
+     "teacherVegetatedPct": 4.9
+    },
+    "米中西部": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 64.6
+    },
+    "パタゴニア風下": {
+     "modelVegetatedPct": 60.7,
+     "teacherVegetatedPct": 4.2
+    },
+    "サハラ": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 0
+    },
+    "ヒマラヤ・チベット": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 7.2
+    },
+    "サヘル": {
+     "modelVegetatedPct": 63.8,
+     "teacherVegetatedPct": 6
+    }
+   },
+   "valid": true
+  },
+  {
+   "params": {
+    "meanTemperatureC": 14,
+    "lapseRateCPerKm": 6.5,
+    "freezeTemperatureC": 0,
+    "seaIceTemperatureC": -1.8,
+    "insolationSensitivityC": 84.924,
+    "polarExtraC": 10.763,
+    "oceanModeration": 0.568,
+    "seasonalSensitivityC": 24.317161203129217,
+    "seaSeasonalDamping": 0.222,
+    "itczFollowFraction": 0.001,
+    "monsoonStrength": 0.029,
+    "itczLandPullDeg": 30,
+    "itczPullRangeDeg": 19.014168804278597,
+    "itczSmoothDeg": 8.88822427764535,
+    "itczElevationPullM": 19409.305131435394,
+    "snowBalanceWeight": 0.6463135990872979,
+    "snowMeltDegreeDay": 1,
+    "snowBalanceRequiredM": -0.5,
+    "snowBalanceWidth": 0.15,
+    "seaIceBalanceWeight": 0.9240856085717677,
+    "seaIceMeltDegreeDay": 0.4891474755480885,
+    "seaIceBalanceRequired": -0.3045086438534782,
+    "seaIceBalanceWidth": 0.15,
+    "growingSeasonWeight": 0.847,
+    "coastalMoisture": 0.892,
+    "moistureDecayKm": 3232.679,
+    "evaporationHalfC": -3,
+    "evaporationWidthC": 3.083,
+    "stillAirMoisture": 0.564,
+    "coriolisStrength": 4,
+    "circulationCellEdgeDeg": 28.557,
+    "cellRotationExponent": 0.33,
+    "advectionRangeKm": 6494.654,
+    "orographicLiftM": 1146.915,
+    "rainShadowM": 3443.136,
+    "orographicRiseM": 180.397,
+    "subtropicalDryStrength": 0.282,
+    "convergenceWetBonus": 1.577,
+    "vegetationWarmthC": -12,
+    "vegetationWarmthWidthC": 5.902,
+    "vegetationMoistureHalf": 0.611,
+    "vegetationMoistureWidth": 0.568,
+    "sandTemperatureC": 10,
+    "sandWidthC": 10,
+    "snowSummerMeltC": -21.086819899035618,
+    "snowBlendC": 6.448,
+    "seaIceBlendC": 1.948,
+    "seaDepthShadingM": 4000
+   },
+   "step2": {
+    "a": 0.5550361252458593,
+    "b": 0.19368588488938376
+   },
+   "a": 0.5554433031790895,
+   "b": 0.1932843935473549,
+   "teacherA": {
+    "total": 0.5554433031790895,
+    "vegetation": 0.4741614850486563,
+    "arid": 0.5532400620752576,
+    "landIce": 0.6543017227241871,
+    "landIceRecall": 0.7768241741817896,
+    "landIcePrecision": 0.8057665168057756,
+    "landIceArea": 0.03208631613817177,
+    "seaIce": 0.5400699428682572,
+    "seaIceRecall": 0.7190178155293422,
+    "seaIcePrecision": 0.6845442699974821,
+    "seaIceArea": 0.010521890582758582,
+    "region": 0.3242574582902561
+   },
+   "teacherB": {
+    "total": 0.1932843935473549,
+    "classes": {
+     "tropicalHumid": 0.2067744847927817,
+     "tropicalSeasonal": 0.09961716213589464,
+     "arid": 0.30738816902577565,
+     "temperateHumid": 0.10639110788105502,
+     "temperateSeasonal": 0.04924075224615983,
+     "coldHumid": 0.4795999597642847,
+     "coldSeasonal": 0,
+     "polar": 0.29726351253288746
+    },
+    "seasonalClassSum": 0.14885791438205448
+   },
+   "longitudinalShare": 0.26701814200479984,
+   "places": {
+    "インドシナ": {
+     "modelVegetatedPct": 60.4,
+     "teacherVegetatedPct": 74.4
+    },
+    "華中・華南": {
+     "modelVegetatedPct": 1.2,
+     "teacherVegetatedPct": 98.2
+    },
+    "インド": {
+     "modelVegetatedPct": 7.2,
+     "teacherVegetatedPct": 4.9
+    },
+    "米中西部": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 64.6
+    },
+    "パタゴニア風下": {
+     "modelVegetatedPct": 60.7,
+     "teacherVegetatedPct": 4.2
+    },
+    "サハラ": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 0
+    },
+    "ヒマラヤ・チベット": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 7.2
+    },
+    "サヘル": {
+     "modelVegetatedPct": 63.5,
+     "teacherVegetatedPct": 6
+    }
+   },
+   "valid": true
+  },
+  {
+   "params": {
+    "meanTemperatureC": 14,
+    "lapseRateCPerKm": 6.5,
+    "freezeTemperatureC": 0,
+    "seaIceTemperatureC": -1.8,
+    "insolationSensitivityC": 84.924,
+    "polarExtraC": 10.763,
+    "oceanModeration": 0.568,
+    "seasonalSensitivityC": 24.360374815994874,
+    "seaSeasonalDamping": 0.222,
+    "itczFollowFraction": 0.001,
+    "monsoonStrength": 0.029,
+    "itczLandPullDeg": 30,
+    "itczPullRangeDeg": 16.414042330579832,
+    "itczSmoothDeg": 11.256844757683576,
+    "itczElevationPullM": 17870.53840626031,
+    "snowBalanceWeight": 0.6841907497495414,
+    "snowMeltDegreeDay": 1,
+    "snowBalanceRequiredM": -0.5,
+    "snowBalanceWidth": 0.15,
+    "seaIceBalanceWeight": 0.9869040894135831,
+    "seaIceMeltDegreeDay": 0.48197034159675234,
+    "seaIceBalanceRequired": -0.2949648313457147,
+    "seaIceBalanceWidth": 0.15,
+    "growingSeasonWeight": 0.847,
+    "coastalMoisture": 0.892,
+    "moistureDecayKm": 3232.679,
+    "evaporationHalfC": -3,
+    "evaporationWidthC": 3.083,
+    "stillAirMoisture": 0.564,
+    "coriolisStrength": 4,
+    "circulationCellEdgeDeg": 28.557,
+    "cellRotationExponent": 0.33,
+    "advectionRangeKm": 6494.654,
+    "orographicLiftM": 1146.915,
+    "rainShadowM": 3443.136,
+    "orographicRiseM": 180.397,
+    "subtropicalDryStrength": 0.282,
+    "convergenceWetBonus": 1.577,
+    "vegetationWarmthC": -12,
+    "vegetationWarmthWidthC": 5.902,
+    "vegetationMoistureHalf": 0.611,
+    "vegetationMoistureWidth": 0.568,
+    "sandTemperatureC": 10,
+    "sandWidthC": 10,
+    "snowSummerMeltC": -14.144493473460898,
+    "snowBlendC": 6.448,
+    "seaIceBlendC": 1.948,
+    "seaDepthShadingM": 4000
+   },
+   "step2": {
+    "a": 0.5546634337440752,
+    "b": 0.1941238607305802
+   },
+   "a": 0.5550603409279977,
+   "b": 0.19376252189429632,
+   "teacherA": {
+    "total": 0.5550603409279977,
+    "vegetation": 0.47272632381204205,
+    "arid": 0.5532380720460266,
+    "landIce": 0.6542070249856653,
+    "landIceRecall": 0.7769211273941365,
+    "landIcePrecision": 0.8055186573870303,
+    "landIceArea": 0.03210019498448043,
+    "seaIce": 0.5400699428682572,
+    "seaIceRecall": 0.7190178155293422,
+    "seaIcePrecision": 0.6845442699974821,
+    "seaIceArea": 0.010521890582758582,
+    "region": 0.32410594093185574
+   },
+   "teacherB": {
+    "total": 0.19376252189429632,
+    "classes": {
+     "tropicalHumid": 0.20789095982431732,
+     "tropicalSeasonal": 0.10187780444659388,
+     "arid": 0.3071676449769268,
+     "temperateHumid": 0.10629069770081531,
+     "temperateSeasonal": 0.04941279284000715,
+     "coldHumid": 0.48085380787692217,
+     "coldSeasonal": 0,
+     "polar": 0.296606467488788
+    },
+    "seasonalClassSum": 0.15129059728660102
+   },
+   "longitudinalShare": 0.26847100508813465,
+   "places": {
+    "インドシナ": {
+     "modelVegetatedPct": 55.7,
+     "teacherVegetatedPct": 74.4
+    },
+    "華中・華南": {
+     "modelVegetatedPct": 1.2,
+     "teacherVegetatedPct": 98.2
+    },
+    "インド": {
+     "modelVegetatedPct": 5.9,
+     "teacherVegetatedPct": 4.9
+    },
+    "米中西部": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 64.6
+    },
+    "パタゴニア風下": {
+     "modelVegetatedPct": 60.7,
+     "teacherVegetatedPct": 4.2
+    },
+    "サハラ": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 0
+    },
+    "ヒマラヤ・チベット": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 7.2
+    },
+    "サヘル": {
+     "modelVegetatedPct": 63.7,
+     "teacherVegetatedPct": 6
+    }
+   },
+   "valid": true
+  },
+  {
+   "params": {
+    "meanTemperatureC": 14,
+    "lapseRateCPerKm": 6.5,
+    "freezeTemperatureC": 0,
+    "seaIceTemperatureC": -1.8,
+    "insolationSensitivityC": 84.924,
+    "polarExtraC": 10.763,
+    "oceanModeration": 0.568,
+    "seasonalSensitivityC": 24.317161203129217,
+    "seaSeasonalDamping": 0.222,
+    "itczFollowFraction": 0.001,
+    "monsoonStrength": 0.029,
+    "itczLandPullDeg": 30,
+    "itczPullRangeDeg": 13.934018697589636,
+    "itczSmoothDeg": 12.425943868048488,
+    "itczElevationPullM": 27582.41438558325,
+    "snowBalanceWeight": 0.8912666373699905,
+    "snowMeltDegreeDay": 1,
+    "snowBalanceRequiredM": -0.49478491451591256,
+    "snowBalanceWidth": 0.15,
+    "seaIceBalanceWeight": 0.5445287857577203,
+    "seaIceMeltDegreeDay": 0.5621107043232768,
+    "seaIceBalanceRequired": -0.5,
+    "seaIceBalanceWidth": 0.15,
+    "growingSeasonWeight": 0.847,
+    "coastalMoisture": 0.892,
+    "moistureDecayKm": 3232.679,
+    "evaporationHalfC": -3,
+    "evaporationWidthC": 3.083,
+    "stillAirMoisture": 0.564,
+    "coriolisStrength": 4,
+    "circulationCellEdgeDeg": 28.557,
+    "cellRotationExponent": 0.33,
+    "advectionRangeKm": 6494.654,
+    "orographicLiftM": 1146.915,
+    "rainShadowM": 3443.136,
+    "orographicRiseM": 180.397,
+    "subtropicalDryStrength": 0.282,
+    "convergenceWetBonus": 1.577,
+    "vegetationWarmthC": -12,
+    "vegetationWarmthWidthC": 5.902,
+    "vegetationMoistureHalf": 0.611,
+    "vegetationMoistureWidth": 0.568,
+    "sandTemperatureC": 10,
+    "sandWidthC": 10,
+    "snowSummerMeltC": -25.263444637181237,
+    "snowBlendC": 6.448,
+    "seaIceBlendC": 1.948,
+    "seaDepthShadingM": 4000
+   },
+   "step2": {
+    "a": 0.5538830269531527,
+    "b": 0.19414280548449897
+   },
+   "a": 0.554280177222841,
+   "b": 0.19379602417966252,
+   "teacherA": {
+    "total": 0.554280177222841,
+    "vegetation": 0.4701728101356872,
+    "arid": 0.5529576822538302,
+    "landIce": 0.6543172908473014,
+    "landIceRecall": 0.7816324221891082,
+    "landIcePrecision": 0.8006810429862061,
+    "landIceArea": 0.03248997387574664,
+    "seaIce": 0.5396729256545452,
+    "seaIceRecall": 0.6969122646359943,
+    "seaIcePrecision": 0.7051821466910062,
+    "seaIceArea": 0.00989993785557273,
+    "region": 0.3247656079049194
+   },
+   "teacherB": {
+    "total": 0.19379602417966252,
+    "classes": {
+     "tropicalHumid": 0.20586028493179978,
+     "tropicalSeasonal": 0.10512334889821227,
+     "arid": 0.30696019579467004,
+     "temperateHumid": 0.10636949709008851,
+     "temperateSeasonal": 0.04919500095786473,
+     "coldHumid": 0.4795999597642847,
+     "coldSeasonal": 0,
+     "polar": 0.29725990600038005
+    },
+    "seasonalClassSum": 0.154318349856077
+   },
+   "longitudinalShare": 0.27025593440592693,
+   "places": {
+    "インドシナ": {
+     "modelVegetatedPct": 47.9,
+     "teacherVegetatedPct": 74.4
+    },
+    "華中・華南": {
+     "modelVegetatedPct": 1.2,
+     "teacherVegetatedPct": 98.2
+    },
+    "インド": {
+     "modelVegetatedPct": 5.1,
+     "teacherVegetatedPct": 4.9
+    },
+    "米中西部": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 64.6
+    },
+    "パタゴニア風下": {
+     "modelVegetatedPct": 60.7,
+     "teacherVegetatedPct": 4.2
+    },
+    "サハラ": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 0
+    },
+    "ヒマラヤ・チベット": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 7.2
+    },
+    "サヘル": {
+     "modelVegetatedPct": 63.5,
+     "teacherVegetatedPct": 6
+    }
+   },
+   "valid": true
+  },
+  {
+   "params": {
+    "meanTemperatureC": 14,
+    "lapseRateCPerKm": 6.5,
+    "freezeTemperatureC": 0,
+    "seaIceTemperatureC": -1.8,
+    "insolationSensitivityC": 84.924,
+    "polarExtraC": 10.763,
+    "oceanModeration": 0.568,
+    "seasonalSensitivityC": 24.317161203129217,
+    "seaSeasonalDamping": 0.222,
+    "itczFollowFraction": 0.001,
+    "monsoonStrength": 0.029,
+    "itczLandPullDeg": 30,
+    "itczPullRangeDeg": 13.611330828163773,
+    "itczSmoothDeg": 12.839077859278767,
+    "itczElevationPullM": 15633.756481064484,
+    "snowBalanceWeight": 0.900721348002553,
+    "snowMeltDegreeDay": 0.9726890457794068,
+    "snowBalanceRequiredM": -0.3344425710150972,
+    "snowBalanceWidth": 0.15,
+    "seaIceBalanceWeight": 0.6934141205251216,
+    "seaIceMeltDegreeDay": 0.5318603003397584,
+    "seaIceBalanceRequired": -0.4059265677817166,
+    "seaIceBalanceWidth": 0.15,
+    "growingSeasonWeight": 0.847,
+    "coastalMoisture": 0.892,
+    "moistureDecayKm": 3232.679,
+    "evaporationHalfC": -3,
+    "evaporationWidthC": 3.083,
+    "stillAirMoisture": 0.564,
+    "coriolisStrength": 4,
+    "circulationCellEdgeDeg": 28.557,
+    "cellRotationExponent": 0.33,
+    "advectionRangeKm": 6494.654,
+    "orographicLiftM": 1146.915,
+    "rainShadowM": 3443.136,
+    "orographicRiseM": 180.397,
+    "subtropicalDryStrength": 0.282,
+    "convergenceWetBonus": 1.577,
+    "vegetationWarmthC": -12,
+    "vegetationWarmthWidthC": 5.902,
+    "vegetationMoistureHalf": 0.611,
+    "vegetationMoistureWidth": 0.568,
+    "sandTemperatureC": 10,
+    "sandWidthC": 10,
+    "snowSummerMeltC": -21.433983608381823,
+    "snowBlendC": 6.448,
+    "seaIceBlendC": 1.948,
+    "seaDepthShadingM": 4000
+   },
+   "step2": {
+    "a": 0.5533322616355771,
+    "b": 0.19419752921300887
+   },
+   "a": 0.5537495425789595,
+   "b": 0.19385814295446352,
+   "teacherA": {
+    "total": 0.5537495425789595,
+    "vegetation": 0.4699433612201639,
+    "arid": 0.5523303716685996,
+    "landIce": 0.6526544945588174,
+    "landIceRecall": 0.7645164063390403,
+    "landIcePrecision": 0.8168680897476337,
+    "landIceArea": 0.031148792908872774,
+    "seaIce": 0.5400699428682572,
+    "seaIceRecall": 0.7190178155293422,
+    "seaIcePrecision": 0.6845442699974821,
+    "seaIceArea": 0.010521890582758582,
+    "region": 0.32215673135415923
+   },
+   "teacherB": {
+    "total": 0.19385814295446352,
+    "classes": {
+     "tropicalHumid": 0.20452862956932824,
+     "tropicalSeasonal": 0.10726095589212117,
+     "arid": 0.30661825533873216,
+     "temperateHumid": 0.10635668482470208,
+     "temperateSeasonal": 0.04924075224615983,
+     "coldHumid": 0.4795999597642847,
+     "coldSeasonal": 0,
+     "polar": 0.29725990600038005
+    },
+    "seasonalClassSum": 0.15650170813828101
+   },
+   "longitudinalShare": 0.27033601409223895,
+   "places": {
+    "インドシナ": {
+     "modelVegetatedPct": 47.3,
+     "teacherVegetatedPct": 74.4
+    },
+    "華中・華南": {
+     "modelVegetatedPct": 1.2,
+     "teacherVegetatedPct": 98.2
+    },
+    "インド": {
+     "modelVegetatedPct": 5.1,
+     "teacherVegetatedPct": 4.9
+    },
+    "米中西部": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 64.6
+    },
+    "パタゴニア風下": {
+     "modelVegetatedPct": 60.7,
+     "teacherVegetatedPct": 4.2
+    },
+    "サハラ": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 0
+    },
+    "ヒマラヤ・チベット": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 7.2
+    },
+    "サヘル": {
+     "modelVegetatedPct": 63.6,
+     "teacherVegetatedPct": 6
+    }
+   },
+   "valid": true
+  }
+ ]
+}
