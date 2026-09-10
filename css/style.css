@@ -197,6 +197,19 @@ html, body {
   text-overflow: ellipsis;
 }
 
+/* The comparison feature's own precomputed A/B numbers -- same quiet weight
+   as the score line above, since it answers the same kind of question. */
+#climate-compare-score {
+  margin: 0 2px 1px;
+  font-size: 0.68rem;
+  font-weight: 400;
+  line-height: 1.25;
+  color: #c8d6ea;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* The axial-tilt and graticule buttons. Same visual family as the segmented
    controls, but each is a single button that cycles through its states. */
 .pill {

@@ -27,6 +27,7 @@ async function main() {
   const climateTempSlider = document.getElementById("climate-temp-slider");
   const climateTempReadout = document.getElementById("climate-temp-readout");
   const climateScoreLine = document.getElementById("climate-score");
+  const climateCompareLine = document.getElementById("climate-compare-score");
   const axisRow = document.getElementById("axis-row");
   const axisButton = document.getElementById("axis-toggle");
   const axisReadout = document.getElementById("axis-readout");
@@ -149,6 +150,23 @@ async function main() {
     climateSetRow.hidden = !showsClimate || sets.length < 2;
     climateTempRow.hidden = !showsClimate;
     applyClimateScore();
+    applyClimateCompareLine(climateSetRow.hidden ? null : globe3d.getClimateSet());
+  }
+
+  // The temporary comparison feature's own precomputed A/B numbers (see
+  // js/globe3d.js's "sea-ice-round comparison feature" block). Static
+  // numbers straight from the candidate's own committed JSON entry, not a
+  // live recomputation -- this row already shows the live Teacher A score,
+  // and adding a second live Teacher B pass to every repaint is well beyond
+  // what a temporary comparison view needs.
+  function applyClimateCompareLine(id) {
+    const set = id && globe3d ? globe3d.climateSets.find((s) => s.id === id) : null;
+    if (!set || !set.compareInfo) {
+      climateCompareLine.hidden = true;
+      return;
+    }
+    climateCompareLine.textContent = set.compareInfo;
+    climateCompareLine.hidden = false;
   }
 
   // The agreement with the teacher data, in one line. Worked out by the same
@@ -200,6 +218,7 @@ async function main() {
       button.addEventListener("click", () => {
         if (globe3d.getClimateSet() === set.id) return;
         applyClimateSetButtons(set.id);
+        applyClimateCompareLine(set.id);
         // Same as the other repaint buttons: let the pressed state paint
         // before the pass over every pixel blocks the thread.
         requestAnimationFrame(() => {

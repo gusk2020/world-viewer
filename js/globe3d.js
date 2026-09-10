@@ -24,6 +24,7 @@ import {
   paintClimate,
   computeClimate,
   resolveClimateSets,
+  resolveClimateParams,
   scoreAgainstTeacher,
 } from "./climate.js";
 import {
@@ -103,13 +104,26 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
   // fetch it fails before anything has been created. It is one paletted PNG
   // of about 50 KB, which next to the terrain raster is nothing.
   const teacherEra = pickTeacherEra(worldConfig.teacher);
-  const [colorImage, elevationImage, teacherImage] = await Promise.all([
-    usesPhoto ? loadImage(worldConfig.globeTexture) : null,
-    loadImage(pickElevationLevel(terrain.levels, USEFUL_GRID_WIDTH).url),
-    // A failed teacher fetch must not cost the user the whole world: it is a
-    // comparison layer, not the globe. The button simply does not appear.
-    teacherEra ? loadImage(teacherEra.map).catch(() => null) : null,
-  ]);
+  // Temporary sea-ice-round comparison feature (see the block after
+  // climateSets below): reads two already-committed candidate files by id,
+  // Earth (kasoku-sekai) only. Fetched alongside everything else so a
+  // missing file costs nothing but the comparison row, the same tolerance
+  // the teacher fetch already gets.
+  const isCompareWorld = usesPhoto && worldConfig.id === "kasoku-sekai";
+  const [colorImage, elevationImage, teacherImage, seaIceCandidatesDoc, largeSearchCandidatesDoc] =
+    await Promise.all([
+      usesPhoto ? loadImage(worldConfig.globeTexture) : null,
+      loadImage(pickElevationLevel(terrain.levels, USEFUL_GRID_WIDTH).url),
+      // A failed teacher fetch must not cost the user the whole world: it is a
+      // comparison layer, not the globe. The button simply does not appear.
+      teacherEra ? loadImage(teacherEra.map).catch(() => null) : null,
+      isCompareWorld
+        ? fetch(`./worlds/${worldConfig.id}/sea-ice-candidates.json`).then((r) => r.json()).catch(() => null)
+        : null,
+      isCompareWorld
+        ? fetch(`./worlds/${worldConfig.id}/climate-large-search-candidates.json`).then((r) => r.json()).catch(() => null)
+        : null,
+    ]);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -311,6 +325,58 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
     // retired must still load, so unknown names are reported and skipped.
     console.info(`climate set "${set.id}": ignoring unknown parameter(s) ${set.ignored.join(", ")}`);
   }
+
+  // --- Temporary sea-ice-round comparison feature ---------------------------
+  // Lets the three candidates from docs/climate-large-pareto-search.md be
+  // compared on screen without ever touching the world's own default: this
+  // only ever *appends* to climateSets.sets, so climateSets.defaultId and the
+  // `climate` variable above still point at the world's real default set,
+  // object and all. Switching through setClimateSet() below is unchanged --
+  // these three behave exactly like any named set the world itself could
+  // have declared in config.json.
+  //
+  // Every parameter value comes from the two committed candidate files by
+  // id, never typed in here, so re-running the search and overwriting those
+  // files is the only thing needed to keep this comparison current.
+  if (isCompareWorld && seaIceCandidatesDoc && largeSearchCandidatesDoc) {
+    const findEntry = (doc, id) => (doc.entries || []).find((e) => e.id === id);
+    const shipped = findEntry(seaIceCandidatesDoc, "shipped");
+    const oldSeason = findEntry(seaIceCandidatesDoc, "real-season-itcz-snow-new-seaice");
+    const newSeason = findEntry(largeSearchCandidatesDoc, "large-search-teacher-b");
+    // Both files exist for this world always, but a candidate id could still
+    // move or be renamed in a future round -- degrade to no comparison
+    // rather than compare against `undefined`.
+    if (shipped && oldSeason && newSeason) {
+      const compareInfo = (entry) =>
+        `A ${entry.teacherA.total.toFixed(1)} / B ${entry.teacherB.total.toFixed(1)} / ` +
+        `季節${entry.teacherB.seasonalClassSum.toFixed(1)} 経度${entry.longitudinalSharePct.toFixed(0)}%`;
+      // The world's own default set -- same object `climate` above already
+      // points at -- just gets a clearer label and a tooltip for this
+      // temporary feature. Its .values/.palette are untouched.
+      const defaultSet = climateSets.sets.find((set) => set.id === climateSets.defaultId);
+      if (defaultSet) {
+        defaultSet.label = "現行";
+        defaultSet.note = shipped.why || defaultSet.note;
+        defaultSet.compareInfo = compareInfo(shipped);
+      }
+      const buildCompareSet = (id, label, entry) => {
+        // The same layering resolveClimateSets itself uses for a world's own
+        // named sets: the world's base overrides, then this candidate's own
+        // (which may be a partial delta or, as here for the large-search
+        // entry, an already-fully-resolved set -- both work identically).
+        const resolved = resolveClimateParams({ ...(worldConfig.climate || {}), ...entry.params });
+        if (resolved.ignored.length) {
+          console.info(`comparison candidate "${id}": ignoring unknown parameter(s) ${resolved.ignored.join(", ")}`);
+        }
+        return { id, label, note: entry.why || "", compareInfo: compareInfo(entry), ...resolved };
+      };
+      climateSets.sets.push(
+        buildCompareSet("real-season-itcz-snow-new-seaice", "旧季節", oldSeason),
+        buildCompareSet("large-search-teacher-b", "新季節", newSeason)
+      );
+    }
+  }
+  // --- end temporary comparison feature --------------------------------
 
   let surfaceMode = "standard";
   let climateSetId = climate.id;
@@ -654,7 +720,13 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
     supportsClimate,
     hasTeacher,
     teacherEra: teacherEra ? { id: teacherEra.id, label: teacherEra.label } : null,
-    climateSets: climateSets.sets.map((set) => ({ id: set.id, label: set.label, note: set.note })),
+    // compareInfo is undefined for a world's own authored sets and only
+    // present on the temporary comparison feature's injected ones -- carried
+    // through here rather than left off, since .values/.palette/.ignored are
+    // still deliberately not exposed (nothing outside this module needs the
+    // full resolved set, only enough to build a button and read its own
+    // label/tooltip/comparison line).
+    climateSets: climateSets.sets.map((set) => ({ id: set.id, label: set.label, note: set.note, compareInfo: set.compareInfo })),
     getClimateSet: () => climateSetId,
     setClimateSet,
     getMeanTemperature,
