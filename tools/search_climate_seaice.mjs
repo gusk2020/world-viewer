@@ -24,16 +24,28 @@
 //     --patience N     stop after N trials with no front improvement (default 500)
 //     --step N         score every Nth pixel (default 2)
 //     --seed N         base random seed; the shard id is mixed in
-//     --keep N         how many front members to keep after dedup (default 20)
+//     --keep N         front size cap, during the search and at merge (default 40)
 //     --out FILE       checkpoint path (default ./search-seaice-shard<N>.json)
 //     --resume         continue from that checkpoint instead of starting over
+//     --seedFrom FILE  warm-start candidates (default the world's own
+//                      sea-ice-candidates.json, skipped if absent)
 //     --merge A B ..   combine finished shard checkpoints, dedupe, print/save
 //
 // Stop condition is whichever of the three limits is reached first, exactly
 // as the user specified: 6 hours, 10,000 trials, or 500 consecutive trials
-// with no front improvement (a trial that is rejected by a hard constraint,
-// see below, still counts toward both the trial cap and the patience clock --
-// it is a real attempt that found nothing worth keeping).
+// with no front improvement. Two details of that third one were both wrong
+// before the audit and are worth stating precisely: "improvement" means the
+// front's hypervolume actually grew (see hypervolume() for why the obvious
+// definition never fires), and the 500 counts only trials that passed the
+// hard constraints (see the loop for why counting rejections would make a
+// shard stop before it had found anything).
+//
+// The search space and the hard constraints below were both revised by the
+// pre-large-search audit, which measured that the original ones let three
+// separate degenerate families through -- two of them scoring *better* than
+// the known-good candidate, so they would have owned the front. The full
+// write-up, including the numbers each bound is derived from, is in
+// docs/pre-large-search-audit.md.
 //
 // Checkpoints are written every ten seconds to a temp file and renamed, so
 // killing the process loses at most a few seconds of work, and --resume
@@ -76,7 +88,20 @@ const SPACE = {
   snowBalanceWeight: [0.2, 1],
   snowMeltDegreeDay: [0, 1],
   snowBalanceRequiredM: [-0.5, 1],
-  snowSummerMeltC: [-30, 15],
+  // Capped at 0 by the pre-search audit, and that cap is the whole point of
+  // the bound. This is the *old* warm-season snow threshold, which survives
+  // as the other half of the mixture whenever snowBalanceWeight < 1 -- and
+  // with its old range reaching +15 the search could rebuild the exact design
+  // the snow-balance round rejected: a "melt point" of +6 C, which has no
+  // physical meaning and only ever meant "whatever makes Earth come out
+  // right". Measured during the audit, that reconstruction *beats* the
+  // known-good candidate on both objectives (Teacher A 54.43 -> 55.01, land
+  // ice 62.7 -> 65.2, Teacher B identical), so a 10,000-trial search would
+  // have found it immediately and filled the front with it. A melt point
+  // above freezing is unphysical for *permanent* snow, so the cap is at the
+  // real freezing point and nothing below it is lost -- every known-good
+  // candidate sits at -23 to -25. See docs/pre-large-search-audit.md.
+  snowSummerMeltC: [-30, 0],
   seaIceBalanceWeight: [0.2, 1],
   seaIceMeltDegreeDay: [0, 1],
   seaIceBalanceRequired: [-0.5, 1],
@@ -90,15 +115,55 @@ const NAMES = Object.keys(SPACE);
 // resolved default climate set, unchanged.
 
 // ---------------------------------------------------------------------------
-// Hard constraints (Step 24): a trial that fails these is rejected before it
-// can ever reach the front, rather than discovered to be degenerate after the
-// search has already spent its budget chasing it. Both floors are an order of
-// magnitude below the teacher's own area (land ice 3.33% of the globe, sea
-// ice 1.01%) -- loose enough to leave room for a legitimately different
-// climate, tight enough that "erase the ice" cannot pass either check.
+// Hard constraints: a trial that fails these is rejected before it can ever
+// reach the front, rather than discovered to be degenerate after the search
+// has already spent its budget chasing it.
+//
+// **The pre-search audit measured that the original two floors were not
+// enough**, and not in a subtle way -- three separate degenerate families
+// passed them, and two of those *beat* the known-good candidate on Teacher A,
+// so they would have taken over the front rather than merely appearing on it:
+//
+//   - an ITCZ neutered while its own headline knob still reads 30 (a wide
+//     pull window plus heavy longitude smoothing): Teacher A 54.43 -> 56.37
+//     while the seasonal classes collapse 17.0 -> 1.2 and the longitudinal
+//     structure falls 27.4% -> 22.2%, i.e. most of the way back to the purely
+//     zonal model this whole line of work exists to escape;
+//   - a season at the space's own floor with the seasonal classes at exactly
+//     0.0 (this one the small search actually produced, at the top of its
+//     front);
+//   - a melt rate of zero, which paints 11.00% of the globe in land ice
+//     against the teacher's 3.33% -- an *upper* bound problem that a floor on
+//     area cannot see at all.
+//
+// So the guards below are on **outcomes**, not on parameter values, because
+// every one of those families keeps its parameters inside the space's floors
+// and switches the mechanism off downstream instead. Each number is taken
+// from measurement rather than chosen: the area bands are the teacher's own
+// area scaled loosely both ways, the IoU floors sit at roughly a third of
+// what is actually achieved, the seasonal floor sits inside an empty gap
+// (the zonal model scores exactly 0.0 and anything genuinely seasonal scores
+// 4.8 or more), and the longitudinal floor is the bottom of the measured
+// "ITCZ genuinely on" range (24.5-27.4%) against a zonal baseline of 19%.
+//
+// None of these is a scoring term: they cannot pull the search toward the
+// teacher, only stop it walking off the edge. `lon` is computed from the
+// model's own moisture field and involves no teacher at all.
 // ---------------------------------------------------------------------------
-const ICE_FLOOR = 0.003;
-const SEA_ICE_FLOOR = 0.001;
+const CONSTRAINTS = {
+  iceAreaMin: 0.003,      // teacher 3.33% of the globe; ~1/10th of it
+  iceAreaMax: 0.10,       // ~3x the teacher: catches "ice everywhere"
+  iceIouMin: 0.20,        // achieved 62.7-71%
+  seaIceAreaMin: 0.001,   // teacher 1.01%
+  seaIceAreaMax: 0.030,   // ~3x the teacher
+  seaIceIouMin: 0.15,     // achieved 52.7-53.7%
+  seasonalMin: 0.02,      // zonal model 0.0; anything real >= 4.8%
+  lonMin: 0.24,           // zonal 19%; ITCZ genuinely on 24.5-27.4%
+};
+
+// How much the front's hypervolume must gain, relatively, before a trial
+// counts as an improvement for the patience clock.
+const HYPERVOLUME_EPSILON = 1e-4;
 
 function makeRandom(seed) {
   let state = (seed >>> 0) || 1;
@@ -111,7 +176,7 @@ function makeRandom(seed) {
 }
 
 function parseArgs(argv) {
-  const out = { shard: 0, trials: 10000, hours: 6, patience: 500, step: 2, seed: 1, keep: 20, merge: [] };
+  const out = { shard: 0, trials: 10000, hours: 6, patience: 500, step: 2, seed: 1, keep: 40, merge: [] };
   let world = "worlds/kasoku-sekai";
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -124,6 +189,7 @@ function parseArgs(argv) {
     else if (a === "--keep") out.keep = Number(argv[++i]);
     else if (a === "--out") out.out = argv[++i];
     else if (a === "--resume") out.resume = true;
+    else if (a === "--seedFrom") out.seedFrom = argv[++i];
     else if (a === "--merge") { while (i + 1 < argv.length && !argv[i + 1].startsWith("--")) out.merge.push(argv[++i]); }
     else if (!a.startsWith("--")) world = a;
   }
@@ -176,7 +242,10 @@ function longitudinalShare(climate, geography) {
 
 function makeEvaluator(world, step) {
   const { config, elevation, teacherA, teacherB, geography } = world;
-  const base = resolveClimateSets(config).sets[0];
+  // By id, not by position: a world that grows a second climate set would
+  // otherwise silently have the search optimising from the wrong base.
+  const sets = resolveClimateSets(config);
+  const base = sets.sets.find((s) => s.id === sets.defaultId) || sets.sets[0];
   const body = config.body;
   let count = 0;
   return {
@@ -198,21 +267,73 @@ function makeEvaluator(world, step) {
         .reduce((s, k) => s + (b.classes[k]?.iou ?? 0), 0);
       const iceArea = ca.landIce.modelArea / a.totalWeight;
       const seaIceArea = ca.seaIce.modelArea / a.totalWeight;
+      const lon = longitudinalShare(climate, geography);
       return {
         params, a: a.meanIou, b: b.meanIou, region: 1 - a.regionPenalty,
         veg: ca.vegetation.iou, arid: ca.arid.iou, ice: ca.landIce.iou, seaIce: ca.seaIce.iou,
         iceRecall: ca.landIce.recall, icePrecision: ca.landIce.precision, iceArea,
         seaIceRecall: ca.seaIce.recall, seaIcePrecision: ca.seaIce.precision, seaIceArea,
-        seasonal, lon: longitudinalShare(climate, geography),
-        valid: iceArea >= ICE_FLOOR && seaIceArea >= SEA_ICE_FLOOR,
+        seasonal, lon,
+        valid:
+          iceArea >= CONSTRAINTS.iceAreaMin && iceArea <= CONSTRAINTS.iceAreaMax &&
+          ca.landIce.iou >= CONSTRAINTS.iceIouMin &&
+          seaIceArea >= CONSTRAINTS.seaIceAreaMin && seaIceArea <= CONSTRAINTS.seaIceAreaMax &&
+          ca.seaIce.iou >= CONSTRAINTS.seaIceIouMin &&
+          seasonal >= CONSTRAINTS.seasonalMin &&
+          lon >= CONSTRAINTS.lonMin,
       };
     },
   };
 }
 
-// Two-objective Pareto dominance on (Teacher A, Teacher B), exactly as Step
-// 23 requires -- no combined score anywhere in this file.
+// Two-objective Pareto dominance on (Teacher A, Teacher B) -- no combined
+// score anywhere in this file.
 const dominates = (x, y) => (x.a >= y.a && x.b >= y.b) && (x.a > y.a || x.b > y.b);
+
+// The front's hypervolume against the origin, which is a valid reference here
+// because both objectives are mean IoU and so cannot go below 0.
+//
+// **This exists because "500 trials with no improvement" was not measuring
+// what it says.** Patience used to reset whenever anything was added to the
+// front at all -- and in two continuous objectives almost any small jitter
+// off a front member lands somewhere non-dominated, so the clock reset
+// perpetually and the run could only ever stop on the trial cap or the wall
+// clock. Hypervolume moves only when the front actually covers more ground,
+// so a front that is merely shuffling its interior no longer counts as
+// progress.
+function hypervolume(front) {
+  if (!front.length) return 0;
+  const pts = [...front].sort((x, y) => y.a - x.a);
+  let hv = 0;
+  let bestB = 0;
+  for (const p of pts) {
+    if (p.b > bestB) {
+      hv += p.a * (p.b - bestB);
+      bestB = p.b;
+    }
+  }
+  return hv;
+}
+
+// Crowding distance in (a, b), the standard NSGA-II measure, used only to
+// decide which interior point to drop when the front is over its cap. The two
+// extremes are never droppable -- losing them would quietly shrink the range
+// of trade-offs the run reports.
+function dropMostCrowded(front) {
+  const idx = front.map((_, i) => i).sort((i, j) => front[i].a - front[j].a);
+  let worst = -1;
+  let worstDistance = Infinity;
+  for (let k = 1; k < idx.length - 1; k++) {
+    const prev = front[idx[k - 1]];
+    const next = front[idx[k + 1]];
+    const distance = (next.a - prev.a) + (prev.b - next.b);
+    if (distance < worstDistance) {
+      worstDistance = distance;
+      worst = idx[k];
+    }
+  }
+  if (worst >= 0) front.splice(worst, 1);
+}
 
 // Dedup: drop a point within 5% of parameter-space distance of one already on
 // the front, same rule Stage 7's search used, so twenty near-copies of one
@@ -253,25 +374,90 @@ function saveCheckpoint(outPath, state) {
   renameSync(tmp, outPath);
 }
 
+/**
+ * Known-good starting points, so the search begins inside the feasible region
+ * instead of hunting for it.
+ *
+ * **The audit's smoke test found this missing and it matters more than it
+ * sounds.** Sampling 12 dimensions uniformly and then asking eight outcome
+ * constraints to all hold at once succeeds roughly once in two hundred
+ * tries -- 100 random trials in a row produced nothing at all -- so a cold
+ * start spends its first few hundred trials merely locating the region, and
+ * every front member after that descends from whichever one or two seeds it
+ * stumbled on. Stage 7 recorded this same failure in almost the same words
+ * ("no progress at all over 200 trials in four independent shards") and
+ * fixed it the same way: start near an answer that already works, and keep
+ * random sampling alongside it for exploration.
+ *
+ * The file is this line of work's own committed Pareto candidates, so nothing
+ * is invented here; entries that do not satisfy the constraints (the shipped
+ * default, the pre-fix baseline) are simply skipped.
+ */
+function seedFront(world, args, evaluate) {
+  const file = args.seedFrom || path.join(args.world, "sea-ice-candidates.json");
+  if (!existsSync(file)) return [];
+  let entries;
+  try {
+    entries = JSON.parse(readFileSync(file, "utf8")).entries || [];
+  } catch {
+    console.log(`could not read seeds from ${file}; starting cold`);
+    return [];
+  }
+  const seeded = [];
+  for (const entry of entries) {
+    if (!entry.params) continue;
+    const p = {};
+    for (const n of NAMES) {
+      const [lo, hi] = SPACE[n];
+      const v = entry.params[n];
+      p[n] = v === undefined ? evaluate.base.values[n] : Math.min(hi, Math.max(lo, v));
+    }
+    const c = evaluate.run(p);
+    if (c.valid) seeded.push(c);
+  }
+  console.log(`seeded ${seeded.length} of ${entries.length} candidates from ${path.basename(file)}`);
+  return seeded;
+}
+
 function search(world, args) {
   const evaluate = makeEvaluator(world, args.step);
   const outPath = args.out || path.join(process.cwd(), `search-seaice-shard${args.shard}.json`);
   const seed = (args.seed * 2654435761 + args.shard * 40503) >>> 0;
   const random = makeRandom(seed);
 
+  // Two shards whose seeds differ by a small amount are two nearby *values*,
+  // not two nearby positions on xorshift's cycle -- but nothing guarantees
+  // they are far apart either, so each shard walks its own stream forward a
+  // shard-dependent distance before the search starts. Cheap, and it removes
+  // the question entirely.
+  for (let i = 0; i < 1013 * (args.shard + 1); i++) random();
+
   let front = [];
   let trial = 0;
   let rejected = 0;
   let sinceImprovement = 0;
   let elapsedMs = 0;
+  let bestHypervolume = 0;
 
   if (args.resume) {
     const cp = loadCheckpoint(outPath);
     if (cp) {
       front = cp.front; trial = cp.trial; rejected = cp.rejected || 0;
       sinceImprovement = cp.sinceImprovement || 0; elapsedMs = cp.elapsedMs || 0;
+      bestHypervolume = cp.bestHypervolume || hypervolume(front);
       console.log(`resumed shard ${args.shard} from ${outPath}: trial ${trial}, front ${front.length}`);
     }
+  }
+
+  // A fresh run starts from the committed candidates; a resumed one already
+  // has its own front and must not have them injected a second time.
+  if (!front.length) {
+    for (const c of seedFront(world, args, evaluate)) {
+      if (front.some((f) => dominates(f, c) || tooClose(f.params, c.params))) continue;
+      for (let i = front.length - 1; i >= 0; i--) if (dominates(c, front[i])) front.splice(i, 1);
+      front.push(c);
+    }
+    bestHypervolume = hypervolume(front);
   }
 
   const start = Date.now();
@@ -288,20 +474,34 @@ function search(world, args) {
       : sample(random);
     const c = evaluate.run(p);
     trial++;
-    sinceImprovement++;
 
+    // Only trials that actually got past the hard constraints count toward
+    // patience. With the audit's revised guards about seven trials in ten are
+    // rejected, so counting them would make "500 trials with no improvement"
+    // mean roughly 150 real attempts -- and a shard could then stop before it
+    // had found anything at all. The trial cap and the wall clock still bound
+    // a run that is rejecting everything.
     if (!c.valid) { rejected++; }
-    else if (!front.some((f) => dominates(f, c))) {
+    else { sinceImprovement++; }
+
+    if (c.valid && !front.some((f) => dominates(f, c))) {
       for (let i = front.length - 1; i >= 0; i--) if (dominates(c, front[i])) front.splice(i, 1);
       if (!front.some((f) => tooClose(f.params, c.params))) {
         front.push(c);
-        sinceImprovement = 0;
+        while (front.length > args.keep) dropMostCrowded(front);
+        // Only a real gain in coverage counts as progress; see hypervolume().
+        const hv = hypervolume(front);
+        if (hv > bestHypervolume * (1 + HYPERVOLUME_EPSILON)) {
+          bestHypervolume = hv;
+          sinceImprovement = 0;
+        }
       }
     }
 
     if (Date.now() - lastCheckpoint > 10000) {
       saveCheckpoint(outPath, {
-        shard: args.shard, trial, rejected, sinceImprovement,
+        shard: args.shard, trial, rejected, sinceImprovement, bestHypervolume,
+        constraints: CONSTRAINTS, space: SPACE,
         elapsedMs: elapsedMs + (Date.now() - start), front,
       });
       lastCheckpoint = Date.now();
@@ -309,7 +509,8 @@ function search(world, args) {
     }
   }
   saveCheckpoint(outPath, {
-    shard: args.shard, trial, rejected, sinceImprovement,
+    shard: args.shard, trial, rejected, sinceImprovement, bestHypervolume,
+    constraints: CONSTRAINTS, space: SPACE,
     elapsedMs: elapsedMs + (Date.now() - start), front,
   });
   console.log(`shard ${args.shard} done: trial ${trial}, front ${front.length}, rejected ${rejected}. Wrote ${outPath}`);
