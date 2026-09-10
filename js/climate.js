@@ -1553,6 +1553,28 @@ export const SURFACE_SEA_ICE = 2;
 export const SURFACE_SAND = 3;
 export const SURFACE_IS_SEA = 4;
 
+/**
+ * The annual-mean surface temperature at one point, isolated from every
+ * other question classifyPoint asks (moisture, vegetation, snow...). Kept as
+ * its own exported function so Climate v1 (js/climate-v1/) can import the
+ * exact formula the painter uses for its own independent temperature field,
+ * rather than re-deriving something that could quietly drift from it -- the
+ * same reasoning that keeps classifyPoint itself shared between the painter
+ * and the scorer.
+ *
+ * Land cools with height via the lapse rate, applied to *relative* elevation
+ * (metres above the current sea level, not absolute elevation) -- so this
+ * tracks a moving sea level automatically. The sea does not cool with depth;
+ * instead it sits at a damped fraction of the latitude's own sea-level
+ * temperature, `oceanModeration` away from the global mean, since water's
+ * heat capacity flattens it toward the mean more than land is.
+ */
+export function surfaceAnnualTemperatureC({ isSea, seaLevelC, relativeElevationMetres, params }) {
+  return isSea
+    ? params.meanTemperatureC + params.oceanModeration * (seaLevelC - params.meanTemperatureC)
+    : seaLevelC - params.lapseRateCPerKm * (relativeElevationMetres / 1000);
+}
+
 export function classifyPoint(
   out, metres, seaLevelMetres, seaLevelC, warmDeltaC, coldDeltaC, moisture, params
 ) {
@@ -1563,8 +1585,7 @@ export function classifyPoint(
 
   if (metres < seaLevelMetres) {
     out[SURFACE_IS_SEA] = 1;
-    const annual =
-      params.meanTemperatureC + params.oceanModeration * (seaLevelC - params.meanTemperatureC);
+    const annual = surfaceAnnualTemperatureC({ isSea: true, seaLevelC, relativeElevationMetres: 0, params });
     // Sea ice is judged on the *warm* season, because what the teacher's
     // cloud-free composite shows is the ice that survived the melt season, not
     // the far larger area that freezes over each winter. The sea keeps only
@@ -1590,7 +1611,9 @@ export function classifyPoint(
   }
 
   out[SURFACE_IS_SEA] = 0;
-  const annual = seaLevelC - params.lapseRateCPerKm * ((metres - seaLevelMetres) / 1000);
+  const annual = surfaceAnnualTemperatureC({
+    isSea: false, seaLevelC, relativeElevationMetres: metres - seaLevelMetres, params,
+  });
   // Land keeps the whole seasonal swing; the sea above keeps a fraction of it.
   const warm = annual + warmDeltaC;
   // What a plant experiences: weighted toward the warm season, because that is
