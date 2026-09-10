@@ -66,3 +66,6 @@ shard 0: trial 2131/10000, front 5, rejected 1039
 shard 0: trial 2165/10000, front 6, rejected 1057
 shard 0: trial 2198/10000, front 7, rejected 1071
 shard 0: trial 2230/10000, front 8, rejected 1083
+shard 0: trial 2264/10000, front 7, rejected 1103
+shard 0: trial 2297/10000, front 7, rejected 1115
+shard 0: trial 2329/10000, front 6, rejected 1126
