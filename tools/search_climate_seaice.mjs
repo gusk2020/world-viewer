@@ -149,6 +149,16 @@ const NAMES = Object.keys(SPACE);
 // None of these is a scoring term: they cannot pull the search toward the
 // teacher, only stop it walking off the edge. `lon` is computed from the
 // model's own moisture field and involves no teacher at all.
+//
+// **What these are not**: a law of physics for what a valid climate looks
+// like on any world. Every number here is calibrated against *this* run's
+// Earth teacher data (its ice area, its Koppen-derived seasonal classes) --
+// they are guardrails for *this calibration search*, not a runtime
+// constraint js/climate.js enforces or that a fictional planet must satisfy.
+// A world with far more or far less ice than Earth, or no meaningful
+// longitude structure at all, is a legitimate climate; it would just not be
+// a legitimate answer to "which parameters make this model agree with
+// Earth", which is the only question this file asks.
 // ---------------------------------------------------------------------------
 const CONSTRAINTS = {
   iceAreaMin: 0.003,      // teacher 3.33% of the globe; ~1/10th of it
@@ -527,8 +537,15 @@ function merge(files, keep) {
     if (front.some((f) => tooClose(f.params, c.params))) continue;
     front.push(c);
   }
+  // Not front.sort(...).slice(0, keep) -- sorting by `a` and truncating drops
+  // whichever end has the lowest `a` outright, which on a 2-objective front is
+  // exactly the highest-`b` extreme (the one place a shard would actually see
+  // strong Teacher B agreement). A merge across several shards can easily
+  // exceed `keep`, so this reuses the same crowding-distance thinning the
+  // search loop already uses per-shard, which never drops either extreme.
+  while (front.length > keep) dropMostCrowded(front);
   front.sort((x, y) => y.a - x.a);
-  return front.slice(0, keep);
+  return front;
 }
 
 function main() {
@@ -542,4 +559,14 @@ function main() {
   search(world, args);
 }
 
-main();
+// Only run the search when this file is the CLI entry point, never when it is
+// imported. **This is not a style preference -- it is what the pre-search
+// audit's own accident was.** Reading this module's exports (e.g. to check
+// CLIMATE_PARAMETERS or SPACE from a REPL/one-liner) previously started a
+// real, unbounded search as a side effect of the import alone; that ran 576
+// trials before it was caught and killed. `import.meta.url` is the standard
+// ESM way to ask "was I executed directly", and it stays true regardless of
+// the caller's current working directory or how the path was spelled.
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main();
+}
