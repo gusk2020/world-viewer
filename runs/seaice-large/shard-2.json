@@ -1,0 +1,138 @@
+{
+ "shard": 2,
+ "trial": 827,
+ "rejected": 378,
+ "sinceImprovement": 206,
+ "bestHypervolume": 0.1075118795195214,
+ "constraints": {
+  "iceAreaMin": 0.003,
+  "iceAreaMax": 0.1,
+  "iceIouMin": 0.2,
+  "seaIceAreaMin": 0.001,
+  "seaIceAreaMax": 0.03,
+  "seaIceIouMin": 0.15,
+  "seasonalMin": 0.02,
+  "lonMin": 0.24
+ },
+ "space": {
+  "seasonalSensitivityC": [
+   15,
+   30
+  ],
+  "itczLandPullDeg": [
+   15,
+   30
+  ],
+  "itczPullRangeDeg": [
+   5,
+   60
+  ],
+  "itczSmoothDeg": [
+   2,
+   60
+  ],
+  "itczElevationPullM": [
+   1000,
+   40000
+  ],
+  "snowBalanceWeight": [
+   0.2,
+   1
+  ],
+  "snowMeltDegreeDay": [
+   0,
+   1
+  ],
+  "snowBalanceRequiredM": [
+   -0.5,
+   1
+  ],
+  "snowSummerMeltC": [
+   -30,
+   0
+  ],
+  "seaIceBalanceWeight": [
+   0.2,
+   1
+  ],
+  "seaIceMeltDegreeDay": [
+   0,
+   1
+  ],
+  "seaIceBalanceRequired": [
+   -0.5,
+   1
+  ]
+ },
+ "elapsedMs": 254188,
+ "front": [
+  {
+   "params": {
+    "meanTemperatureC": 14,
+    "lapseRateCPerKm": 6.5,
+    "freezeTemperatureC": 0,
+    "seaIceTemperatureC": -1.8,
+    "insolationSensitivityC": 84.924,
+    "polarExtraC": 10.763,
+    "oceanModeration": 0.568,
+    "seasonalSensitivityC": 24.424907923210412,
+    "seaSeasonalDamping": 0.222,
+    "itczFollowFraction": 0.001,
+    "monsoonStrength": 0.029,
+    "itczLandPullDeg": 30,
+    "itczPullRangeDeg": 18.94339485699311,
+    "itczSmoothDeg": 8.703415551502257,
+    "itczElevationPullM": 29564.19188384898,
+    "snowBalanceWeight": 0.6809756582602859,
+    "snowMeltDegreeDay": 1,
+    "snowBalanceRequiredM": -0.5,
+    "snowBalanceWidth": 0.15,
+    "seaIceBalanceWeight": 0.947610840499401,
+    "seaIceMeltDegreeDay": 0.4906847481615841,
+    "seaIceBalanceRequired": -0.31105137956328693,
+    "seaIceBalanceWidth": 0.15,
+    "growingSeasonWeight": 0.847,
+    "coastalMoisture": 0.892,
+    "moistureDecayKm": 3232.679,
+    "evaporationHalfC": -3,
+    "evaporationWidthC": 3.083,
+    "stillAirMoisture": 0.564,
+    "coriolisStrength": 4,
+    "circulationCellEdgeDeg": 28.557,
+    "cellRotationExponent": 0.33,
+    "advectionRangeKm": 6494.654,
+    "orographicLiftM": 1146.915,
+    "rainShadowM": 3443.136,
+    "orographicRiseM": 180.397,
+    "subtropicalDryStrength": 0.282,
+    "convergenceWetBonus": 1.577,
+    "vegetationWarmthC": -12,
+    "vegetationWarmthWidthC": 5.902,
+    "vegetationMoistureHalf": 0.611,
+    "vegetationMoistureWidth": 0.568,
+    "sandTemperatureC": 10,
+    "sandWidthC": 10,
+    "snowSummerMeltC": -25.285005619050935,
+    "snowBlendC": 6.448,
+    "seaIceBlendC": 1.948,
+    "seaDepthShadingM": 4000
+   },
+   "a": 0.5549316475813743,
+   "b": 0.19365332364527651,
+   "region": 0.32720140278007614,
+   "veg": 0.47619094403034923,
+   "arid": 0.552795176847735,
+   "ice": 0.653524084040652,
+   "seaIce": 0.5372163854067609,
+   "iceRecall": 0.7741198056828072,
+   "icePrecision": 0.807509333792013,
+   "iceArea": 0.03189772239685512,
+   "seaIceRecall": 0.7116080127791748,
+   "seaIcePrecision": 0.6867286311480844,
+   "seaIceArea": 0.01041604887249549,
+   "seasonal": 0.14930689460339086,
+   "lon": 0.26719026419469444,
+   "valid": true
+  }
+ ]
+}
