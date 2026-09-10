@@ -248,6 +248,57 @@ export const CLIMATE_PARAMETERS = {
       "actually control -- how hard the ice edge looks -- nothing scores.",
   },
 
+  // ---- Sea ice as a year's budget (this experiment) ------------------------
+  //
+  // The rule above this asks the same single-moment question the old land
+  // snow rule did, just of the sea instead: is the warm season above a
+  // threshold. Measured, it fails the identical way -- at seasonalSensitivityC
+  // = 25 the warm-season sea-surface temperature at the Arctic Ocean's centre
+  // rises to +2.3 C, past the threshold everywhere on Earth, and sea ice goes
+  // to exactly 0% (from an already-fitted 53.7% IoU at the shipped season).
+  //
+  // This asks a year instead, the same way land snow now does -- ice forms
+  // while the sea is below its own freezing point and melts in proportion to
+  // how far and how long the year runs above it -- but it is not land snow's
+  // formula reused: sea ice needs no moisture term, because seawater below
+  // freezing simply freezes, with no supply to run short of the way snowfall
+  // can. See seaIceYearBudget for the shared geometry and what each caller
+  // does differently with it.
+  seaIceBalanceWeight: {
+    value: 0, kind: "empirical", min: 0, max: 1,
+    note:
+      "How much of the sea-ice decision comes from the year's budget rather " +
+      "than the warm-season threshold above. 0 is the threshold alone and " +
+      "reproduces the shipped model exactly, which is the default so that " +
+      "every set saved before this keeps drawing what it drew.",
+  },
+  seaIceMeltDegreeDay: {
+    value: 0.12, kind: "empirical", min: 0, max: 1,
+    note:
+      "How much sea ice one degree of year-mean warmth above the sea's " +
+      "freezing point removes, against an accumulation of 1 for a year spent " +
+      "wholly below freezing. Not the same number as snowMeltDegreeDay -- the " +
+      "two balances are in different units -- even though it plays the same " +
+      "role in the same formula shape.",
+  },
+  seaIceBalanceRequired: {
+    value: 0.27, kind: "empirical", min: -0.5, max: 1,
+    note:
+      "How much net freezing a stretch of sea needs before ice survives on it " +
+      "all year (perennial ice). Above zero for the same reason as the land " +
+      "value: a real ice pack also loses mass to currents, ridging and export " +
+      "this model has none of, and a 20 km cell is not permanently iced the " +
+      "moment its average balance turns positive.",
+  },
+  seaIceBalanceWidth: {
+    value: 0.15, kind: "empirical", min: 0.02, max: 1, search: false,
+    note:
+      "How softly that crossing is made. Kept out of the search for the same " +
+      "reason as snowBalanceWidth: a class resolved to one label per pixel " +
+      "flips at the centre of the ramp whatever its width, so the reported " +
+      "score cannot see this, only how hard the ice edge looks.",
+  },
+
   growingSeasonWeight: {
     value: 0.7, kind: "empirical", min: 0, max: 1,
     note:
@@ -1519,11 +1570,22 @@ export function classifyPoint(
     // the far larger area that freezes over each winter. The sea keeps only
     // part of the swing -- that is what seaSeasonalDamping is.
     const warm = annual + params.seaSeasonalDamping * warmDeltaC;
-    out[SURFACE_SEA_ICE] = 1 - smoothstep(
+    const threshold = 1 - smoothstep(
       params.seaIceTemperatureC - params.seaIceBlendC,
       params.seaIceTemperatureC + params.seaIceBlendC,
       warm
     );
+    // ...and the year's budget, same idea as land snow's: skipped outright
+    // when switched off, so the shipped model costs nothing and comes out
+    // bit-identical.
+    const sw = params.seaIceBalanceWeight;
+    if (sw > 0) {
+      const cold = annual + params.seaSeasonalDamping * coldDeltaC;
+      const { perennial } = seaIceYearBudget(warm, cold, params);
+      out[SURFACE_SEA_ICE] = threshold + (perennial - threshold) * sw;
+    } else {
+      out[SURFACE_SEA_ICE] = threshold;
+    }
     return out;
   }
 
@@ -1581,6 +1643,47 @@ export function classifyPoint(
 }
 
 /**
+ * How much of a sinusoidal year a surface spends below some freezing point,
+ * and the year-mean of how far above it the surface stands otherwise.
+ *
+ * Shared by land snow and sea ice because the *geometry* of a year -- two
+ * solstice temperatures standing for the ends of a sinusoid, and a closed
+ * form for how much of the cycle sits on each side of a threshold -- is the
+ * same question for both. What each does with the two numbers this returns
+ * is not: land snow multiplies the frozen share by moisture before it counts
+ * as accumulation, because snowfall needs supply; sea ice does not, because
+ * seawater below its freezing point simply freezes. That distinction is kept
+ * entirely in the two callers, not in here.
+ *
+ * For T(t) = mean + amplitude*cos(t) the melt term has a closed form, and it
+ * saturates the right way by construction: a brief fierce summer contributes
+ * a fraction of what a long mild one does, without any cap imposed by hand
+ * and without ever breaking "warmer melts more".
+ */
+function sinusoidalFreezeBudget(warm, cold, freeze) {
+  const mean = (warm + cold) / 2;
+  const amplitude = (warm - cold) / 2;
+
+  if (!(amplitude > 1e-6)) {
+    // No season worth the name: the year is one temperature.
+    return {
+      frozenShare: mean < freeze ? 1 : 0,
+      degreesAboveFreezing: Math.max(0, mean - freeze),
+    };
+  }
+  const u = (freeze - mean) / amplitude;
+  if (u >= 1) return { frozenShare: 1, degreesAboveFreezing: 0 };
+  if (u <= -1) return { frozenShare: 0, degreesAboveFreezing: mean - freeze };
+  // The year crosses freezing twice; phi is how far round the cycle it
+  // spends above it.
+  const phi = Math.acos(u);
+  return {
+    frozenShare: 1 - phi / Math.PI,
+    degreesAboveFreezing: (amplitude / Math.PI) * (Math.sin(phi) - u * phi),
+  };
+}
+
+/**
  * How much of a year's snowfall survives its melt season, as 0 to 1.
  *
  * The two seasons this model computes are the ends of a year, not the year
@@ -1593,11 +1696,6 @@ export function classifyPoint(
  *                 desert accumulates little, which is why the driest cold
  *                 places on any world should not silently ice over.
  *   melt          the year-mean of how far the surface stands above freezing.
- *                 For T(t) = mean + amplitude*cos(t) this has a closed form,
- *                 and it saturates the right way by construction: a brief
- *                 fierce summer contributes a fraction of what a long mild one
- *                 does, without any cap being imposed by hand and without ever
- *                 breaking "warmer melts more".
  *
  * Nothing here reads a latitude, a coordinate or a place -- only the two
  * temperatures and the moisture the model already has for that point, so it
@@ -1605,33 +1703,8 @@ export function classifyPoint(
  * both terms fall back to their annual-mean limits) or on one tilted 80.
  */
 export function snowYearBudget(warm, cold, moisture, params) {
-  const mean = (warm + cold) / 2;
-  const amplitude = (warm - cold) / 2;
-  const freeze = params.freezeTemperatureC;
-
-  let frozenShare;
-  let degreesAboveFreezing;
-  if (!(amplitude > 1e-6)) {
-    // No season worth the name: the year is one temperature.
-    frozenShare = mean < freeze ? 1 : 0;
-    degreesAboveFreezing = Math.max(0, mean - freeze);
-  } else {
-    const u = (freeze - mean) / amplitude;
-    if (u >= 1) {
-      frozenShare = 1;
-      degreesAboveFreezing = 0;
-    } else if (u <= -1) {
-      frozenShare = 0;
-      degreesAboveFreezing = mean - freeze;
-    } else {
-      // The year crosses freezing twice; phi is how far round the cycle it
-      // spends above it.
-      const phi = Math.acos(u);
-      frozenShare = 1 - phi / Math.PI;
-      degreesAboveFreezing = (amplitude / Math.PI) * (Math.sin(phi) - u * phi);
-    }
-  }
-
+  const { frozenShare, degreesAboveFreezing } =
+    sinusoidalFreezeBudget(warm, cold, params.freezeTemperatureC);
   const balance =
     frozenShare * moisture - params.snowMeltDegreeDay * degreesAboveFreezing;
   return smoothstep(
@@ -1639,6 +1712,43 @@ export function snowYearBudget(warm, cold, moisture, params) {
     params.snowBalanceRequiredM + params.snowBalanceWidth,
     balance
   );
+}
+
+/**
+ * How much sea ice survives a year's melt season, as 0 to 1 -- the sea-water
+ * equivalent of snowYearBudget above, and deliberately not the same function
+ * with a different threshold. Land snow needs moisture to fall before it can
+ * accumulate; sea ice needs none, because seawater below its own freezing
+ * point (`seaIceTemperatureC`, physical, about -1.8 C) freezes directly. So
+ * the accumulation term here is the frozen share of the year on its own,
+ * never multiplied by anything standing in for supply.
+ *
+ * `seaIceMeltDegreeDay`/`seaIceBalanceRequired`/`seaIceBalanceWidth` are this
+ * mechanism's own empirical constants -- not reused from the land-snow ones,
+ * because the two budgets are in different units (a snowfall-and-moisture
+ * balance is not a freeze-duration balance) and fitting them together would
+ * hide which mechanism a future change was actually tuning.
+ *
+ * Returns both **perennial** ice -- the annual net balance, i.e. ice that
+ * does not fully melt and so persists from one year's freeze into the next
+ * -- and **seasonal** ice -- the share of the year that ever freezes at all,
+ * whether or not it survives the melt. The two are kept distinct because a
+ * coast that freezes over every winter and clears every summer (seasonal)
+ * and one that never fully opens (perennial) are different places, even
+ * though today only `perennial` is painted and scored -- see the module's
+ * sea-ice section for why: the teacher's cloud-free composite shows what
+ * lasts, not the far larger area that freezes each winter.
+ */
+export function seaIceYearBudget(warm, cold, params) {
+  const { frozenShare, degreesAboveFreezing } =
+    sinusoidalFreezeBudget(warm, cold, params.seaIceTemperatureC);
+  const balance = frozenShare - params.seaIceMeltDegreeDay * degreesAboveFreezing;
+  const perennial = smoothstep(
+    params.seaIceBalanceRequired - params.seaIceBalanceWidth,
+    params.seaIceBalanceRequired + params.seaIceBalanceWidth,
+    balance
+  );
+  return { perennial, seasonal: frozenShare };
 }
 
 // ---------------------------------------------------------------------------

@@ -163,6 +163,39 @@ continue.
   longitude-dependent ITCZ and surviving ice all stand up together
   (Teacher B 19.32%, seasonal classes 17.0). Candidates in
   `worlds/kasoku-sekai/snow-ice-candidates.json`.
+- **V0.8 sea-ice-as-a-year's-budget (current, done, off by default)**: the
+  last structural collapse standing between the model and a large parameter
+  search across all four realistic-season mechanisms at once. Sea ice was
+  judged by the identical shape of bug land snow had: a single smoothstep on
+  the *warm*-season sea-surface temperature, so raising `seasonalSensitivityC`
+  to 25 pushed the Arctic Ocean's own centre to +2.3 C and sea ice collapsed
+  to exactly **0%** everywhere on Earth (from 53.7% IoU at the shipped
+  season). Diagnosed first, then three candidates measured before choosing:
+  shifting the threshold reaches the same 53.7% ceiling but needs an
+  unphysical "+3 C melt point" (rejected, same reasoning as land snow's
+  rejected +6 C candidate); a formation-times-survival multiplication tops
+  out around 29% even at an unphysical 60 C survival range; the adopted
+  design integrates a sinusoidal year exactly like land snow's does, sharing
+  the geometry (`sinusoidalFreezeBudget`, extracted from `snowYearBudget`)
+  but never its moisture term, since seawater below `seaIceTemperatureC`
+  (physical, -1.8 C) freezes directly with nothing to run short of. Four new
+  parameters, all `empirical`, `seaIceBalanceWeight` defaulting to **0** so
+  the shipped app is bit-for-bit what it was (all 8 internal field hashes plus
+  both painted textures confirmed identical against the pre-change commit).
+  Sea ice at a real season goes **0.0% -> 53.3% IoU** with land ice, Teacher
+  B, its seasonal classes, and every ITCZ region gain all unchanged; confirmed
+  monotonic under warming/cooling on both the real Earth raster and five
+  synthetic all-ocean worlds (cold, warm, strongly seasonal, zero-tilt
+  control, a temperature sweep), so the mechanism is not Earth-pole-specific.
+  A 2000-trial small Pareto search (4 shards, hard constraints excluding any
+  ice-collapse solution) found sea ice never collapses anywhere on the front
+  (52.7-53.7% throughout). See "V0.8: sea ice as a year's budget" and
+  `docs/sea-ice-seasonal-balance-experiment.md`. Candidates in
+  `worlds/kasoku-sekai/sea-ice-candidates.json`. A large-scale (10,000-trial
+  class) search across all four mechanisms together is designed and ready
+  (`tools/search_climate_seaice.mjs`, checkpointing and `--resume` verified)
+  but was **deliberately not run** this round -- the user reviews this
+  round's result first.
 - **V0.9+**: cities, borders/territories, historical eras, and other
   過速世界-specific data. Several distinct features, not one version —
   treat each as its own sub-version. **Needs the user's own world-setting
@@ -2795,6 +2828,66 @@ becomes roughly 55% total if sea ice returns to its usual ~54. **Fix that
 before any large search**, or the search will pull the season back down to
 protect the sea ice, which is precisely the tug-of-war this round removed
 from the land.
+
+## V0.8: sea ice as a year's budget
+
+Full write-up in `docs/sea-ice-seasonal-balance-experiment.md`; the short
+version. This closes the exact gap the snow round above ended on.
+
+**The problem, diagnosed before trusting the guess.** Sea ice's rule had the
+identical shape to land snow's broken one: a single smoothstep on the *warm*
+season's sea-surface temperature against `seaIceTemperatureC` (-1.8 C,
+physical). At `seasonalSensitivityC` 25 the Arctic Ocean's own centre warms to
++2.3 C in its warm season -- while its cold season, at -6.5 C, is *colder*
+than before -- and since the threshold never moves, sea ice collapses to
+exactly **0.0%** everywhere on Earth, from 53.7% IoU at the shipped season.
+
+**Three candidates, measured before choosing.** (A) move the threshold: tops
+out at the same **53.7%** ceiling land snow's analogous candidate reached, but
+needs the freezing point shifted to **+3 C** -- 4.8 C off the real, physical
+-1.8 C, the same kind of fudge already rejected for land. (B) an annual
+freeze-minus-melt budget, sharing land snow's sinusoid geometry
+(`sinusoidalFreezeBudget`, extracted out of `snowYearBudget` for both to
+share) but never its moisture term, since seawater below freezing simply
+freezes with nothing to run short of: **53.7%**, matching A without the fake
+melting point. (C) formation-times-survival, two smoothsteps multiplied: caps
+near **29%** even at a physically absurd 60 C survival range, because a
+single warm-season excess cannot stand in for a whole year's melt the way an
+integrated degree-day sum can. B was chosen on principle (A ties B in score
+but needs the unphysical constant) and on measurement (C is worse regardless).
+
+**What B is.** `seaIceYearBudget` returns both a **perennial** value (the
+annual net balance -- ice that does not fully melt and so persists year to
+year, which is what gets painted and scored, matching what the teacher's
+cloud-free composite actually shows) and a **seasonal** value (the raw
+frozen-time share, kept as an internal diagnostic only -- no UI, nothing new
+drawn). Four new parameters, all `empirical`, `seaIceBalanceWeight` (0-1,
+defaulting to **0**) plus its own melt-rate and required-balance constants
+(deliberately not shared with land snow's -- different units, same shape).
+
+**What it bought.** Sea ice **0.0% -> 53.3% IoU** (recall 75%, precision
+65%) with land ice, Teacher B, its seasonal classes, and every ITCZ region
+gain all unchanged -- verified by direct comparison, not assumption. Confirmed
+monotonic under warming and cooling on both the real Earth raster (peaking
+exactly at Earth's own 14 C, unprompted, the same self-validating pattern
+Stage 6 found for the whole model) and five synthetic all-ocean worlds (cold,
+warm, strongly seasonal, a zero-tilt control, a temperature sweep) -- so nothing
+here depends on Earth's actual pole geometry or coastline. A 2000-trial small
+Pareto search (4 shards, hard constraints excluding any ice-collapse solution
+structurally rather than discovering it after the fact) found sea ice never
+collapses anywhere on the front: every one of 20 kept candidates holds
+52.7-53.7% IoU, whatever the season strength.
+
+**Bit-identical when off.** All 8 of the model's internal field hashes plus
+both painted textures match the pre-change commit exactly at
+`seaIceBalanceWeight`'s default of 0.
+
+**Prepared but not run: the large-scale search.** `tools/search_climate_seaice.mjs`
+is a real, checkpointed, resumable 2-objective (Teacher A, Teacher B) Pareto
+search across all twelve season/ITCZ/snow/sea-ice parameters together --
+smoke-tested (trial cap, `--resume`, `--merge` all verified working) but
+**deliberately not run at the 10,000-trial scale this round**. The user
+reviews this round's small-scale result first.
 
 ## The panel move (after Stage 6)
 
