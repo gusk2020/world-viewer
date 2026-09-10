@@ -191,6 +191,63 @@ export const CLIMATE_PARAMETERS = {
       "At the top of its range this is effectively off.",
   },
 
+  // ---- Snow and ice as a year's budget (this experiment) ------------------
+  //
+  // The snow rule above this asks one question of one moment: is the warmest
+  // season above a threshold. Measured, that is why a physically real season
+  // destroys the ice -- the fitted threshold sits at -11.8 C, which only ever
+  // meant "cold enough given that this model has almost no summer", and
+  // raising seasonalSensitivityC to 25 lifts the warm season by 10-24 C and
+  // walks every ice sheet straight over it (land-ice agreement 79.3% -> 8.8%,
+  // and the model keeps only 0.29% of the globe iced against the teacher's
+  // 3.33%).
+  //
+  // These four ask a year instead: snow falls while the surface is below
+  // freezing and there is moisture to fall, melt removes it in proportion to
+  // how far and how long the year runs above freezing, and permanent ice is
+  // what is left over. Both halves come from the same two seasons already
+  // computed, integrated analytically over a sinusoidal year -- so a short
+  // fierce summer removes far less than a long mild one, which is exactly the
+  // saturation a single warm-season snapshot cannot express.
+  snowBalanceWeight: {
+    value: 0, kind: "empirical", min: 0, max: 1,
+    note:
+      "How much of the snow decision comes from the year's budget rather than " +
+      "the warm-season threshold above. 0 is the threshold alone and " +
+      "reproduces the shipped model exactly, which is the default so that " +
+      "every set saved before this keeps drawing what it drew.",
+  },
+  snowMeltDegreeDay: {
+    value: 0.06, kind: "empirical", min: 0, max: 1,
+    note:
+      "How much snow one degree of year-mean warmth above freezing removes, " +
+      "against an accumulation of 1 for a year spent wholly frozen and wholly " +
+      "moist. The degree-day factor of a real mass balance, in this model's " +
+      "own arbitrary snow units rather than millimetres.",
+  },
+  snowBalanceRequiredM: {
+    value: 0.1, kind: "empirical", min: -0.5, max: 1,
+    note:
+      "How much net accumulation a place needs before it holds ice all year. " +
+      "Above zero because a real surface also loses snow to wind and to " +
+      "sublimation, neither of which this model has, and because one grid " +
+      "cell 20 km across is not glaciated the moment its average balance " +
+      "turns positive.",
+  },
+  snowBalanceWidth: {
+    value: 0.15, kind: "empirical", min: 0.02, max: 1, search: false,
+    note:
+      "How softly that crossing is made, in the same snow units. The ice edge " +
+      "is a gradient on the ground and the user asked for gradients rather " +
+      "than steps, so this is floored well above zero -- and kept out of the " +
+      "search for the reason Stage 7 recorded for the other blend widths: a " +
+      "class resolved to one label per pixel flips exactly at the centre of " +
+      "the ramp whatever its width, so the reported score is measurably, " +
+      "identically blind to this (0.05 and 0.50 give the same figure to every " +
+      "decimal). A search given it would be fitting noise, and what it would " +
+      "actually control -- how hard the ice edge looks -- nothing scores.",
+  },
+
   growingSeasonWeight: {
     value: 0.7, kind: "empirical", min: 0, max: 1,
     note:
@@ -1506,10 +1563,82 @@ export function classifyPoint(
   // lowland is forest, and it is why this needed seasons before it could be
   // asked at all.
   const meltPoint = params.freezeTemperatureC + params.snowSummerMeltC;
-  out[SURFACE_SNOW] = 1 - smoothstep(
+  const threshold = 1 - smoothstep(
     meltPoint - params.snowBlendC, meltPoint + params.snowBlendC, warm
   );
+
+  // ...and the year's budget, which asks the same question of the whole year
+  // rather than of its warmest moment. Skipped outright when switched off, so
+  // the shipped model costs nothing for it and comes out bit-identical.
+  const w = params.snowBalanceWeight;
+  if (w > 0) {
+    const cold = annual + coldDeltaC;
+    out[SURFACE_SNOW] = threshold + (snowYearBudget(warm, cold, moisture, params) - threshold) * w;
+  } else {
+    out[SURFACE_SNOW] = threshold;
+  }
   return out;
+}
+
+/**
+ * How much of a year's snowfall survives its melt season, as 0 to 1.
+ *
+ * The two seasons this model computes are the ends of a year, not the year
+ * itself, so both halves of the budget are integrated over a sinusoid running
+ * between them. That is the whole idea: **a year is a duration, and a single
+ * warm-season temperature cannot say how long anything lasted.**
+ *
+ *   accumulation  the share of the year spent below freezing, times the
+ *                 moisture available to fall as snow. So a bitterly cold
+ *                 desert accumulates little, which is why the driest cold
+ *                 places on any world should not silently ice over.
+ *   melt          the year-mean of how far the surface stands above freezing.
+ *                 For T(t) = mean + amplitude*cos(t) this has a closed form,
+ *                 and it saturates the right way by construction: a brief
+ *                 fierce summer contributes a fraction of what a long mild one
+ *                 does, without any cap being imposed by hand and without ever
+ *                 breaking "warmer melts more".
+ *
+ * Nothing here reads a latitude, a coordinate or a place -- only the two
+ * temperatures and the moisture the model already has for that point, so it
+ * works unchanged on a world with no seasons (the amplitude goes to zero and
+ * both terms fall back to their annual-mean limits) or on one tilted 80.
+ */
+export function snowYearBudget(warm, cold, moisture, params) {
+  const mean = (warm + cold) / 2;
+  const amplitude = (warm - cold) / 2;
+  const freeze = params.freezeTemperatureC;
+
+  let frozenShare;
+  let degreesAboveFreezing;
+  if (!(amplitude > 1e-6)) {
+    // No season worth the name: the year is one temperature.
+    frozenShare = mean < freeze ? 1 : 0;
+    degreesAboveFreezing = Math.max(0, mean - freeze);
+  } else {
+    const u = (freeze - mean) / amplitude;
+    if (u >= 1) {
+      frozenShare = 1;
+      degreesAboveFreezing = 0;
+    } else if (u <= -1) {
+      frozenShare = 0;
+      degreesAboveFreezing = mean - freeze;
+    } else {
+      // The year crosses freezing twice; phi is how far round the cycle it
+      // spends above it.
+      const phi = Math.acos(u);
+      frozenShare = 1 - phi / Math.PI;
+      degreesAboveFreezing = (amplitude / Math.PI) * (Math.sin(phi) - u * phi);
+    }
+  }
+
+  const balance =
+    frozenShare * moisture - params.snowMeltDegreeDay * degreesAboveFreezing;
+  return smoothstep(
+    params.snowBalanceRequiredM - params.snowBalanceWidth,
+    params.snowBalanceRequiredM + params.snowBalanceWidth,
+    balance
+  );
 }
 
 // ---------------------------------------------------------------------------

@@ -146,6 +146,23 @@ continue.
   reason Stage 7.5 already identified. Nothing was applied to the world's
   config; the Pareto candidates are in
   `worlds/kasoku-sekai/itcz-candidates.json`.
+- **V0.8 snow-as-a-year's-budget (current, done, off by default)**: the one
+  thing standing between the model and a physically real season. The old snow
+  rule asked whether the warmest season cleared a fitted threshold of
+  -11.78 C, so raising `seasonalSensitivityC` to 25 lifted the warm season by
+  10-24 C and walked every ice sheet over it (land ice 79.4% -> 8.8%). The
+  replacement integrates a sinusoidal year between the two seasons already
+  computed: snow accumulates while below freezing and there is moisture to
+  fall, melt is the year-mean excess above freezing (which saturates by
+  construction), and permanent ice is the remainder. Four new parameters, all
+  `empirical`, `snowBalanceWeight` defaulting to **0** so the shipped app is
+  bit-for-bit what it was. See "V0.8: snow as a year's budget" and
+  `docs/snow-ice-balance-experiment.md`. Land ice at a real season goes
+  **8.8% -> 63.0%** with Teacher B and every ITCZ region gain unchanged, and
+  the search then found a point where a real season, a strong
+  longitude-dependent ITCZ and surviving ice all stand up together
+  (Teacher B 19.32%, seasonal classes 17.0). Candidates in
+  `worlds/kasoku-sekai/snow-ice-candidates.json`.
 - **V0.9+**: cities, borders/territories, historical eras, and other
   過速世界-specific data. Several distinct features, not one version —
   treat each as its own sub-version. **Needs the user's own world-setting
@@ -2713,6 +2730,71 @@ fixed season).
   silently switched nothing and passed. The real hooks are `window.__loadWorld`
   and `window.__currentWorld`. Same lesson as V0.7.1's graticule probe: when a
   measurement says "no effect", suspect the measurement.
+
+## V0.8: snow as a year's budget
+
+Full write-up in `docs/snow-ice-balance-experiment.md`; the short version.
+
+**The problem, measured.** `classifyPoint`'s snow line was
+`warm season < freezeTemperatureC + snowSummerMeltC`, fitted to **-11.78 C**.
+That number never meant a melt point -- it meant "cold enough, given that this
+model has almost no summer". Raise `seasonalSensitivityC` from 4 to 25 and the
+warm season rises by 10-24 C while the threshold stays put, so Greenland's
+interior goes -28.8 -> -8.9 C, Antarctica's -29.1 -> -6.5, and land-ice
+agreement collapses **79.4% -> 8.8%** with the model keeping 0.29% of the
+globe iced against the teacher's 3.33%. Recall 8.8%, precision 100%: what
+survived was right, there was just almost none of it.
+
+**Three candidates, compared before choosing.** (A) move the threshold: tops
+out at **65.9%**, but needs a melt point of **+6 C** and still cannot see
+moisture at all. (B) an annual accumulation-minus-melt budget: **63.3%**.
+(C) a saturating melt response: subsumed by B, so not built separately.
+**A scores 2.6 points higher on Earth and B was still chosen**, because A's
++6 C is exactly the same kind of fudge as the -11.78 C that just broke --
+proved by holding each setting still and sweeping the season: A at -11.8 runs
+79.3 -> 8.8 across s=4..25, A at +6 runs 32.0 -> 65.9. Every threshold works
+at exactly one season strength.
+
+**What B is.** `snowYearBudget` integrates a sinusoid running between the two
+seasons the model already has. Accumulation is the share of the year below
+freezing times the moisture available to fall; melt is the year-mean excess
+above freezing, which for a sinusoid has the closed form
+`(amplitude/pi)(sin phi - u*phi)`. That form is the point: **a short fierce
+summer removes far less than a long mild one**, saturating with no cap
+imposed by hand and without breaking "warmer melts more". Nothing reads a
+latitude or a place, and a world with no seasons falls back to the
+annual-mean limits.
+
+**What it bought.** At `seasonalSensitivityC` 25 with the longitude ITCZ on:
+land ice **8.8% -> 63.0%** (recall 74%, precision 81%, area 3.04% against the
+teacher's 3.33%), Teacher A total 28.07% -> 42.72%, and **Teacher B, the
+seasonal classes and every region number identical** -- the snow fix takes
+nothing from the ITCZ work. The 1600-trial Pareto search then found
+`pareto-balanced`: a real season, the ITCZ at full strength and ice at 63%,
+with Teacher B **19.32%** and the seasonal classes at **17.0**.
+
+**Three things worth remembering.**
+- **The default melt coefficient was off by a decade and nothing said so.**
+  0.06 let Siberia and Canada ice over completely (model area 8-10% against
+  3.33%); the working band is 0.3-0.7. Accumulation is dimensionless 0-1 and
+  melt is in degrees 0-25, and the two only balance in that band.
+- **Blending A and B beat neither.** Five weights times four thresholds, and
+  the best point was always A alone. "Mix them and get the best of both" was
+  measured and refuted.
+- **`snowBalanceWidth` is `search: false`** for the reason Stage 7 recorded
+  for the other blend widths, and this time it was checked rather than
+  assumed: 0.05 and 0.50 give figures identical to every decimal, because a
+  class resolved to one label per pixel flips at the centre of the ramp
+  whatever its width.
+
+**The largest thing still broken, and it is the same bug.** Sea ice is
+**0.0%** at a real season, because it is judged by an identical threshold
+(`seaIceTemperatureC` against a damped warm season) and fails identically.
+It is worth about **13 points of Teacher A** on its own -- 47/55/63/**0**
+becomes roughly 55% total if sea ice returns to its usual ~54. **Fix that
+before any large search**, or the search will pull the season back down to
+protect the sea ice, which is precisely the tug-of-war this round removed
+from the land.
 
 ## The panel move (after Stage 6)
 
