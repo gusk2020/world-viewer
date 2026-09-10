@@ -33,3 +33,11 @@ shard 2: trial 1029/10000, front 1, rejected 475
 shard 2: trial 1063/10000, front 1, rejected 494
 shard 2: trial 1097/10000, front 1, rejected 513
 shard 2: trial 1130/10000, front 1, rejected 525
+shard 2: trial 1164/10000, front 1, rejected 539
+shard 2: trial 1196/10000, front 1, rejected 552
+shard 2: trial 1229/10000, front 1, rejected 565
+shard 2: trial 1263/10000, front 1, rejected 579
+shard 2: trial 1296/10000, front 1, rejected 593
+shard 2: trial 1330/10000, front 1, rejected 608
+shard 2: stopping at patience 500
+shard 2 done: trial 1359, front 1, rejected 616. Wrote runs/seaice-large/shard-2.json
