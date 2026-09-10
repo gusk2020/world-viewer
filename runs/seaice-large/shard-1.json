@@ -1,8 +1,8 @@
 {
  "shard": 1,
- "trial": 3162,
- "rejected": 1610,
- "sinceImprovement": 20,
+ "trial": 3225,
+ "rejected": 1643,
+ "sinceImprovement": 50,
  "bestHypervolume": 0.11251699317752246,
  "constraints": {
   "iceAreaMin": 0.003,
@@ -64,7 +64,7 @@
    1
   ]
  },
- "elapsedMs": 974274,
+ "elapsedMs": 994653,
  "front": [
   {
    "params": {

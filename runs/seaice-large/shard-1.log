@@ -95,3 +95,5 @@ shard 1: trial 3062/10000, front 9, rejected 1552
 shard 1: trial 3096/10000, front 9, rejected 1571
 shard 1: trial 3129/10000, front 11, rejected 1588
 shard 1: trial 3162/10000, front 11, rejected 1610
+shard 1: trial 3193/10000, front 11, rejected 1623
+shard 1: trial 3225/10000, front 11, rejected 1643
