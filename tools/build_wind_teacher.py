@@ -54,23 +54,27 @@ import urllib.request
 import numpy as np
 
 SOURCE_BASE = "https://downloads.psl.noaa.gov/Datasets/ncep.reanalysis.derived"
-# The 850hPa product uses the pre-computed long-term-mean ("ltm") file, not
-# the full 1948-present monthly-mean record: the full pressure-level record
-# spans 17 levels (not just 850), so downloading it just to keep one level's
-# slice pulls down about 17x more data than needed -- confirmed the hard
-# way, not guessed: the first real attempt to fetch uwnd.mon.mean.nc timed
-# out (HTTP 504) at PSL's own gateway before finishing. The ltm file already
-# is a 12-calendar-month climatology at every level, so no per-level waste.
-# Its own reference period is read from the file's metadata at build time
-# and recorded honestly rather than assumed -- see monthly_climatology().
-# The 10m product has no such multi-level waste (a single level to begin
-# with), so it keeps fetching the full record and building an exact
-# 1991-2020 climatology to match the temperature teacher's own period.
+# Both levels use PSL's own pre-computed long-term-mean ("ltm") files rather
+# than the full 1948-present monthly-mean records. Confirmed the hard way,
+# not guessed: the first real attempt fetched the full 850hPa record (17
+# pressure levels, ~17x more data than the one level actually used) and hit
+# an HTTP 504 at PSL's own gateway; the second attempt used the 850hPa ltm
+# file (fast) but kept the 10m fetch on the full record, which then ran long
+# enough (cancelled after ~14 minutes still in progress) to look like the
+# same problem on a single-level file that should have been much smaller --
+# consistent with PSL's server being generally slow for large transfers
+# through this project's proxy path, not specifically a multi-level issue.
+# Both levels now use the lighter ltm file; each one's own reference period
+# is read from its file's metadata at build time and recorded honestly
+# rather than assumed -- see monthly_climatology() and
+# docs/climate-v1-wind-validation.md section 7 for what period each
+# actually turned out to be and why an exact 1991-2020 match was not
+# pursued at the cost of an unreliable multi-attempt fetch.
 SOURCES = {
     "u850": f"{SOURCE_BASE}/pressure/uwnd.mon.ltm.nc",
     "v850": f"{SOURCE_BASE}/pressure/vwnd.mon.ltm.nc",
-    "u10m": f"{SOURCE_BASE}/surface_gauss/uwnd.10m.mon.mean.nc",
-    "v10m": f"{SOURCE_BASE}/surface_gauss/vwnd.10m.mon.mean.nc",
+    "u10m": f"{SOURCE_BASE}/surface_gauss/uwnd.10m.mon.ltm.nc",
+    "v10m": f"{SOURCE_BASE}/surface_gauss/vwnd.10m.mon.ltm.nc",
 }
 LEVEL_HPA = 850
 CLIMATOLOGY_START_YEAR = 1991
