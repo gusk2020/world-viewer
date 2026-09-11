@@ -54,28 +54,54 @@ import urllib.request
 import numpy as np
 
 SOURCE_BASE = "https://downloads.psl.noaa.gov/Datasets/ncep.reanalysis.derived"
+# The 850hPa product uses the pre-computed long-term-mean ("ltm") file, not
+# the full 1948-present monthly-mean record: the full pressure-level record
+# spans 17 levels (not just 850), so downloading it just to keep one level's
+# slice pulls down about 17x more data than needed -- confirmed the hard
+# way, not guessed: the first real attempt to fetch uwnd.mon.mean.nc timed
+# out (HTTP 504) at PSL's own gateway before finishing. The ltm file already
+# is a 12-calendar-month climatology at every level, so no per-level waste.
+# Its own reference period is read from the file's metadata at build time
+# and recorded honestly rather than assumed -- see monthly_climatology().
+# The 10m product has no such multi-level waste (a single level to begin
+# with), so it keeps fetching the full record and building an exact
+# 1991-2020 climatology to match the temperature teacher's own period.
 SOURCES = {
-    "u850": f"{SOURCE_BASE}/pressure/uwnd.mon.mean.nc",
-    "v850": f"{SOURCE_BASE}/pressure/vwnd.mon.mean.nc",
+    "u850": f"{SOURCE_BASE}/pressure/uwnd.mon.ltm.nc",
+    "v850": f"{SOURCE_BASE}/pressure/vwnd.mon.ltm.nc",
     "u10m": f"{SOURCE_BASE}/surface_gauss/uwnd.10m.mon.mean.nc",
     "v10m": f"{SOURCE_BASE}/surface_gauss/vwnd.10m.mon.mean.nc",
 }
 LEVEL_HPA = 850
 CLIMATOLOGY_START_YEAR = 1991
-CLIMATOLOGY_END_YEAR = 2020  # inclusive, matching the temperature teacher
+CLIMATOLOGY_END_YEAR = 2020  # inclusive, matching the temperature teacher; applies to the 10m fetch only (see above)
 
 
-def fetch(url, dest, cache_dir):
+def fetch(url, dest, cache_dir, attempts=4, timeout_s=180):
     cache_dir.mkdir(parents=True, exist_ok=True)
     path = cache_dir / dest
     if path.exists():
         print(f"  using cached {path} ({path.stat().st_size} bytes)")
         return path
-    print(f"  downloading {url}")
-    t0 = time.time()
-    urllib.request.urlretrieve(url, path)
-    print(f"  fetched {path.stat().st_size} bytes in {time.time() - t0:.1f}s")
-    return path
+    last_error = None
+    for attempt in range(1, attempts + 1):
+        print(f"  downloading {url} (attempt {attempt}/{attempts})")
+        t0 = time.time()
+        try:
+            with urllib.request.urlopen(url, timeout=timeout_s) as response, open(path, "wb") as out:
+                out.write(response.read())
+            print(f"  fetched {path.stat().st_size} bytes in {time.time() - t0:.1f}s")
+            return path
+        except (urllib.error.URLError, TimeoutError) as e:
+            last_error = e
+            print(f"  attempt {attempt} failed after {time.time() - t0:.1f}s: {e}")
+            if path.exists():
+                path.unlink()
+            if attempt < attempts:
+                backoff = 5 * (2 ** (attempt - 1))
+                print(f"  retrying in {backoff}s")
+                time.sleep(backoff)
+    raise SystemExit(f"failed to fetch {url} after {attempts} attempts: {last_error}")
 
 
 def month_index(time_var, year, month):
@@ -90,14 +116,58 @@ def month_index(time_var, year, month):
     raise SystemExit(f"could not find {year}-{month:02d} in the time axis (units={time_var.units})")
 
 
-def climatology_annual_mean(path, level_hpa=None):
-    """Returns (annual_mean_2d, lat_1d, lon_1d, had_missing_below_ground)."""
+def monthly_climatology(path, level_hpa=None):
+    """Returns (monthly_mean_3d [12,lat,lon], lat_1d, lon_1d, had_missing_below_ground, period_label).
+
+    Deliberately stops at the 12-calendar-month climatology and lets the
+    caller decide what to do with it -- computing a scalar mean speed
+    correctly needs each *component*'s own monthly value (u and v together,
+    before they are combined into a speed), not a speed already collapsed to
+    one number per variable. See build_level() for where u and v are joined.
+
+    Handles two shapes of source file, detected from the time axis rather
+    than assumed from the filename:
+      - a pre-computed "ltm" (long-term-mean) file: exactly 12 time steps,
+        already the calendar-month climatology PSL computed. Its reference
+        period is read from the file's own global attributes (printed at
+        build time) rather than assumed -- NOAA's LTM convention has changed
+        base period before and this project has been burned by assuming a
+        number instead of reading it (see the temperature stage's own
+        history of getting a wrong constant from memory).
+      - a full multi-year monthly-mean record: sliced to exactly
+        CLIMATOLOGY_START_YEAR-CLIMATOLOGY_END_YEAR by real calendar dates,
+        then averaged into the same [12,lat,lon] shape.
+    """
     import netCDF4 as nc
     d = nc.Dataset(str(path))
     var_name = [k for k in d.variables if k in ("uwnd", "vwnd")][0]
     var = d.variables[var_name]
     lat = np.array(d.variables["lat"][:], dtype=np.float64)
     lon = np.array(d.variables["lon"][:], dtype=np.float64)
+    n_time = d.variables["time"].shape[0]
+
+    if level_hpa is not None:
+        levels = np.array(d.variables["level"][:])
+        level_indices = np.where(levels == level_hpa)[0]
+        if len(level_indices) == 0:
+            raise SystemExit(f"level {level_hpa} hPa not found in {path} (levels: {levels})")
+        li = int(level_indices[0])
+    else:
+        li = None
+
+    if n_time == 12:
+        # Already a 12-month climatology (an .ltm.nc file). Report whatever
+        # the file itself says about its reference period.
+        period_bits = []
+        for attr in d.ncattrs():
+            value = str(getattr(d, attr))
+            if any(tok in value for tok in ("limatology", "base period", "1981", "1991", "2010", "2020", "LTM", "ltm")):
+                period_bits.append(f"{attr}={value}")
+        period_label = "; ".join(period_bits) if period_bits else "(no period stated in file metadata -- see build log's full attribute dump)"
+        raw = var[:, li, :, :] if li is not None else var[:, :, :]
+        monthly_mean = np.ma.filled(raw, np.nan).astype(np.float64)  # already (12, lat, lon)
+        had_missing = bool(np.isnan(monthly_mean).any())
+        return monthly_mean, lat, lon, had_missing, period_label
 
     i0 = month_index(d.variables["time"], CLIMATOLOGY_START_YEAR, 1)
     i1 = month_index(d.variables["time"], CLIMATOLOGY_END_YEAR, 12) + 1
@@ -106,26 +176,17 @@ def climatology_annual_mean(path, level_hpa=None):
     if n_months != n_years * 12:
         raise SystemExit(f"expected {n_years * 12} months, got {n_months} -- check the time axis")
 
-    if level_hpa is not None:
-        levels = np.array(d.variables["level"][:])
-        level_indices = np.where(levels == level_hpa)[0]
-        if len(level_indices) == 0:
-            raise SystemExit(f"level {level_hpa} hPa not found in {path} (levels: {levels})")
-        li = int(level_indices[0])
-        raw = var[i0:i1, li, :, :]
-    else:
-        raw = var[i0:i1, :, :]
-
+    raw = var[i0:i1, li, :, :] if li is not None else var[i0:i1, :, :]
     data = np.ma.filled(raw, np.nan).astype(np.float64)
     had_missing = bool(np.isnan(data).any())
     monthly = data.reshape(n_years, 12, *data.shape[1:])
-    monthly_mean = np.nanmean(monthly, axis=0)  # (12, lat, lon) -- missing stays missing only if ALL years missing there
     # A cell missing in every one of the 30 Januaries (say) is genuinely
     # below ground in every one of them -- nanmean over an all-NaN slice
     # correctly returns NaN with a RuntimeWarning, which is the honest
     # answer, not a bug to suppress.
-    annual_mean = np.nanmean(monthly_mean, axis=0)  # (lat, lon)
-    return annual_mean, lat, lon, had_missing
+    monthly_mean = np.nanmean(monthly, axis=0)  # (12, lat, lon)
+    period_label = f"{CLIMATOLOGY_START_YEAR}-{CLIMATOLOGY_END_YEAR} (computed from the full monthly record)"
+    return monthly_mean, lat, lon, had_missing, period_label
 
 
 def reorient(grid, lat):
@@ -150,20 +211,56 @@ def area_weighted_mean(values, lat_deg):
     return float(np.average(values[finite], weights=w[finite]))
 
 
+# Calendar-month index (0=Jan..11=Dec) for the DJF/JJA composites -- future
+# use only (see docs/climate-v1-wind-validation.md section on seasonality);
+# not analysed this stage.
+DJF_MONTHS = [11, 0, 1]
+JJA_MONTHS = [5, 6, 7]
+
+
 def build_level(cache_dir, level_hpa, u_url, v_url, label):
     u_path = fetch(u_url, f"{label}_u.nc", cache_dir)
     v_path = fetch(v_url, f"{label}_v.nc", cache_dir)
-    u, lat, lon, u_missing = climatology_annual_mean(u_path, level_hpa)
-    v, _, _, v_missing = climatology_annual_mean(v_path, level_hpa)
-    print(f"  {label}: grid {u.shape[1]}x{u.shape[0]}, lat[0]={lat[0]} lat[-1]={lat[-1]}, "
-          f"lon[0]={lon[0]} lon[-1]={lon[-1]}, missing-below-ground found: {u_missing or v_missing}")
-    u_r = reorient(u, lat)
-    v_r = reorient(v, lat)
+    u_monthly, lat, lon, u_missing, period_label = monthly_climatology(u_path, level_hpa)  # (12, lat, lon)
+    v_monthly, _, _, v_missing, _ = monthly_climatology(v_path, level_hpa)
+    had_missing = bool(u_missing or v_missing)
+    print(f"  {label}: grid {u_monthly.shape[2]}x{u_monthly.shape[1]}, lat[0]={lat[0]} lat[-1]={lat[-1]}, "
+          f"lon[0]={lon[0]} lon[-1]={lon[-1]}, missing-below-ground found: {had_missing}")
+    print(f"  {label}: climatology period = {period_label}")
+
+    # annualMeanU/V: the plain time-mean of each *component* -- this is what
+    # a monsoon reversal cancels toward zero, because opposite-signed months
+    # average away. Kept separate from meanScalarSpeed on purpose; see
+    # docs/climate-v1-wind-validation.md section 4.
+    annual_mean_u = np.nanmean(u_monthly, axis=0)
+    annual_mean_v = np.nanmean(v_monthly, axis=0)
+    annual_resultant_speed = np.hypot(annual_mean_u, annual_mean_v)
+
+    # meanScalarSpeed: speed computed *per calendar month first*, then
+    # averaged -- this is the quantity a monsoon reversal does NOT cancel,
+    # because sqrt(u^2+v^2) is always positive regardless of which way the
+    # wind blew that month. By the triangle inequality this is always >=
+    # annualResultantSpeed; how much bigger says how much of the real wind's
+    # strength an annual-mean-vector model like Climate v0.8's throws away.
+    monthly_speed = np.hypot(u_monthly, v_monthly)  # (12, lat, lon)
+    mean_scalar_speed = np.nanmean(monthly_speed, axis=0)
+
+    djf_u = np.nanmean(u_monthly[DJF_MONTHS], axis=0)
+    djf_v = np.nanmean(v_monthly[DJF_MONTHS], axis=0)
+    jja_u = np.nanmean(u_monthly[JJA_MONTHS], axis=0)
+    jja_v = np.nanmean(v_monthly[JJA_MONTHS], axis=0)
+
     lat_north_to_south = lat  # already north-to-south, per reorient()'s own check
     return {
-        "u": u_r.astype(np.float32), "v": v_r.astype(np.float32),
-        "width": u_r.shape[1], "height": u_r.shape[0],
-        "lat": lat_north_to_south, "hadMissingBelowGround": bool(u_missing or v_missing),
+        "u": reorient(annual_mean_u, lat).astype(np.float32),
+        "v": reorient(annual_mean_v, lat).astype(np.float32),
+        "annualResultantSpeed": reorient(annual_resultant_speed, lat).astype(np.float32),
+        "meanScalarSpeed": reorient(mean_scalar_speed, lat).astype(np.float32),
+        "djfU": reorient(djf_u, lat).astype(np.float32), "djfV": reorient(djf_v, lat).astype(np.float32),
+        "jjaU": reorient(jja_u, lat).astype(np.float32), "jjaV": reorient(jja_v, lat).astype(np.float32),
+        "width": annual_mean_u.shape[1], "height": annual_mean_u.shape[0],
+        "lat": lat_north_to_south, "hadMissingBelowGround": had_missing,
+        "periodLabel": period_label,
     }
 
 
@@ -181,26 +278,32 @@ def main():
     p10m = build_level(cache_dir, None, SOURCES["u10m"], SOURCES["v10m"], "u10mv10m")
 
     for label, level in [("850hPa", p850), ("10m", p10m)]:
-        speed = np.hypot(level["u"], level["v"])
-        finite = np.isfinite(speed)
-        gm = area_weighted_mean(speed, level["lat"])
-        print(f"  {label}: {int(finite.sum())}/{speed.size} finite cells, "
-              f"area-weighted mean resultant speed {gm:.2f} m/s, max {np.nanmax(speed):.1f} m/s")
+        finite = np.isfinite(level["annualResultantSpeed"])
+        gm_resultant = area_weighted_mean(level["annualResultantSpeed"], level["lat"])
+        gm_scalar = area_weighted_mean(level["meanScalarSpeed"], level["lat"])
+        print(f"  {label}: {int(finite.sum())}/{level['annualResultantSpeed'].size} finite cells, "
+              f"area-weighted annualResultantSpeed {gm_resultant:.2f} m/s, meanScalarSpeed {gm_scalar:.2f} m/s "
+              f"(scalar >= resultant by {gm_scalar - gm_resultant:+.2f} m/s -- what a monsoon-cancelling vector "
+              f"mean throws away)")
 
     out_dir = pathlib.Path(args.world_dir) / "teacher"
     out_dir.mkdir(exist_ok=True)
 
+    FIELDS = ["u", "v", "annualResultantSpeed", "meanScalarSpeed", "djfU", "djfV", "jjaU", "jjaV"]
+
     def write_level(level, prefix):
-        u_path = out_dir / f"{prefix}-u-ms.bin"
-        v_path = out_dir / f"{prefix}-v-ms.bin"
-        u_path.write_bytes(level["u"].astype("<f4").tobytes())
-        v_path.write_bytes(level["v"].astype("<f4").tobytes())
-        print(f"  wrote {u_path} and {v_path} ({level['width']}x{level['height']})")
+        files = {}
+        for field in FIELDS:
+            path = out_dir / f"{prefix}-{field}-ms.bin"
+            path.write_bytes(level[field].astype("<f4").tobytes())
+            files[field] = path.name
+        print(f"  wrote {len(FIELDS)} grids for {prefix} ({level['width']}x{level['height']})")
         return {
             "width": level["width"], "height": level["height"],
-            "uFile": u_path.name, "vFile": v_path.name,
+            "files": files,
             "dtype": "float32le", "units": "m/s",
             "hadMissingBelowGround": level["hadMissingBelowGround"],
+            "climatologyPeriod": level["periodLabel"],
         }
 
     grids = {
@@ -210,8 +313,8 @@ def main():
 
     # Sanity checks, refuse to write a summary claiming success if these fail.
     failures = []
-    p850_speed_mean = area_weighted_mean(np.hypot(p850["u"], p850["v"]), p850["lat"])
-    p10m_speed_mean = area_weighted_mean(np.hypot(p10m["u"], p10m["v"]), p10m["lat"])
+    p850_speed_mean = area_weighted_mean(p850["annualResultantSpeed"], p850["lat"])
+    p10m_speed_mean = area_weighted_mean(p10m["annualResultantSpeed"], p10m["lat"])
     # Real Earth: the free troposphere is windier than the friction-slowed
     # surface, and neither should be a near-zero or absurd number.
     if not (3.0 <= p10m_speed_mean <= 12.0):
@@ -222,6 +325,13 @@ def main():
         failures.append("850hPa is not windier than 10m on average -- expected the free troposphere to be windier")
     if not p850["hadMissingBelowGround"]:
         failures.append("no missing-below-ground cells found at 850hPa -- expected some over Tibet/Andes/ice sheets")
+    # meanScalarSpeed must never be less than annualResultantSpeed anywhere
+    # finite (the triangle inequality guarantees this; a violation would mean
+    # a bug in how the two were computed, not a fact about the atmosphere).
+    for label, level in [("850hPa", p850), ("10m", p10m)]:
+        finite = np.isfinite(level["annualResultantSpeed"]) & np.isfinite(level["meanScalarSpeed"])
+        if np.any(level["meanScalarSpeed"][finite] < level["annualResultantSpeed"][finite] - 1e-3):
+            failures.append(f"{label}: meanScalarSpeed < annualResultantSpeed somewhere -- should be impossible")
     if failures:
         raise SystemExit("wind teacher failed its own checks:\n  " + "\n  ".join(failures))
 
@@ -238,7 +348,13 @@ def main():
             "license": "US federal government work -- no reuse restriction. PSL requests acknowledgement in publications.",
             "citation": "NCEP/NCAR Reanalysis 1, NOAA/OAR/ESRL PSL, https://psl.noaa.gov/data/gridded/data.ncep.reanalysis.html",
         },
-        "climatology": {"referencePeriod": f"{CLIMATOLOGY_START_YEAR}-{CLIMATOLOGY_END_YEAR}"},
+        "climatology": {
+            "targetReferencePeriod": f"{CLIMATOLOGY_START_YEAR}-{CLIMATOLOGY_END_YEAR} (matches the temperature teacher)",
+            "level850hPa": p850["periodLabel"],
+            "level10m": p10m["periodLabel"],
+            "note": "See docs/climate-v1-wind-validation.md section 7 for why the two levels may use "
+                    "different periods and what that does and does not affect.",
+        },
         "vectorConvention": {
             "u": "eastward component, positive = blowing toward the east",
             "v": "northward component, positive = blowing toward the north",
@@ -246,12 +362,25 @@ def main():
                     "'wind direction' compass convention ('a north wind' = FROM the north, "
                     "TOWARD the south) -- see docs/climate-v1-wind-validation.md section 15.",
         },
+        "fields": {
+            "u": "annualMeanU -- time-mean of the eastward component (a monsoon reversal cancels toward 0 here)",
+            "v": "annualMeanV -- time-mean of the northward component",
+            "annualResultantSpeed": "sqrt(annualMeanU^2 + annualMeanV^2) -- speed of the annually-averaged vector",
+            "meanScalarSpeed": "time-mean of sqrt(u^2+v^2) computed per calendar month BEFORE averaging -- always "
+                               ">= annualResultantSpeed; the gap is what an annual-mean-vector model cannot see",
+            "djfU": "Dec-Jan-Feb mean U (future use -- not analysed this stage)",
+            "djfV": "Dec-Jan-Feb mean V (future use -- not analysed this stage)",
+            "jjaU": "Jun-Jul-Aug mean U (future use -- not analysed this stage)",
+            "jjaV": "Jun-Jul-Aug mean V (future use -- not analysed this stage)",
+        },
         "primaryLevel": "level850hPa",
         "secondaryLevel": "level10m",
         "grids": grids,
-        "globalMeanResultantSpeedMs": {
-            "level850hPa": round(p850_speed_mean, 3),
-            "level10m": round(p10m_speed_mean, 3),
+        "globalMeanSpeedMs": {
+            "level850hPa": {"annualResultant": round(p850_speed_mean, 3),
+                             "meanScalar": round(area_weighted_mean(p850["meanScalarSpeed"], p850["lat"]), 3)},
+            "level10m": {"annualResultant": round(p10m_speed_mean, 3),
+                         "meanScalar": round(area_weighted_mean(p10m["meanScalarSpeed"], p10m["lat"]), 3)},
         },
         "mask": {
             "method": "source file's own missing value at grid points below the 850 hPa surface "
