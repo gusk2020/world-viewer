@@ -1,0 +1,35 @@
+{
+  "_note": "Earth's real annual-mean surface temperature, for Climate v1's temperature field to be validated against (never fitted to it -- see docs/climate-v1-temperature-validation.md). Built by tools/build_temperature_teacher.py.",
+  "source": {
+    "product": "Berkeley Earth Land+Ocean Gridded Temperature (native 1x1 degree, monthly)",
+    "file": "Land_and_Ocean_LatLong1.nc",
+    "url": "https://berkeley-earth-temperature.s3.amazonaws.com/Global/Gridded/Land_and_Ocean_LatLong1.nc",
+    "fileSizeBytes": 454568996,
+    "institution": "Berkeley Earth Surface Temperature Project",
+    "variable": "Air Surface Temperature -- land cells: near-surface (~2 m) air temperature from station data; ocean cells: sea-surface temperature converted to an air-temperature-equivalent basis. One blended field, Berkeley Earth's own convention, not raw SST.",
+    "license": "Creative Commons BY-NC 4.0 (attribution required, non-commercial use only). This repository commits only a small derived grid (not the source file), for climate-model validation in a non-commercial hobby project.",
+    "citation": "Berkeley Earth Surface Temperature Project, https://berkeleyearth.org/data/"
+  },
+  "climatology": {
+    "referencePeriod": "1991-2020",
+    "method": "Berkeley Earth's own fixed absolute baseline climatology (Jan 1951 - Dec 1980, from this same file) plus the mean monthly anomaly over the reference period, from this same file's anomaly time series -- Berkeley Earth's own documented method for an absolute climatology of any period.",
+    "baselinePeriod": "1951-1980"
+  },
+  "grid": {
+    "width": 360,
+    "height": 180,
+    "resolutionDeg": 1.0,
+    "row0": "north pole (cell centre ~89.5N)",
+    "col0": "cell centre ~-179.5, increasing eastward",
+    "valuesFile": "temperature-annual-mean-c.bin",
+    "dtype": "float32le",
+    "units": "degC",
+    "missingValue": "NaN"
+  },
+  "missingCells": 21,
+  "missingFraction": 0.000324,
+  "globalMeanC": 14.884,
+  "landMeanC_BerkeleyMask": 9.278,
+  "seaMeanC_BerkeleyMask": 17.15,
+  "builtAt": "2026-09-11T03:31:24Z"
+}
