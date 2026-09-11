@@ -19,13 +19,13 @@ Two pressure/height levels, and this is the part worth reading before
 touching anything downstream (see docs/climate-v1-wind-validation.md
 section 6 for the full reasoning):
 
-  - **850 hPa** (`pressure/{u,v}wnd.mon.mean.nc`, level index for 850) is
+  - **850 hPa** (`pressure/{u,v}wnd.mon.ltm.nc`, level index for 850) is
     roughly 1.5 km up -- above most surface friction, in the free
     troposphere where a Hadley/Ferrel/polar-cell idealisation (which is
     exactly what Climate v0.8's `windField` is: an analytic large-scale
     circulation with no boundary-layer drag term at all) is a much fairer
     comparison than the surface. **This is the primary teacher.**
-  - **10 m** (`surface_gauss/{u,v}wnd.10m.mon.mean.nc`) is the real surface
+  - **10 m** (`surface_gauss/{u,v}wnd.10m.mon.ltm.nc`) is the real surface
     wind, strongly shaped by friction, coastlines and terrain that
     Climate v0.8 has no representation of at all. Built as a **secondary**
     reference only, to make the "which level is Climate v0.8's wind closer
@@ -35,11 +35,26 @@ section 6 for the full reasoning):
 **The 850 hPa topographic mask.** A pressure surface at 850 hPa sits
 *underground* wherever the real surface is above roughly 1.5 km (the
 Tibetan Plateau, the Andes, the Rockies, Greenland and Antarctica's
-interiors) -- NCEP/NCAR Reanalysis 1's own pressure-level files already
-encode this as a missing value at those grid points (verified directly by
-this script: printed at build time, not assumed), so no separate surface-
-pressure comparison is needed. Cells missing in the source file stay
-missing in the teacher; nothing is interpolated or invented to fill them.
+interiors). **This was checked directly, not assumed, and the first
+assumption was wrong**: NCEP/NCAR Reanalysis 1's full monthly-mean record
+does carry a missing value at below-ground pressure-level points, but the
+pre-computed long-term-mean (`.ltm.nc`) file this script actually fetches
+(for a much smaller, much faster download -- see SOURCES below) does not;
+its `doMonthLTMNC4`-built climatology reports a real-looking number at
+every grid point regardless of ground level. Confirmed by this script's own
+sanity check failing on the first real run ("no missing-below-ground cells
+found at 850hPa") rather than by reading documentation. So the mask is
+built here instead, from the same LTM product's own surface-pressure
+climatology (`SOURCES["surfacePressure"]`): a cell is below ground at
+850 hPa wherever its climatological surface pressure is under 850 hPa.
+Nothing is interpolated across the mask; masked cells are written as NaN.
+
+**Reference period**: NCEP/NCAR Reanalysis 1's `.ltm.nc` files use PSL's
+documented 1981-2010 base period (confirmed from PSL's own published
+description of the product, since the file's own metadata carries only a
+processing-history string, not the reference years -- see
+docs/climate-v1-wind-validation.md section 7 for that gap and why the
+number here is trusted anyway).
 
 License: NCEP/NCAR Reanalysis is produced by NOAA, a US federal agency, and
 carries no reuse restriction -- PSL only asks for acknowledgement in
@@ -75,8 +90,14 @@ SOURCES = {
     "v850": f"{SOURCE_BASE}/pressure/vwnd.mon.ltm.nc",
     "u10m": f"{SOURCE_BASE}/surface_gauss/uwnd.10m.mon.ltm.nc",
     "v10m": f"{SOURCE_BASE}/surface_gauss/vwnd.10m.mon.ltm.nc",
+    # Same 2.5-degree regular grid as the pressure-level files (not the
+    # Gaussian surface_gauss grid the 10m fields use) -- confirmed at build
+    # time, not assumed: the mask is only valid if built on the same grid
+    # it is applied to.
+    "surfacePressure": f"{SOURCE_BASE}/surface/pres.sfc.mon.ltm.nc",
 }
 LEVEL_HPA = 850
+NCEP_LTM_PERIOD = "1981-2010"  # PSL's documented base period for .ltm.nc files -- not stated in the file's own metadata
 CLIMATOLOGY_START_YEAR = 1991
 CLIMATOLOGY_END_YEAR = 2020  # inclusive, matching the temperature teacher; applies to the 10m fetch only (see above)
 
@@ -120,7 +141,7 @@ def month_index(time_var, year, month):
     raise SystemExit(f"could not find {year}-{month:02d} in the time axis (units={time_var.units})")
 
 
-def monthly_climatology(path, level_hpa=None):
+def monthly_climatology(path, level_hpa=None, var_names=("uwnd", "vwnd")):
     """Returns (monthly_mean_3d [12,lat,lon], lat_1d, lon_1d, had_missing_below_ground, period_label).
 
     Deliberately stops at the 12-calendar-month climatology and lets the
@@ -132,19 +153,19 @@ def monthly_climatology(path, level_hpa=None):
     Handles two shapes of source file, detected from the time axis rather
     than assumed from the filename:
       - a pre-computed "ltm" (long-term-mean) file: exactly 12 time steps,
-        already the calendar-month climatology PSL computed. Its reference
-        period is read from the file's own global attributes (printed at
-        build time) rather than assumed -- NOAA's LTM convention has changed
-        base period before and this project has been burned by assuming a
-        number instead of reading it (see the temperature stage's own
-        history of getting a wrong constant from memory).
+        already the calendar-month climatology PSL computed. Checked
+        directly (not assumed): this file's own global attributes carry
+        only a processing-history string ("Created .../doMonthLTMNC4"), not
+        the reference years, so the period label comes from NCEP_LTM_PERIOD
+        (PSL's own published documentation) instead -- the file's raw
+        attributes are still printed at build time for the record.
       - a full multi-year monthly-mean record: sliced to exactly
         CLIMATOLOGY_START_YEAR-CLIMATOLOGY_END_YEAR by real calendar dates,
         then averaged into the same [12,lat,lon] shape.
     """
     import netCDF4 as nc
     d = nc.Dataset(str(path))
-    var_name = [k for k in d.variables if k in ("uwnd", "vwnd")][0]
+    var_name = [k for k in d.variables if k in var_names][0]
     var = d.variables[var_name]
     lat = np.array(d.variables["lat"][:], dtype=np.float64)
     lon = np.array(d.variables["lon"][:], dtype=np.float64)
@@ -160,14 +181,12 @@ def monthly_climatology(path, level_hpa=None):
         li = None
 
     if n_time == 12:
-        # Already a 12-month climatology (an .ltm.nc file). Report whatever
-        # the file itself says about its reference period.
-        period_bits = []
-        for attr in d.ncattrs():
-            value = str(getattr(d, attr))
-            if any(tok in value for tok in ("limatology", "base period", "1981", "1991", "2010", "2020", "LTM", "ltm")):
-                period_bits.append(f"{attr}={value}")
-        period_label = "; ".join(period_bits) if period_bits else "(no period stated in file metadata -- see build log's full attribute dump)"
+        # Already a 12-month climatology (an .ltm.nc file). The file's own
+        # attributes are printed for the record, but the authoritative
+        # period is PSL's documented one (NCEP_LTM_PERIOD) -- see the
+        # docstring above for why the attributes alone are not enough.
+        raw_attrs = "; ".join(f"{attr}={getattr(d, attr)}" for attr in d.ncattrs())
+        period_label = f"{NCEP_LTM_PERIOD} (PSL's documented ltm base period; file attributes: {raw_attrs})"
         raw = var[:, li, :, :] if li is not None else var[:, :, :]
         monthly_mean = np.ma.filled(raw, np.nan).astype(np.float64)  # already (12, lat, lon)
         had_missing = bool(np.isnan(monthly_mean).any())
@@ -222,12 +241,27 @@ DJF_MONTHS = [11, 0, 1]
 JJA_MONTHS = [5, 6, 7]
 
 
-def build_level(cache_dir, level_hpa, u_url, v_url, label):
+def build_level(cache_dir, level_hpa, u_url, v_url, label, below_ground_mask=None):
     u_path = fetch(u_url, f"{label}_u.nc", cache_dir)
     v_path = fetch(v_url, f"{label}_v.nc", cache_dir)
     u_monthly, lat, lon, u_missing, period_label = monthly_climatology(u_path, level_hpa)  # (12, lat, lon)
     v_monthly, _, _, v_missing, _ = monthly_climatology(v_path, level_hpa)
     had_missing = bool(u_missing or v_missing)
+
+    # The topographic mask, if the caller built one from surface pressure --
+    # see main(). Applied before anything downstream is computed so every
+    # derived field (annual mean, scalar speed, DJF/JJA) honestly carries
+    # NaN wherever the source file's own missing values did not.
+    if below_ground_mask is not None:
+        if below_ground_mask.shape != u_monthly.shape[1:]:
+            raise SystemExit(
+                f"below_ground_mask shape {below_ground_mask.shape} does not match "
+                f"{label}'s grid {u_monthly.shape[1:]} -- the mask must be built on the same raw grid"
+            )
+        u_monthly = np.where(below_ground_mask[None, :, :], np.nan, u_monthly)
+        v_monthly = np.where(below_ground_mask[None, :, :], np.nan, v_monthly)
+        had_missing = had_missing or bool(np.any(below_ground_mask))
+
     print(f"  {label}: grid {u_monthly.shape[2]}x{u_monthly.shape[1]}, lat[0]={lat[0]} lat[-1]={lat[-1]}, "
           f"lon[0]={lon[0]} lon[-1]={lon[-1]}, missing-below-ground found: {had_missing}")
     print(f"  {label}: climatology period = {period_label}")
@@ -276,8 +310,27 @@ def main():
     cache_dir = pathlib.Path(args.cache)
 
     print(f"building Earth wind teacher ({CLIMATOLOGY_START_YEAR}-{CLIMATOLOGY_END_YEAR} climatology)")
+
+    print("topographic mask: surface pressure climatology, for the 850hPa below-ground mask")
+    pres_path = fetch(SOURCES["surfacePressure"], "pres_sfc.nc", cache_dir)
+    pres_monthly, pres_lat, pres_lon, _, pres_period = monthly_climatology(pres_path, var_names=("pres",))
+    print(f"  surface pressure: grid {pres_monthly.shape[2]}x{pres_monthly.shape[1]}, period = {pres_period}")
+    # Annual-mean surface pressure (Pa in this product -> hPa) is enough for
+    # a static mask: which cells are above/below the 850hPa surface does not
+    # meaningfully change month to month, and a single mask applied to every
+    # field (annual mean, scalar speed, DJF, JJA alike) is simpler and more
+    # defensible than a seasonally-varying one this stage has no use for.
+    # Left in the source file's own (raw) orientation here, matching
+    # u_monthly/v_monthly's orientation at the point build_level() applies
+    # it -- build_level reorients everything together at the very end, so
+    # reorienting the mask separately here would silently misalign it.
+    annual_pres_hpa = np.nanmean(pres_monthly, axis=0) / 100.0
+    below_ground_850 = annual_pres_hpa < LEVEL_HPA
+    print(f"  below-ground-at-850hPa cells: {int(below_ground_850.sum())}/{below_ground_850.size}")
+
     print("primary: 850 hPa")
-    p850 = build_level(cache_dir, LEVEL_HPA, SOURCES["u850"], SOURCES["v850"], "u850v850")
+    p850 = build_level(cache_dir, LEVEL_HPA, SOURCES["u850"], SOURCES["v850"], "u850v850",
+                        below_ground_mask=below_ground_850)
     print("secondary: 10 m")
     p10m = build_level(cache_dir, None, SOURCES["u10m"], SOURCES["v10m"], "u10mv10m")
 
@@ -387,9 +440,13 @@ def main():
                          "meanScalar": round(area_weighted_mean(p10m["meanScalarSpeed"], p10m["lat"]), 3)},
         },
         "mask": {
-            "method": "source file's own missing value at grid points below the 850 hPa surface "
-                      "(confirmed present at build time -- see build log), never interpolated or filled",
+            "method": "the pre-computed 850hPa ltm file was checked directly and does NOT come pre-masked "
+                      "below ground (unlike the full monthly-mean record, which does) -- so the mask is "
+                      "built here instead, from the same product's own surface-pressure ltm climatology: "
+                      "a cell is masked wherever its annual-mean surface pressure is under 850 hPa. Applied "
+                      "once (not seasonally) to every 850hPa field alike. Never interpolated or filled.",
             "appliesTo": "level850hPa only; level10m has no topographic mask (10m is always above the surface by definition)",
+            "belowGroundCellCount": int(below_ground_850.sum()),
         },
         "builtAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
