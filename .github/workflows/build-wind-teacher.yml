@@ -51,10 +51,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add "worlds/${world}/teacher/wind-850hpa-u-ms.bin" \
-                   "worlds/${world}/teacher/wind-850hpa-v-ms.bin" \
-                   "worlds/${world}/teacher/wind-10m-u-ms.bin" \
-                   "worlds/${world}/teacher/wind-10m-v-ms.bin" \
+          git add "worlds/${world}/teacher/"wind-*-ms.bin \
                    "worlds/${world}/teacher/wind-summary.json"
           if git diff --cached --quiet; then
             echo "wind teacher data unchanged"
