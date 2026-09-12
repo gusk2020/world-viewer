@@ -1,0 +1,93 @@
+{
+  "_note": "Earth's real annual-mean wind, for Climate v1's wind field to be validated against -- never fitted to it. See docs/climate-v1-wind-validation.md. Built by tools/build_wind_teacher.py.",
+  "source": {
+    "product": "NCEP/NCAR Reanalysis 1, monthly means (derived)",
+    "urls": {
+      "u850": "https://downloads.psl.noaa.gov/Datasets/ncep.reanalysis.derived/pressure/uwnd.mon.ltm.nc",
+      "v850": "https://downloads.psl.noaa.gov/Datasets/ncep.reanalysis.derived/pressure/vwnd.mon.ltm.nc",
+      "u10m": "https://downloads.psl.noaa.gov/Datasets/ncep.reanalysis.derived/surface_gauss/uwnd.10m.mon.ltm.nc",
+      "v10m": "https://downloads.psl.noaa.gov/Datasets/ncep.reanalysis.derived/surface_gauss/vwnd.10m.mon.ltm.nc",
+      "surfacePressure": "https://downloads.psl.noaa.gov/Datasets/ncep.reanalysis.derived/surface/pres.sfc.mon.ltm.nc"
+    },
+    "institution": "NOAA Physical Sciences Laboratory",
+    "license": "US federal government work -- no reuse restriction. PSL requests acknowledgement in publications.",
+    "citation": "NCEP/NCAR Reanalysis 1, NOAA/OAR/ESRL PSL, https://psl.noaa.gov/data/gridded/data.ncep.reanalysis.html"
+  },
+  "climatology": {
+    "targetReferencePeriod": "1991-2020 (matches the temperature teacher)",
+    "level850hPa": "1981-2010 (PSL's documented ltm base period; file attributes: title=monthly mean u wind from the NCEP Reanalysis; description=Data from NCEP initialized reanalysis (4x/day).  These are interpolated to pressure surfaces from model (sigma) surfaces; platform=Model; Conventions=COARDS; NCO=20121012; history=Created 2021/07/26 by doMonthLTMNC4; dataset_title=NCEP-NCAR Reanalysis 1; References=http://www.psl.noaa.gov/data/gridded/data.ncep.reanalysis.derived.html; not_missing_threshold_percent=minimum 3% values input to have non-missing output value)",
+    "level10m": "1981-2010 (PSL's documented ltm base period; file attributes: Conventions=COARDS; description=Data is from NMC initialized reanalysis\n(4x/day).  It consists of T62 variables interpolated to\npressure surfaces from model (sigma) surfaces.; platform=Model; NCO=20121013; history=Created 2021/07/26 by doMonthLTMNC4; title=monthly mean uwnd.10m from the NCEP Reanalysis; dataset_title=NCEP-NCAR Reanalysis 1; References=http://www.psl.noaa.gov/data/gridded/data.ncep.reanalysis.derived.html; not_missing_threshold_percent=minimum 3% values input to have non-missing output value)",
+    "note": "See docs/climate-v1-wind-validation.md section 7 for why the two levels may use different periods and what that does and does not affect."
+  },
+  "vectorConvention": {
+    "u": "eastward component, positive = blowing toward the east",
+    "v": "northward component, positive = blowing toward the north",
+    "note": "This is the 'blows toward' meteorological vector convention, NOT the 'wind direction' compass convention ('a north wind' = FROM the north, TOWARD the south) -- see docs/climate-v1-wind-validation.md section 15."
+  },
+  "fields": {
+    "u": "annualMeanU -- time-mean of the eastward component (a monsoon reversal cancels toward 0 here)",
+    "v": "annualMeanV -- time-mean of the northward component",
+    "annualResultantSpeed": "sqrt(annualMeanU^2 + annualMeanV^2) -- speed of the annually-averaged vector",
+    "meanScalarSpeed": "time-mean of sqrt(u^2+v^2) computed per calendar month BEFORE averaging -- always >= annualResultantSpeed; the gap is what an annual-mean-vector model cannot see",
+    "djfU": "Dec-Jan-Feb mean U (future use -- not analysed this stage)",
+    "djfV": "Dec-Jan-Feb mean V (future use -- not analysed this stage)",
+    "jjaU": "Jun-Jul-Aug mean U (future use -- not analysed this stage)",
+    "jjaV": "Jun-Jul-Aug mean V (future use -- not analysed this stage)"
+  },
+  "primaryLevel": "level850hPa",
+  "secondaryLevel": "level10m",
+  "grids": {
+    "level850hPa": {
+      "width": 144,
+      "height": 73,
+      "files": {
+        "u": "wind-850hpa-u-ms.bin",
+        "v": "wind-850hpa-v-ms.bin",
+        "annualResultantSpeed": "wind-850hpa-annualResultantSpeed-ms.bin",
+        "meanScalarSpeed": "wind-850hpa-meanScalarSpeed-ms.bin",
+        "djfU": "wind-850hpa-djfU-ms.bin",
+        "djfV": "wind-850hpa-djfV-ms.bin",
+        "jjaU": "wind-850hpa-jjaU-ms.bin",
+        "jjaV": "wind-850hpa-jjaV-ms.bin"
+      },
+      "dtype": "float32le",
+      "units": "m/s",
+      "hadMissingBelowGround": true,
+      "climatologyPeriod": "1981-2010 (PSL's documented ltm base period; file attributes: title=monthly mean u wind from the NCEP Reanalysis; description=Data from NCEP initialized reanalysis (4x/day).  These are interpolated to pressure surfaces from model (sigma) surfaces; platform=Model; Conventions=COARDS; NCO=20121012; history=Created 2021/07/26 by doMonthLTMNC4; dataset_title=NCEP-NCAR Reanalysis 1; References=http://www.psl.noaa.gov/data/gridded/data.ncep.reanalysis.derived.html; not_missing_threshold_percent=minimum 3% values input to have non-missing output value)"
+    },
+    "level10m": {
+      "width": 192,
+      "height": 94,
+      "files": {
+        "u": "wind-10m-u-ms.bin",
+        "v": "wind-10m-v-ms.bin",
+        "annualResultantSpeed": "wind-10m-annualResultantSpeed-ms.bin",
+        "meanScalarSpeed": "wind-10m-meanScalarSpeed-ms.bin",
+        "djfU": "wind-10m-djfU-ms.bin",
+        "djfV": "wind-10m-djfV-ms.bin",
+        "jjaU": "wind-10m-jjaU-ms.bin",
+        "jjaV": "wind-10m-jjaV-ms.bin"
+      },
+      "dtype": "float32le",
+      "units": "m/s",
+      "hadMissingBelowGround": false,
+      "climatologyPeriod": "1981-2010 (PSL's documented ltm base period; file attributes: Conventions=COARDS; description=Data is from NMC initialized reanalysis\n(4x/day).  It consists of T62 variables interpolated to\npressure surfaces from model (sigma) surfaces.; platform=Model; NCO=20121013; history=Created 2021/07/26 by doMonthLTMNC4; title=monthly mean uwnd.10m from the NCEP Reanalysis; dataset_title=NCEP-NCAR Reanalysis 1; References=http://www.psl.noaa.gov/data/gridded/data.ncep.reanalysis.derived.html; not_missing_threshold_percent=minimum 3% values input to have non-missing output value)"
+    }
+  },
+  "globalMeanSpeedMs": {
+    "level850hPa": {
+      "annualResultant": 4.879,
+      "meanScalar": 5.343
+    },
+    "level10m": {
+      "annualResultant": 3.19,
+      "meanScalar": 3.564
+    }
+  },
+  "mask": {
+    "method": "the pre-computed 850hPa ltm file was checked directly and does NOT come pre-masked below ground (unlike the full monthly-mean record, which does) -- so the mask is built here instead, from the same product's own surface-pressure ltm climatology: a cell is masked wherever its annual-mean surface pressure is under 850 hPa. Applied once (not seasonally) to every 850hPa field alike. Never interpolated or filled.",
+    "appliesTo": "level850hPa only; level10m has no topographic mask (10m is always above the surface by definition)",
+    "belowGroundCellCount": 1128
+  },
+  "builtAt": "2026-09-12T08:42:20Z"
+}
