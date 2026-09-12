@@ -89,5 +89,5 @@
     "appliesTo": "level850hPa only; level10m has no topographic mask (10m is always above the surface by definition)",
     "belowGroundCellCount": 1128
   },
-  "builtAt": "2026-09-12T08:42:20Z"
+  "builtAt": "2026-09-12T08:48:13Z"
 }
