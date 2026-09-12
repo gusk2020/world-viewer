@@ -315,18 +315,40 @@ def main():
     pres_path = fetch(SOURCES["surfacePressure"], "pres_sfc.nc", cache_dir)
     pres_monthly, pres_lat, pres_lon, _, pres_period = monthly_climatology(pres_path, var_names=("pres",))
     print(f"  surface pressure: grid {pres_monthly.shape[2]}x{pres_monthly.shape[1]}, period = {pres_period}")
-    # Annual-mean surface pressure (Pa in this product -> hPa) is enough for
-    # a static mask: which cells are above/below the 850hPa surface does not
-    # meaningfully change month to month, and a single mask applied to every
-    # field (annual mean, scalar speed, DJF, JJA alike) is simpler and more
-    # defensible than a seasonally-varying one this stage has no use for.
+    # Annual-mean surface pressure is enough for a static mask: which cells
+    # are above/below the 850hPa surface does not meaningfully change month
+    # to month, and a single mask applied to every field (annual mean,
+    # scalar speed, DJF, JJA alike) is simpler and more defensible than a
+    # seasonally-varying one this stage has no use for.
     # Left in the source file's own (raw) orientation here, matching
     # u_monthly/v_monthly's orientation at the point build_level() applies
     # it -- build_level reorients everything together at the very end, so
     # reorienting the mask separately here would silently misalign it.
-    annual_pres_hpa = np.nanmean(pres_monthly, axis=0) / 100.0
+    #
+    # Unit resolution, checked rather than assumed: real surface pressure
+    # averages close to 1013 hPa at sea level. The raw NCEP value came back
+    # in whatever unit the file actually uses (COARDS-convention NCEP files
+    # are inconsistent between Pa and hPa across products), so the global
+    # mean of the raw values -- not their documented units string, which the
+    # first attempt trusted and got wrong (it produced ~10 hPa everywhere
+    # and masked all 10512/10512 cells as below ground) -- decides whether a
+    # /100 conversion from Pa is needed.
+    raw_global_mean = float(np.nanmean(pres_monthly))
+    if 500 <= raw_global_mean <= 1500:
+        annual_pres_hpa = np.nanmean(pres_monthly, axis=0)
+        pres_unit_note = f"already hPa (raw global mean {raw_global_mean:.1f})"
+    elif 50000 <= raw_global_mean <= 150000:
+        annual_pres_hpa = np.nanmean(pres_monthly, axis=0) / 100.0
+        pres_unit_note = f"Pa, converted /100 (raw global mean {raw_global_mean:.1f})"
+    else:
+        raise SystemExit(f"surface pressure's raw global mean ({raw_global_mean:.1f}) is neither "
+                          "plausible hPa nor plausible Pa -- refusing to guess a conversion")
+    print(f"  surface pressure units: {pres_unit_note}")
     below_ground_850 = annual_pres_hpa < LEVEL_HPA
     print(f"  below-ground-at-850hPa cells: {int(below_ground_850.sum())}/{below_ground_850.size}")
+    if not (100 <= below_ground_850.sum() <= 3000):
+        raise SystemExit(f"below-ground-at-850hPa cell count ({int(below_ground_850.sum())}) is implausible "
+                          "for Earth's real high terrain -- refusing to write a teacher built on it")
 
     print("primary: 850 hPa")
     p850 = build_level(cache_dir, LEVEL_HPA, SOURCES["u850"], SOURCES["v850"], "u850v850",
