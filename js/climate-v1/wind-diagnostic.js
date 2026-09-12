@@ -127,8 +127,57 @@ function angleBetweenDeg(eastA, northA, eastB, northB) {
 export function compareWindToTeacher({
   modelWind, teacher, modelSpeedScaleMS = 1, minTeacherSpeedForDirectionMS = 1,
 }) {
+  const result = compareSamplerToTeacher({
+    teacher,
+    minTeacherSpeedForDirectionMS,
+    sampleModelRow: (latDeg) => {
+      const modelRow = nearestModelRow(latDeg, modelWind.rows);
+      return [modelWind.east[modelRow] * modelSpeedScaleMS, modelWind.north[modelRow] * modelSpeedScaleMS];
+    },
+  });
+  if (result) result.modelSpeedScaleMS = modelSpeedScaleMS;
+  return result;
+}
+
+/**
+ * Scores a full 2-D model wind field (Stage 4's new pressure-gradient
+ * model, which genuinely varies with longitude) against the same teacher,
+ * through the **same metric code** `compareWindToTeacher` uses -- so an
+ * old-vs-new comparison is never an artefact of two different scorers.
+ *
+ * `modelField`: { width, height, uWindMs, vWindMs } already in m/s. No
+ * scale factor is accepted, deliberately: this model produces real units,
+ * and offering a K here would reintroduce exactly the fitted-magnitude
+ * crutch Stage 4 exists to remove.
+ */
+export function compareWindFieldToTeacher({ modelField, teacher, minTeacherSpeedForDirectionMS = 1 }) {
+  if (!modelField || !modelField.uWindMs || !modelField.vWindMs) {
+    throw new Error("compareWindFieldToTeacher requires { width, height, uWindMs, vWindMs } in m/s");
+  }
+  const mw = modelField.width;
+  const mh = modelField.height;
+  return compareSamplerToTeacher({
+    teacher,
+    minTeacherSpeedForDirectionMS,
+    sampleModelCell: (lngDeg, latDeg) => {
+      const mx = Math.min(mw - 1, Math.max(0, Math.floor(((lngDeg + 180) / 360) * mw)));
+      const my = Math.min(mh - 1, Math.max(0, Math.floor(((90 - latDeg) / 180) * mh)));
+      const i = my * mw + mx;
+      return [modelField.uWindMs[i], modelField.vWindMs[i]];
+    },
+  });
+}
+
+/**
+ * The shared scoring core. Takes either a per-row sampler (a
+ * latitude-only model, like Climate v0.8's) or a per-cell sampler (a real
+ * 2-D field), and accumulates every metric identically for both.
+ */
+function compareSamplerToTeacher({
+  teacher, sampleModelRow = null, sampleModelCell = null, minTeacherSpeedForDirectionMS = 1,
+}) {
   if (!teacher || !teacher.u || !teacher.v) {
-    throw new Error("compareWindToTeacher requires a teacher grid { width, height, u, v } in m/s");
+    throw new Error("comparing to a teacher requires a grid { width, height, u, v } in m/s");
   }
   const { width, height, u: teacherU, v: teacherV } = teacher;
   let n = 0;
@@ -148,15 +197,20 @@ export function compareWindToTeacher({
   for (let y = 0; y < height; y++) {
     const latDeg = latitudeDegOfRow(y, height);
     const weight = Math.cos((latDeg * Math.PI) / 180);
-    const modelRow = nearestModelRow(latDeg, modelWind.rows);
-    const modelEastMS = modelWind.east[modelRow] * modelSpeedScaleMS;
-    const modelNorthMS = modelWind.north[modelRow] * modelSpeedScaleMS;
-    const modelSpeedMS = Math.hypot(modelEastMS, modelNorthMS);
+    // A row-only model is sampled once per row; a 2-D field once per cell.
+    let rowEastMS = 0, rowNorthMS = 0;
+    if (sampleModelRow) [rowEastMS, rowNorthMS] = sampleModelRow(latDeg);
     for (let x = 0; x < width; x++) {
       const i = y * width + x;
       const tU = teacherU[i];
       const tV = teacherV[i];
       if (!Number.isFinite(tU) || !Number.isFinite(tV)) continue; // e.g. a land mask on an ocean-only product, or below-ground at 850hPa
+      let modelEastMS = rowEastMS, modelNorthMS = rowNorthMS;
+      if (sampleModelCell) {
+        const lngDeg = -180 + ((x + 0.5) * 360) / width;
+        [modelEastMS, modelNorthMS] = sampleModelCell(lngDeg, latDeg);
+      }
+      const modelSpeedMS = Math.hypot(modelEastMS, modelNorthMS);
       const teacherSpeedMS = Math.hypot(tU, tV);
 
       n++;
@@ -217,7 +271,6 @@ export function compareWindToTeacher({
     directionSampleCount: dirCount,
     directionExcludedCount: n - dirCount,
     minTeacherSpeedForDirectionMS,
-    modelSpeedScaleMS,
     weighted: {
       biasMS: swSpeedErr / sw,
       speedMaeMS: swAbsSpeedErr / sw,
