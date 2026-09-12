@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 
 import { resolveClimateSets } from "../js/climate.js";
 import {
-  currentModelWind, compareWindToTeacher, fitSpeedScaleK, nearestModelRow,
+  currentModelWind, compareWindToTeacher, fitSpeedScaleK, nearestModelRow, REFERENCE_DAY_HOURS,
 } from "../js/climate-v1/wind-diagnostic.js";
 import { parseWindGrid } from "../js/climate-v1/wind-teacher.js";
 
@@ -197,23 +197,42 @@ function main() {
   assert.ok(trades15N.u < 0, `teacher sanity: 10-20N mean u should be westward (trades), got ${trades15N.u}`);
 
   // ---- rotation synthetic tests (Step 22) ---------------------------------
+  // Tested against windField's own documented formula directly
+  // (turn = (pi/2)*tanh(coriolisStrength*spin*sin(lat)), spin =
+  // direction*REFERENCE_DAY_HOURS/dayLengthHours -- see
+  // docs/climate-v1-wind-validation.md section 16), not inferred from the
+  // resultant vector's atan2 direction. That indirect approach was tried
+  // first and gave a false failure: cellEdgeDeg itself depends on `spin`
+  // (`circulationCellEdgeDeg / spin^cellRotationExponent`), so changing
+  // dayLengthHours can shift which circulation cell a fixed latitude falls
+  // into, flipping `flow`'s own sign independently of how much the
+  // Coriolis term itself turned -- conflating two different effects. The
+  // turn term is tested in isolation instead, which is also a more literal
+  // reading of what "Coriolis turning" means in the formula.
+  const spinOf = (days) => rotationDirection * REFERENCE_DAY_HOURS / Math.max(Math.abs(days), 1e-3);
+  const turnAt = (latDeg, days) => (Math.PI / 2) * Math.tanh(params.coriolisStrength * spinOf(days) * Math.sin((latDeg * Math.PI) / 180));
+
+  const turnFast45 = turnAt(45, dayLengthHours);
+  const turnSlow45 = turnAt(45, dayLengthHours * 20);
+  assert.ok(Math.abs(turnFast45) > Math.abs(turnSlow45),
+    `a slower rotation (longer day) must turn the flow less at 45deg (fast=${turnFast45}, slow=${turnSlow45})`);
+
+  const turnVeryLongDay45 = turnAt(45, dayLengthHours * 5000);
+  assert.ok(Math.abs(turnVeryLongDay45) < 0.01, `near-zero rotation must leave almost no turn at 45deg, got ${turnVeryLongDay45}`);
+
+  const turnEquator = turnAt(0, dayLengthHours);
+  assert.equal(turnEquator, 0, `Coriolis turning must be exactly zero at the equator (sin(0)=0), got ${turnEquator}`);
+  assert.ok(Math.abs(turnEquator) < Math.abs(turnFast45), "Coriolis turning must be weaker at the equator than at 45deg");
+
+  // The east component itself: reversing rotationDirection must reverse it
+  // exactly, everywhere -- this one IS safe to check on the real vector,
+  // since reversing direction alone (not dayLengthHours) never moves a
+  // cell boundary (cellEdgeDeg depends on |spin|, and |spin| is unchanged
+  // by a sign flip).
   const reversed = currentModelWind({ rows: MODEL_ROWS, dayLengthHours, rotationDirection: -rotationDirection, params, subsolarDeg: 0 });
   let maxEastDiff = 0;
   for (let i = 0; i < modelWind.east.length; i++) maxEastDiff = Math.max(maxEastDiff, Math.abs(modelWind.east[i] + reversed.east[i]));
   assert.ok(maxEastDiff < 1e-9, `rotation reversal must exactly reverse the east component (max diff ${maxEastDiff})`);
-
-  const slowSpin = currentModelWind({ rows: MODEL_ROWS, dayLengthHours: dayLengthHours * 20, rotationDirection, params, subsolarDeg: 0 });
-  const row45 = nearestModelRow(45, MODEL_ROWS);
-  const turnFast = Math.atan2(modelWind.east[row45], modelWind.north[row45]);
-  const turnSlow = Math.atan2(slowSpin.east[row45], slowSpin.north[row45]);
-  assert.ok(Math.abs(turnFast) > Math.abs(turnSlow), `a slower rotation (longer day) must turn the flow less at 45deg (fast=${turnFast}, slow=${turnSlow})`);
-
-  const veryLongDay = currentModelWind({ rows: MODEL_ROWS, dayLengthHours: dayLengthHours * 5000, rotationDirection, params, subsolarDeg: 0 });
-  assert.ok(Math.abs(veryLongDay.east[row45]) < 0.05, `near-zero rotation must leave almost no east-west deflection at 45deg, got ${veryLongDay.east[row45]}`);
-
-  const rowEquator = nearestModelRow(0, MODEL_ROWS);
-  const equatorTurn = Math.atan2(modelWind.east[rowEquator], modelWind.north[rowEquator]);
-  assert.ok(Math.abs(equatorTurn) < Math.abs(turnFast), `Coriolis turning must be weaker at the equator than at 45deg (equator=${equatorTurn}, 45deg=${turnFast})`);
 
   // ---- fit K on the primary (850hPa) teacher -------------------------------
   const rowsFor850 = buildModelTeacherRows(t850, modelWind);
