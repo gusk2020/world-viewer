@@ -1,7 +1,7 @@
 {
   "test": "ai-handoff-v1",
-  "cycle": 2,
+  "cycle": 3,
   "maxCycles": 3,
-  "status": "CHATGPT_TURN",
-  "lastActor": "CLAUDE"
+  "status": "CLAUDE_TURN",
+  "lastActor": "CHATGPT"
 }

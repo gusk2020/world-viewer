@@ -42,9 +42,15 @@ DONE
 - どちらの手番でも、処理中に致命的エラーが起きた場合は `status` を
   `ERROR` にして止める（自動では進めない。人間が見るまで待つ）。
 
+### commit SHA の記録ルール
+
+- 各AIは直前の相手のcommit SHAだけをレポートへ記録する。
+- 自分自身のcommit SHAはレポート本文へ埋め込まず、GitHub commitを真実源とする。
+- 自分自身のSHAを書き込むためのcommit後のamendは禁止する。
+
 ## ファイル
 
 - `state.json` — 状態機械の現在値（test名、cycle数、maxCycles、status、lastActor）
-- `claude-report.md` — Claude側の各cycleの記録（PING、時刻、入力state、結果、commit SHA、usage情報）
+- `claude-report.md` — Claude側の各cycleの記録（PING、時刻、入力state、結果、相手のcommit SHA、usage情報）
 - `chatgpt-review.md` — ChatGPT側の各cycleの記録
 - `README.md` — このファイル
