@@ -1,0 +1,48 @@
+name: Claude Auto Trigger Test
+
+on:
+  issue_comment:
+    types: [created]
+
+concurrency:
+  group: claude-auto-trigger-test
+  cancel-in-progress: false
+
+jobs:
+  claude-auto-test:
+    if: >-
+      github.event.issue.pull_request &&
+      github.actor == 'gusk2020' &&
+      startsWith(github.event.issue.title, '[CLAUDE-AUTO-TEST]') &&
+      github.event.comment.body == '[CLAUDE-AUTO-TEST] RUN'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Run Claude one-shot acknowledgement test
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            This is a one-shot GitHub event-trigger test only.
+            Do not modify any repository file.
+            Do not create or modify commits, branches, pull request state, labels, or reviews.
+            Do not run shell commands.
+            Only post or update the Claude result comment with the following content:
+
+            [AUTO-CLAUDE-ACK]
+            result: PASS
+            trigger: GitHub issue_comment
+            production-files-changed: NO
+          claude_args: |
+            --max-turns 2
+            --disallowedTools "Edit,Write,NotebookEdit,Bash,WebSearch"
