@@ -1,0 +1,10 @@
+{
+  "test": "ai-joint-auto-v1",
+  "protocolVersion": 1,
+  "cycle": 1,
+  "maxCycles": 3,
+  "status": "WAITING_AUTH",
+  "lastActor": "SETUP",
+  "lastInputSha": null,
+  "stopReason": "Claude OAuth token has not yet passed the standalone CI test"
+}
