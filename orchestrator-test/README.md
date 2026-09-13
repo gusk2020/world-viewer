@@ -19,26 +19,29 @@ CLAUDE_TURN
    ▼
 CHATGPT_TURN
    │  ChatGPTがchatgpt-review.mdに追記し、state.status を進める
-   ▼
-CLAUDE_TURN  (cycle + 1)
    │
-   ... (maxCycles回くり返す)
-   ▼
-DONE
+   ├─ cycle < maxCycles なら ─▶ CLAUDE_TURN (cycle + 1)
+   │
+   └─ cycle == maxCycles なら（ChatGPTによる最終監査）─▶ DONE
 ```
 
 `status` が `CLAUDE_TURN` のときだけClaude側のワークフローが処理を行い、
 `CHATGPT_TURN` / `DONE` / `ERROR` のときは何もせずに即終了します
 (Claude利用枠を無駄に消費しないため)。
 
+**`DONE` にするのは常にChatGPTの手番であり、Claudeが自分の手番で `DONE`
+にすることはない**（最終cycleでも同じ）。ChatGPTがClaudeの最終cycleの結果
+を監査し終えて初めて `DONE` になる。
+
 ### cycle / status の更新ルール（ChatGPT側実装のための取り決め）
 
-- Claudeの手番: `cycle` はそのまま。処理後、`status` を
-  `cycle < maxCycles` なら `CHATGPT_TURN` へ、`cycle >= maxCycles` なら
-  `DONE` へ進める。`lastActor` は `CLAUDE`。
-- ChatGPTの手番: 処理後、`cycle` を +1 し、`cycle <= maxCycles` なら
-  `status` を `CLAUDE_TURN` へ、`cycle > maxCycles` なら `DONE` へ進める。
-  `lastActor` は `CHATGPT`。
+- Claudeの手番: `cycle` はそのまま。処理後、`status` を常に `CHATGPT_TURN`
+  へ進める（`cycle >= maxCycles` でも `DONE` にはしない）。`lastActor` は
+  `CLAUDE`。
+- ChatGPTの手番: `cycle < maxCycles` なら、Claudeの結果を確認したうえで
+  `cycle` を +1 し `status` を `CLAUDE_TURN` へ進める。`cycle == maxCycles`
+  なら、最終監査として `cycle` は変えずに `status` を `DONE` へ進める。
+  どちらも `lastActor` は `CHATGPT`。
 - どちらの手番でも、処理中に致命的エラーが起きた場合は `status` を
   `ERROR` にして止める（自動では進めない。人間が見るまで待つ）。
 
