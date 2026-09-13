@@ -1,0 +1,110 @@
+name: Joint Handoff Claude Test
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches:
+      - claude/map-app-v0-1-az6aoa
+    paths:
+      - 'orchestrator-joint-test/**'
+      - '.github/workflows/ai-joint-claude.yml'
+
+concurrency:
+  group: joint-handoff-claude-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: read
+  issues: read
+  id-token: write
+
+jobs:
+  claude-turn:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 1
+
+      - name: Validate state and gate Claude call
+        id: gate
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          p = Path('orchestrator-joint-test/state.json')
+          s = json.loads(p.read_text())
+          required = {'test','protocolVersion','cycle','maxCycles','status','lastActor','lastInputSha','stopReason'}
+          if not required.issubset(s):
+              raise SystemExit('Invalid state schema')
+          if s['test'] != 'ai-joint-auto-v1' or s['maxCycles'] != 3:
+              raise SystemExit('Unexpected test identity or maxCycles')
+          if not (1 <= int(s['cycle']) <= int(s['maxCycles'])):
+              raise SystemExit('Invalid cycle')
+          allowed = {'WAITING_AUTH','CLAUDE_TURN','CHATGPT_TURN','USER_DECISION','DONE','ERROR'}
+          if s['status'] not in allowed:
+              raise SystemExit('Invalid status')
+          run = s['status'] == 'CLAUDE_TURN'
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f"run={'true' if run else 'false'}\n")
+              f.write(f"cycle={s['cycle']}\n")
+          print('Claude gate:', 'OPEN' if run else f"CLOSED ({s['status']})")
+          PY
+
+      - name: Run bounded Claude communication turn
+        if: steps.gate.outputs.run == 'true'
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            This is a bounded communication test, cycle ${{ steps.gate.outputs.cycle }} of 3.
+            Do not modify repository files, commits, branches, pull request state, labels, or reviews.
+            Do not run shell commands and do not use web tools.
+            Return a short acknowledgement that the communication turn succeeded.
+          claude_args: |
+            --max-turns 2
+            --disallowedTools "Edit,Write,NotebookEdit,Bash,WebSearch,WebFetch"
+
+      - name: Record successful Claude turn and hand off
+        if: steps.gate.outputs.run == 'true'
+        env:
+          INPUT_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from datetime import datetime, timezone
+          from pathlib import Path
+          state_path = Path('orchestrator-joint-test/state.json')
+          report_path = Path('orchestrator-joint-test/claude-report.md')
+          s = json.loads(state_path.read_text())
+          if s['status'] != 'CLAUDE_TURN':
+              raise SystemExit('State changed before handoff')
+          cycle = int(s['cycle'])
+          stamp = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+          report = report_path.read_text()
+          report += f"\n\n## Cycle {cycle}\n\n- PING-{cycle}\n- result: PASS\n- input commit SHA: {os.environ['INPUT_SHA']}\n- UTC time: {stamp}\n- state transition: CLAUDE_TURN -> CHATGPT_TURN\n- Claude usage: UNAVAILABLE_IN_CI\n"
+          report_path.write_text(report)
+          s['status'] = 'CHATGPT_TURN'
+          s['lastActor'] = 'CLAUDE'
+          s['lastInputSha'] = os.environ['INPUT_SHA']
+          s['stopReason'] = None
+          state_path.write_text(json.dumps(s, indent=2) + '\n')
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add orchestrator-joint-test/state.json orchestrator-joint-test/claude-report.md
+          CHANGED="$(git diff --cached --name-only)"
+          echo "$CHANGED"
+          if echo "$CHANGED" | grep -Ev '^(orchestrator-joint-test/state\.json|orchestrator-joint-test/claude-report\.md)$'; then
+            echo 'Unexpected changed path'
+            exit 1
+          fi
+          git commit -m "[AI-JOINT][CLAUDE_DONE][cycle=${{ steps.gate.outputs.cycle }}]"
+          git push origin HEAD:"$HEAD_BRANCH"
