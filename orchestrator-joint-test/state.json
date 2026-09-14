@@ -3,8 +3,8 @@
   "protocolVersion": 1,
   "cycle": 2,
   "maxCycles": 3,
-  "status": "CLAUDE_TURN",
-  "lastActor": "CHATGPT",
-  "lastInputSha": "d102d8d7e7cc4999eccb3e3645197754db01d27a",
+  "status": "CHATGPT_TURN",
+  "lastActor": "CLAUDE",
+  "lastInputSha": "8e7681773d9ae9807f946ef26a8b176a5c3e5cb2",
   "stopReason": null
 }
