@@ -89,3 +89,33 @@ mechanism.
 Everything above ships **off**: `heatingResponseStrength`,
 `zonalHeatingStrength` and `longitudinalHeatingStrength` all default to 0, so
 Stage 4 is returned bit-identical and the Stage 3 baseline still reproduces.
+
+
+---
+
+## Third attempt: removing the uniform cooling — refuted, and provably so
+
+Hypothesis: the term subtracted from Q to make it sum to zero globally was
+applied at every latitude and was therefore what forced the mid-latitudes.
+Removed from both solvers and re-measured:
+
+| A, z=2, H=100 | tropical dir | mid-lat dir | mid-lat r | vector RMSE | Amazon u |
+| --- | --- | --- | --- | --- | --- |
+| with uniform cooling | 62.9° | 77.6° | −0.455 | 10.106 | −3.69 |
+| without | 62.9° | 77.6° | −0.455 | 10.082 | −3.69 |
+
+**No change at all**, and it could not have been otherwise. A spatially
+*constant* term in Q adds a constant to Φ (∇·(k∇c) = 0 for constant c), and a
+constant Φ has zero gradient, so it produces no wind whatsoever. The mean is
+then removed anyway. This was provable from the equation before running it,
+and should have been.
+
+**The real cause, then.** The Helmholtz decay scale is c/√(f²+r²) ≈ the Rossby
+radius, about 500 km at 45° — so the response *is* local to its forcing. But
+the forcing is not confined: `max(0, zonal mean T − global mean T)` is non-zero
+wherever a latitude is warmer than the global mean, which on Earth reaches
+about 40°. That overlaps the 30–60° evaluation band directly. The mid-latitudes
+are not reached by spreading; they are **inside the heated region**.
+
+Confining the heating to a narrower band would be the forbidden latitude
+restriction. **This line is frozen.**

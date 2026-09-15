@@ -150,18 +150,20 @@ export function buildHadleyCirculation({ temperatureField, body, atmosphere, par
   // Where the heating sits is decided by the planet's own temperature field,
   // not by a latitude: on a world with no tilt, or a different land layout,
   // the warm region moves and the cell moves with it.
+  // NO uniform cooling term. An earlier version subtracted the area mean of
+  // the heating so that Q summed to zero globally. That term was applied at
+  // EVERY latitude, so it forced the mid-latitudes directly rather than
+  // leaving them to be reached by adjustment -- measured as the mid-latitude
+  // collapse in docs/climate-v1-wind-negative-results.md. It is also
+  // unnecessary: the `r*Phi` term in the Helmholtz operator below is already
+  // a damping that balances the forcing, so no separate sink is needed for
+  // the problem to be well posed.
   const positive = new Float64Array(height);
-  let heatW = 0, heatS = 0;
-  for (let y = 0; y < height; y++) {
-    positive[y] = Math.max(0, zonalMeanT[y] - globalMeanT);
-    const w = Math.cos(latRad[y]);
-    heatW += w; heatS += w * positive[y];
-  }
-  const uniformCooling = heatS / heatW;
+  for (let y = 0; y < height; y++) positive[y] = Math.max(0, zonalMeanT[y] - globalMeanT);
   const Q = new Float64Array(height);
   for (let y = 0; y < height; y++) {
     Q[y] = params.heatingResponseStrength * atmosphere.specificGasConstantJPerKgK *
-      (positive[y] - uniformCooling) * REFERENCE_DAMPING_PER_SECOND;
+      positive[y] * REFERENCE_DAMPING_PER_SECOND;
   }
 
   // --- the ODE -------------------------------------------------------------
@@ -277,6 +279,11 @@ export const GILL_PARAMETERS = {
   },
 };
 
+// NOTE ON `r`. One value, `dragTimescaleDays`, is used BOTH as the momentum
+// drag in the balance and as the damping coefficient in the Helmholtz
+// operator. That is the standard linear formulation, but they are physically
+// different rates and nothing here has established that they should be equal.
+// Deliberately NOT separated into two parameters this round.
 export function buildGillCirculation({
   temperatureField, body, atmosphere, dragTimescaleDays,
   params: overrides = {}, maxSweeps = 3000, relaxation = 0.2, convergence = 1e-4,
@@ -313,14 +320,13 @@ export function buildGillCirculation({
   let gw = 0, gs = 0;
   for (let y = 0; y < height; y++) { gw += cosLat[y]; gs += cosLat[y] * zonalMean[y]; }
   const globalMean = gs / gw;
-  let hw = 0, hs = 0;
+  // NO uniform cooling term -- see the note in buildHadleyCirculation.
   const positive = new Float64Array(height);
-  for (let y = 0; y < height; y++) { positive[y] = Math.max(0, zonalMean[y] - globalMean); hw += cosLat[y]; hs += cosLat[y] * positive[y]; }
-  const spreadCooling = hs / hw;
+  for (let y = 0; y < height; y++) positive[y] = Math.max(0, zonalMean[y] - globalMean);
   const Q = new Float64Array(n);
   const scale = Rd * REFERENCE_DAMPING_PER_SECOND;
   for (let y = 0; y < height; y++) {
-    const qz = p.zonalHeatingStrength * (positive[y] - spreadCooling);
+    const qz = p.zonalHeatingStrength * positive[y];
     for (let x = 0; x < width; x++) {
       const ql = p.longitudinalHeatingStrength * (T[y * width + x] - zonalMean[y]);
       Q[y * width + x] = scale * (qz + ql);
