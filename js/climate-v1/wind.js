@@ -245,7 +245,7 @@ export function smoothOnSphere(field, width, height, radiusMetres, scaleKm) {
  *   redesign exists to avoid.
  */
 export function buildWindFromTemperature({
-  temperatureC, width, height, body, atmosphere, params,
+  temperatureC, width, height, body, atmosphere, params, surfaceGeopotentialByRow = null,
 }) {
   const { radiusMetres, dayLengthHours, rotationDirection } = body || {};
   if (!Number.isFinite(radiusMetres) || !Number.isFinite(dayLengthHours) || !Number.isFinite(rotationDirection)) {
@@ -276,6 +276,20 @@ export function buildWindFromTemperature({
   const geopotentialAnomalyM2S2 = new Float64Array(width * height);
   for (let i = 0; i < width * height; i++) {
     geopotentialAnomalyM2S2[i] = hypsometricCoefficient * (smoothedTemperatureC[i] - meanT);
+  }
+  // Optional: the SURFACE mass field Stage 4 otherwise assumes away (see
+  // js/climate-v1/tropical-circulation.js). One value per latitude row, added
+  // to every cell in that row. Omitted, nothing changes and the field above is
+  // bit-identical to what it always was -- which is what keeps Stage 4's
+  // mid-latitude result intact and independently testable.
+  if (surfaceGeopotentialByRow) {
+    if (surfaceGeopotentialByRow.length !== height) {
+      throw new Error(`surfaceGeopotentialByRow must have ${height} rows, got ${surfaceGeopotentialByRow.length}`);
+    }
+    for (let y = 0; y < height; y++) {
+      const add = surfaceGeopotentialByRow[y];
+      for (let x = 0; x < width; x++) geopotentialAnomalyM2S2[y * width + x] += add;
+    }
   }
 
   // -- 3. gradients on the sphere -------------------------------------------
@@ -362,7 +376,7 @@ export function buildWindFromTemperature({
  */
 export function buildClimateV1Wind({
   terrainField, temperatureField, temperatureArray = null,
-  lapseRateCPerKm, body, atmosphere, params,
+  lapseRateCPerKm, body, atmosphere, params, surfaceGeopotentialByRow = null,
   width = 256, height = 128, reduceToSeaLevel = true,
 }) {
   if (!terrainField || !temperatureField) throw new Error("buildClimateV1Wind requires terrainField and temperatureField");
@@ -394,7 +408,7 @@ export function buildClimateV1Wind({
     }
   }
 
-  const field = buildWindFromTemperature({ temperatureC: coarse, width, height, body, atmosphere, params });
+  const field = buildWindFromTemperature({ temperatureC: coarse, width, height, body, atmosphere, params, surfaceGeopotentialByRow });
   field.reducedTemperatureC = coarse;
   field.meta.reduceToSeaLevel = reduceToSeaLevel;
   return field;
