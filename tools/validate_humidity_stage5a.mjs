@@ -21,7 +21,12 @@
 // Stage 5A has zero free parameters, so nothing here can be tuned. A
 // failure is a real error.
 //
-// Usage: node tools/validate_humidity_stage5a.mjs [--json]
+// Usage: node tools/validate_humidity_stage5a.mjs [--json] [--teacher <dir>]
+//
+// `--teacher` exists so the harness itself can be tested against a
+// synthetic teacher before the real data exists -- feeding it the model's
+// own field must return bias ~0 and r ~1, and anything else is a bug in the
+// regridding or the statistics rather than in the physics.
 import { readFileSync, existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -40,7 +45,8 @@ import {
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const WORLD = path.join(REPO, "worlds", "kasoku-sekai");
-const TEACHER_DIR = path.join(WORLD, "teacher");
+const teacherArg = process.argv.indexOf("--teacher");
+const TEACHER_DIR = teacherArg > -1 ? path.resolve(process.argv[teacherArg + 1]) : path.join(WORLD, "teacher");
 
 // Earth's constants live HERE, in the caller, never in js/climate-v1/humidity.js.
 const EARTH_ATMOSPHERE = {

@@ -117,6 +117,19 @@ The adopted form uses the pipeline's *own* temperature field to set the
 column temperature, so the pressure field and the temperature field cannot
 disagree about what the lapse rate is.
 
+The table above is point samples. Measured instead over **the whole real
+land surface** (cosine-weighted, every land cell of the committed raster),
+choosing a fixed 1013.25 hPa instead of the hydrostatic pressure would
+misstate `q_sat` by:
+
+- **8.73%** mean relative error
+- **0.697 g/kg** mean absolute error
+- **−54.3%** at the worst cell
+
+against a land-mean `q_sat` of 12.264 g/kg and a land-mean pressure of
+925.13 hPa. That is the real cost of the cheap option on this project's own
+data, and it is why the cheap option was not taken.
+
 ### Signed elevation on land
 
 `z` is **not** clamped at zero. Ground below sea level genuinely sits under
@@ -213,6 +226,31 @@ rather than discovered later:
 | 10 | the predicted ice-phase bias matches the documented values to three decimals |
 | 11 | the whole 2048×1024 Earth field: all finite, p 463.4–1013.3 hPa, q_sat 0.194–29.49 g/kg, all sea cells exactly p0, built in ~200 ms |
 | 12 | end-to-end through `buildHumidityField`: an injected −430 m land cell gets p > p0 |
+
+### The validation harness was itself verified first
+
+`tools/validate_humidity_stage5a.mjs` takes a `--teacher <dir>` so it can be
+fed a **synthetic** teacher built by pushing the model's own field onto a
+2.5° grid. An identity teacher must come back as bias ≈ 0 and r = 1;
+anything else would be a bug in the regridding or the statistics rather
+than in the physics. It does:
+
+| check | result |
+| --- | --- |
+| pressure, global | bias **+0.003 hPa**, r **1.0000** |
+| pressure, every elevation band | bias ≤ 0.006 hPa, r ≥ 0.9996 |
+| q_sat, and both one-input-substituted variants | bias ≤ 0.02 g/kg, r ≥ 0.9999 |
+| implied RH, with humidity injected at 75% of capacity | **0.750** in every region |
+
+The 0.003 hPa residual is the two regridders' slightly different
+nearest-node rounding, which is the right size for that and nothing else.
+So when the real teacher arrives, a non-zero number will mean something.
+
+This matters because of a lesson this project has now learned twice — the
+V0.7.1 graticule probe and the world-switch regression check both reported
+"no effect" while measuring nothing at all. **When a measurement says
+something surprising, suspect the measurement first**, and the cheapest way
+to do that is to check it against an answer you already know.
 
 ---
 
