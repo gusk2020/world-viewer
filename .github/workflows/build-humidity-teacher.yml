@@ -7,6 +7,12 @@ name: Build humidity teacher
 # This runs on a runner because the user has only a phone and this project's
 # dev sandbox cannot reach downloads.psl.noaa.gov at all -- same arrangement
 # as the terrain, temperature and wind teachers.
+#
+# PSL's gateway returns HTTP 504 in bursts lasting minutes, so the download
+# cache is PERSISTED between runs: a run that gets two of the three fields
+# leaves them behind, and the next run only has to fetch what is missing.
+# Without this, every attempt started from nothing and a flaky hour could
+# never converge.
 
 on:
   workflow_dispatch:
@@ -26,6 +32,14 @@ jobs:
 
       - name: Set up python
         run: pip install --quiet numpy netCDF4
+
+      - name: Restore any previously downloaded source files
+        uses: actions/cache@v4
+        with:
+          path: .cache/humidity-teacher
+          key: humidity-teacher-ncep-r1-${{ github.run_id }}
+          restore-keys: |
+            humidity-teacher-ncep-r1-
 
       - name: Build the teacher
         run: python3 tools/build_humidity_teacher.py --world "${{ inputs.world || 'worlds/kasoku-sekai' }}"
