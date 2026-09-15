@@ -271,6 +271,66 @@ Re-run after the change:
 
 ---
 
+## 7.5. The teacher, and three bugs it found
+
+**Source**: NCEP/NCAR Reanalysis 1 (NOAA/OAR/ESRL PSL), annual mean of the
+12-month long-term-mean climatology. US federal government work, no reuse
+restriction. Three fields: surface pressure (`pres.sfc`), near-surface air
+temperature (`air.2m` on the Gaussian grid, falling back to `air.sig995`),
+and near-surface specific humidity (`shum.2m`).
+
+Every URL is tried from a candidate list and **the one that worked is
+recorded in the summary**; nothing here is asserted from memory. That
+matters because the first probe round returned HTTP 504 for *every* URL
+including a known-good control that Stage 3 had fetched successfully —
+which proves the probe was measuring PSL's availability, not which files
+exist. PSL's gateway fails in bursts lasting minutes; across four real runs
+one fetched everything first try, one needed three attempts per field, and
+one never got surface pressure at all in eight tries. The download cache is
+therefore persisted between runs so attempts accumulate.
+
+Three bugs came out of this, and **none of them was found by reasoning** —
+each was caught by a check or by reading a log, and none was fixable by
+loosening a threshold:
+
+1. **NCEP stores near-surface specific humidity in grams per kg, not
+   kg/kg.** The builder assumed kg/kg, so the first build came back with a
+   peak of 20.55 where kg/kg would be 0.02, and two sanity checks failed.
+   Fixed with a magnitude-based conversion — the same discipline the
+   pressure field already used, because Stage 3 was bitten by trusting a
+   units convention over the data and this was that trap in a new place.
+
+2. **The teacher's grids are not all the same shape.** Surface pressure
+   arrives on NCEP's 144×73 regular grid; the 2 m fields arrive on its
+   192×94 **Gaussian** grid. The validator was indexing all three with one
+   shared flat index, which would have silently compared the wrong cells.
+   Every teacher grid is now sampled through its own axes, and the tool
+   prints each grid's shape so a mismatch is visible rather than silent.
+   **The synthetic-teacher check could not have caught this**, because it
+   built every grid at the same shape — so it now builds humidity at 192×94
+   on purpose. A harness test proves the harness against the case it was
+   given, not against the case the real data turns out to be.
+
+3. **Assumed uniform, cell-centred spacing — three times over.** A Gaussian
+   grid's rows are not evenly spaced and its first row sits at 88.542°, not
+   90° or 89.04°. The sampling formula was right often enough to look
+   correct and wrong where it mattered (it put the Antarctic check at
+   −80.95° instead of −82.85°), and the summary's longitude array was off by
+   half a cell on both grids, because `reorient()` swaps the halves of a
+   0–360 axis so the result starts at exactly −180. All three now use the
+   axes the data actually carries.
+
+Which temperature file wins is **not stable between runs** — the first build
+fell back to `air.sig995` (144×73) because `air.2m` was timing out, the
+second got `air.2m` (192×94). That is precisely why bug 2 mattered and why
+the grid shape is read from the data rather than assumed.
+
+Every check now prints the value it measured, so a failure says what the
+data *is* rather than only that it displeased a threshold — which is what
+left the first failure needing a guess to interpret.
+
+---
+
 ## 8. Open items
 
 1. **Below-sea-level land cannot occur** (§4). It needs a real land mask in
