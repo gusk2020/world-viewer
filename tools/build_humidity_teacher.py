@@ -87,7 +87,14 @@ def annual_mean_field(cache_dir, spec, label):
     errors = []
     for url, dest in spec["candidates"]:
         try:
-            path = fetch(url, dest, cache_dir)
+            # Eight attempts, not the default four: PSL's gateway returns
+            # 504 in bursts that last minutes. Measured across four real
+            # runs, one fetched everything first try, one needed three
+            # attempts per field, and one never got surface pressure at all
+            # in eight tries across two candidates. The cache directory is
+            # persisted between runs by the workflow, so attempts accumulate
+            # rather than starting over.
+            path = fetch(url, dest, cache_dir, attempts=8)
         except SystemExit as e:
             errors.append(f"{url}: {e}")
             print(f"  {label}: {url} unavailable, trying the next candidate")
