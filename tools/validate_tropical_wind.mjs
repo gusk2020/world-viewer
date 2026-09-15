@@ -14,7 +14,7 @@ import { buildTemperatureField } from "../js/climate-v1/temperature.js";
 import { CLIMATE_V1_EARTH_TEMPERATURE_CALIBRATION } from "../js/climate-v1/earth-temperature-calibration.js";
 import { buildHumidityField } from "../js/climate-v1/humidity.js";
 import { buildClimateV1Wind } from "../js/climate-v1/wind.js";
-import { buildHadleyCirculation } from "../js/climate-v1/tropical-circulation.js";
+import { buildHadleyCirculation, buildGillCirculation } from "../js/climate-v1/tropical-circulation.js";
 import { parseWindGrid } from "../js/climate-v1/wind-teacher.js";
 import { parseTeacherGrid } from "../js/climate-v1/humidity-teacher.js";
 import { buildMoistureField, WIND_MODES } from "../js/climate-v1/moisture.js";
@@ -121,15 +121,22 @@ function amazonQ(wind) {
 }
 
 console.log("Stage 5C-wind -- axisymmetric Hadley surface pressure. NCEP = diagnostic teacher only.\n");
-const CASES = [["Stage 4 (unchanged)", null]];
-for (const H of [100, 250, 500]) for (const A of [0.5, 1, 2]) CASES.push([`+Hadley H=${H} A=${A}`, hadley({ equivalentDepthMetres: H, heatingResponseStrength: A }).surfaceGeopotentialM2S2]);
-console.log(`${"case".padEnd(24)} ${"trop dir".padStart(9)} ${"midlat dir".padStart(11)} ${"midlat r".padStart(9)} ${"glob vecRMSE".padStart(13)} ${"Amazon u".padStart(9)}`);
+const gill = (o) => buildGillCirculation({ temperatureField: coarseTemp, body: config.body,
+  atmosphere: { specificGasConstantJPerKgK: 287, gravityMs2: G }, dragTimescaleDays: WIND_PARAMS.dragTimescaleDays, params: o });
+const CASES = [["Stage 4 (baseline)", null]];
+// A = zonal only, B = longitudinal only, C = both. Same solver, same depth.
+for (const H of [100, 250]) {
+  for (const [tag, z, l] of [["A z", 1, 0], ["A z", 2, 0], ["B l", 0, 1], ["B l", 0, 2], ["C both", 1, 1], ["C both", 1, 2], ["C both", 2, 2]]) {
+    CASES.push([`${tag}=${z}/${l} H=${H}`, gill({ equivalentDepthMetres: H, zonalHeatingStrength: z, longitudinalHeatingStrength: l }).surfaceGeopotentialM2S2]);
+  }
+}
+console.log(`${"case".padEnd(20)} ${"trop dir".padStart(9)} ${"midlat dir".padStart(11)} ${"midlat r".padStart(9)} ${"vecRMSE".padStart(9)} ${"Amazon u".padStart(9)}`);
 const out = {};
 for (const [label, sg] of CASES) {
   const wind = makeWind(sg);
   const tr = compare(wind, 0, 30), ml = compare(wind, 30, 60), gl = compare(wind, 0, 90);
   out[label] = { wind, tr, ml, gl, u: amazonZonal(wind) };
-  console.log(`${label.padEnd(24)} ${tr.dir.toFixed(1).padStart(9)} ${ml.dir.toFixed(1).padStart(11)} ${ml.r.toFixed(3).padStart(9)} ${gl.vecRmse.toFixed(3).padStart(13)} ${out[label].u.toFixed(2).padStart(9)}`);
+  console.log(`${label.padEnd(20)} ${tr.dir.toFixed(1).padStart(9)} ${ml.dir.toFixed(1).padStart(11)} ${ml.r.toFixed(3).padStart(9)} ${gl.vecRmse.toFixed(3).padStart(9)} ${out[label].u.toFixed(2).padStart(9)}`);
 }
 console.log("\n(teacher zonal wind over the same Atlantic box, for reference)");
 {
@@ -140,7 +147,7 @@ console.log("\n(teacher zonal wind over the same Atlantic box, for reference)");
   console.log(`  NCEP 850 u = ${(s / n).toFixed(2)} m/s (easterly if negative)`);
 }
 console.log("\n=== declared criteria, best Hadley case vs Stage 4 ===");
-const base = out["Stage 4 (unchanged)"];
+const base = out["Stage 4 (baseline)"];
 let best = null;
 for (const [label, v] of Object.entries(out)) {
   if (label.startsWith("Stage 4")) continue;

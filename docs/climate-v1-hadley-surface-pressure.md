@@ -66,3 +66,44 @@ published one.
 Zonal structure in Q — i.e. the Walker component — is what confines the
 response and makes the trapping argument valid. That is the next stage, and
 this result is the argument for it rather than against it.
+
+
+---
+
+# Addendum — the 2-D Walker component does not rescue it
+
+The hypothesis above ("zonal structure in Q is what confines the response")
+was implemented and **refuted**. `zonalHeatingStrength` and
+`longitudinalHeatingStrength` both default to **0**; production is unchanged.
+
+Q is split into the zonal mean and each cell's departure from its own
+latitude's mean, so the halves switch independently. Same solver, H = 100 m:
+
+| | tropical dir | mid-lat dir | mid-lat r | vector RMSE | Amazon u |
+| --- | --- | --- | --- | --- | --- |
+| Stage 4 baseline | 119.0° | 20.2° | −0.294 | 5.691 | +1.51 |
+| **A** zonal only (z=2) | **62.9°** | 77.6° | −0.455 | 10.106 | **−3.69** |
+| **B** longitudinal only (l=2) | 117.1° | 37.3° | −0.432 | 10.657 | +0.14 |
+| **C** both (z=2,l=2) | 63.8° | 90.4° | −0.564 | 13.161 | −5.07 |
+
+**B alone does nothing for the tropics** (117° against a 119° baseline) and
+never produces an easterly. **C is worse than A** on every extratropical
+measure. Best case is 3/6 — the same three passes and the same three failures
+as the axisymmetric version.
+
+**Why the trapping argument still fails.** The Rossby radius does confine the
+*wave response*: c/f at 45° with c = 50 m/s is about 500 km. But the forcing
+itself is not confined — the spread cooling that balances the localised
+heating is applied at **every latitude**, so the mid-latitudes are forced
+directly rather than reached by wave adjustment. Zonal structure in Q cannot
+fix that, because it is zero in the zonal mean by construction and so leaves
+the symmetric part untouched.
+
+Confining the cooling to the tropics would be a latitude restriction — the
+forbidden lookup table — so nothing was rescued.
+
+**A solver bug found and fixed on the way**: the first 2-D iteration pushed Φ
+toward (−Q − c²·div(u))/r with the Laplacian on the explicit side. That is
+anti-diffusive and every case returned NaN. The operator has to be inverted,
+not evaluated: `r·Φ − c²∇·((r/(f²+r²))∇Φ) = −Q` is a Helmholtz problem, which
+Gauss-Seidel solves without trouble.

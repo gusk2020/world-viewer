@@ -283,12 +283,18 @@ export function buildWindFromTemperature({
   // bit-identical to what it always was -- which is what keeps Stage 4's
   // mid-latitude result intact and independently testable.
   if (surfaceGeopotentialByRow) {
-    if (surfaceGeopotentialByRow.length !== height) {
-      throw new Error(`surfaceGeopotentialByRow must have ${height} rows, got ${surfaceGeopotentialByRow.length}`);
+    if (surfaceGeopotentialByRow.length !== height && surfaceGeopotentialByRow.length !== width * height) {
+      throw new Error(`surfaceGeopotentialByRow must have ${height} rows or ${width * height} cells, got ${surfaceGeopotentialByRow.length}`);
     }
-    for (let y = 0; y < height; y++) {
-      const add = surfaceGeopotentialByRow[y];
-      for (let x = 0; x < width; x++) geopotentialAnomalyM2S2[y * width + x] += add;
+    // Accepts either one value per latitude row (axisymmetric) or a full
+    // width*height field (the 2-D response).
+    if (surfaceGeopotentialByRow.length === width * height) {
+      for (let i = 0; i < width * height; i++) geopotentialAnomalyM2S2[i] += surfaceGeopotentialByRow[i];
+    } else {
+      for (let y = 0; y < height; y++) {
+        const add = surfaceGeopotentialByRow[y];
+        for (let x = 0; x < width; x++) geopotentialAnomalyM2S2[y * width + x] += add;
+      }
     }
   }
 

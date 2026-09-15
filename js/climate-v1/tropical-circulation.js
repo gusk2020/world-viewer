@@ -234,3 +234,158 @@ export function buildHadleyCirculation({ temperatureField, body, atmosphere, par
     },
   };
 }
+
+// ---------------------------------------------------------------------------
+// THE 2-D RESPONSE
+//
+// The axisymmetric solve above fails for a reason it measured itself: with
+// d/dx = 0 there is no equatorial wave trapping, so the mass adjustment
+// reaches every latitude and the amplitude the tropics need wrecks the
+// mid-latitudes. Trapping is a property of the response to ZONALLY STRUCTURED
+// heating -- which is what this adds.
+//
+// Same three equations, now solved on the full grid:
+//
+//     r*u - f*v = -dPhi/dx      f*u + r*v = -dPhi/dy
+//     r*Phi + c^2 * div(u) = -Q
+//
+// The first two are Stage 4's own balance, reused exactly. Substituting them
+// into the third leaves one elliptic problem for Phi, solved by under-relaxed
+// alternating-direction sweeps: at each pass Phi is pushed toward
+// (-Q - c^2*div(u(Phi)))/r. Deterministic, no timestep.
+//
+// Q is split so the two halves can be switched independently and measured
+// apart -- the whole point of this stage:
+//
+//     Q_zonal        the zonal mean, localised heating with spread cooling
+//     Q_longitudinal the departure of each cell from its OWN latitude's mean
+//
+// Q_longitudinal is by construction zero in the zonal mean at every latitude,
+// so it adds no zonally symmetric forcing at all: it can only redistribute.
+
+export const GILL_PARAMETERS = {
+  equivalentDepthMetres: HADLEY_PARAMETERS.equivalentDepthMetres,
+  zonalHeatingStrength: {
+    default: 0, kind: "empirical", search: true, min: 0, max: 4,
+    note: "Amplitude of the zonal-mean (Hadley) part of Q. 0 disables it.",
+  },
+  longitudinalHeatingStrength: {
+    default: 0, kind: "empirical", search: true, min: 0, max: 4,
+    note: "Amplitude of the longitudinal (Walker) part of Q -- each cell's departure from " +
+      "its own latitude's mean. Zero in the zonal mean by construction, so it redistributes " +
+      "rather than forcing a symmetric cell. 0 disables it.",
+  },
+};
+
+export function buildGillCirculation({
+  temperatureField, body, atmosphere, dragTimescaleDays,
+  params: overrides = {}, maxSweeps = 3000, relaxation = 0.2, convergence = 1e-4,
+}) {
+  const p = {};
+  const unknown = [];
+  for (const [k, spec] of Object.entries(GILL_PARAMETERS)) p[k] = spec.default;
+  for (const [k, v] of Object.entries(overrides)) {
+    if (k.startsWith("_")) continue;
+    if (!(k in GILL_PARAMETERS)) { unknown.push(k); continue; }
+    if (!Number.isFinite(v)) throw new Error(`Gill parameter ${k} must be finite`);
+    p[k] = v;
+  }
+  const { width, height, annualMeanTemperatureC: T } = temperatureField;
+  const a = body.radiusMetres;
+  const omega = ((2 * Math.PI) / (body.dayLengthHours * 3600)) * Math.sign(body.rotationDirection || 1);
+  const r = 1 / (dragTimescaleDays * 86400);
+  const c2 = atmosphere.gravityMs2 * p.equivalentDepthMetres;
+  const Rd = atmosphere.specificGasConstantJPerKgK;
+  const n = width * height;
+
+  const latRad = new Float64Array(height), cosLat = new Float64Array(height), f = new Float64Array(height);
+  for (let y = 0; y < height; y++) {
+    latRad[y] = ((90 - ((y + 0.5) * 180) / height) * Math.PI) / 180;
+    cosLat[y] = Math.max(Math.cos((89.5 * Math.PI) / 180), Math.cos(latRad[y]));
+    f[y] = 2 * omega * Math.sin(latRad[y]);
+  }
+  // --- Q, split into its two parts ------------------------------------------
+  const zonalMean = new Float64Array(height);
+  for (let y = 0; y < height; y++) {
+    let s = 0; for (let x = 0; x < width; x++) s += T[y * width + x];
+    zonalMean[y] = s / width;
+  }
+  let gw = 0, gs = 0;
+  for (let y = 0; y < height; y++) { gw += cosLat[y]; gs += cosLat[y] * zonalMean[y]; }
+  const globalMean = gs / gw;
+  let hw = 0, hs = 0;
+  const positive = new Float64Array(height);
+  for (let y = 0; y < height; y++) { positive[y] = Math.max(0, zonalMean[y] - globalMean); hw += cosLat[y]; hs += cosLat[y] * positive[y]; }
+  const spreadCooling = hs / hw;
+  const Q = new Float64Array(n);
+  const scale = Rd * REFERENCE_DAMPING_PER_SECOND;
+  for (let y = 0; y < height; y++) {
+    const qz = p.zonalHeatingStrength * (positive[y] - spreadCooling);
+    for (let x = 0; x < width; x++) {
+      const ql = p.longitudinalHeatingStrength * (T[y * width + x] - zonalMean[y]);
+      Q[y * width + x] = scale * (qz + ql);
+    }
+  }
+
+  // --- solve ----------------------------------------------------------------
+  // Substituting the balance into the mass equation, the cross derivatives
+  // cancel and what is left is a Helmholtz problem:
+  //
+  //     r*Phi - c^2 * div( (r/(f^2+r^2)) grad Phi ) = -Q
+  //
+  // which is diffusion-like and diagonally dominant, so Gauss-Seidel
+  // converges. A first attempt iterated Phi toward (-Q - c^2*div(u))/r with
+  // the Laplacian on the EXPLICIT side; that is anti-diffusive and every case
+  // returned NaN. The operator has to be inverted, not evaluated.
+  const Phi = new Float64Array(n), u = new Float64Array(n), v = new Float64Array(n);
+  const dPhiRad = Math.PI / height, dLam = (2 * Math.PI) / width;
+  const idx = (y, x) => y * width + (x < 0 ? x + width : x >= width ? x - width : x);
+  const kOf = (y) => r / (f[y] * f[y] + r * r);
+  const kHalf = (yA, yB) => 0.5 * (kOf(yA) + kOf(yB));
+  let sweeps = 0, residual = Infinity;
+  for (; sweeps < maxSweeps; sweeps++) {
+    residual = 0;
+    const forward = sweeps % 2 === 0;
+    for (let yi = 0; yi < height; yi++) {
+      const y = forward ? yi : height - 1 - yi;
+      const dxM = a * cosLat[y] * dLam, dyM = a * dPhiRad;
+      const kx = c2 * kOf(y) / (dxM * dxM);
+      const kN = y > 0 ? (c2 * kHalf(y, y - 1) * Math.cos(latRad[y] - dPhiRad / 2)) / (dyM * dyM * cosLat[y]) : 0;
+      const kS = y < height - 1 ? (c2 * kHalf(y, y + 1) * Math.cos(latRad[y] + dPhiRad / 2)) / (dyM * dyM * cosLat[y]) : 0;
+      for (let xi = 0; xi < width; xi++) {
+        const x = forward ? xi : width - 1 - xi;
+        const i = y * width + x;
+        const num = -Q[i] + kx * (Phi[idx(y, x + 1)] + Phi[idx(y, x - 1)]) +
+          (y > 0 ? kN * Phi[idx(y - 1, x)] : 0) + (y < height - 1 ? kS * Phi[idx(y + 1, x)] : 0);
+        const den = r + 2 * kx + kN + kS;
+        const next = num / den;
+        residual = Math.max(residual, Math.abs(next - Phi[i]));
+        Phi[i] = next;
+      }
+    }
+    if (residual < convergence) { sweeps++; break; }
+  }
+  // the balance wind this mass field implies (diagnostic)
+  for (let y = 0; y < height; y++) {
+    const dxM = a * cosLat[y] * dLam, dyM = a * dPhiRad;
+    const denom = f[y] * f[y] + r * r;
+    for (let x = 0; x < width; x++) {
+      const i = y * width + x;
+      const px = (Phi[idx(y, x + 1)] - Phi[idx(y, x - 1)]) / (2 * dxM);
+      const north = y > 0 ? Phi[idx(y - 1, x)] : Phi[i], south = y < height - 1 ? Phi[idx(y + 1, x)] : Phi[i];
+      const rows = (y > 0 ? 1 : 0) + (y < height - 1 ? 1 : 0);
+      const py = (north - south) / (rows * dyM);
+      u[i] = -(r * px + f[y] * py) / denom;
+      v[i] = (f[y] * px - r * py) / denom;
+    }
+  }
+  // only the gradient matters; drop the floating offset
+  let sw = 0, sp = 0;
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) { sw += cosLat[y]; sp += cosLat[y] * Phi[y * width + x]; }
+  const mean = sp / sw;
+  for (let i = 0; i < n; i++) Phi[i] -= mean;
+
+  return { width, height, surfaceGeopotentialM2S2: Phi, uMs: u, vMs: v,
+    meta: { stage: "5C-wind 2D", sweeps, residual, converged: residual < convergence,
+      gravityWaveSpeedMs: Math.sqrt(c2), params: p, unknownParameters: unknown } };
+}
