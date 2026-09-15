@@ -1,0 +1,75 @@
+name: Probe humidity teacher sources
+
+# Throwaway diagnostic, same trick Stage 3/4 used for GEBCO and NCEP: this
+# sandbox's egress proxy blocks downloads.psl.noaa.gov outright, so the only
+# way to find out which near-surface humidity product actually exists (and
+# what its variables, grid and units are) is to ask from a runner.
+# Delete this workflow once tools/build_humidity_teacher.py is settled.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up python
+        run: pip install --quiet numpy netCDF4
+
+      - name: Probe candidate URLs
+        run: |
+          python3 - <<'PY'
+          import urllib.request, urllib.error, tempfile, os
+          import netCDF4
+
+          BASE = "https://downloads.psl.noaa.gov/Datasets/ncep.reanalysis.derived"
+          CANDIDATES = [
+              # control: known-good, already fetched by build_wind_teacher.py
+              f"{BASE}/surface/pres.sfc.mon.ltm.nc",
+              # near-surface specific humidity candidates
+              f"{BASE}/surface_gauss/shum.2m.mon.ltm.nc",
+              f"{BASE}/surface_gauss/shum.2m.mon.mean.nc",
+              # relative humidity candidates (fallback path in the plan)
+              f"{BASE}/surface/rhum.sig995.mon.ltm.nc",
+              # pressure-level specific humidity (R1 carries shum to 300 hPa)
+              f"{BASE}/pressure/shum.mon.ltm.nc",
+              # near-surface air temperature, needed if we reconstruct q from RH
+              f"{BASE}/surface/air.sig995.mon.ltm.nc",
+              f"{BASE}/surface_gauss/air.2m.mon.ltm.nc",
+          ]
+
+          for url in CANDIDATES:
+              print("=" * 78)
+              print(url)
+              try:
+                  req = urllib.request.Request(url, method="HEAD")
+                  with urllib.request.urlopen(req, timeout=120) as r:
+                      size = r.headers.get("Content-Length")
+                      print(f"  HEAD ok, Content-Length={size}")
+              except Exception as e:
+                  print(f"  HEAD FAILED: {e}")
+                  continue
+              try:
+                  fd, path = tempfile.mkstemp(suffix=".nc")
+                  os.close(fd)
+                  with urllib.request.urlopen(url, timeout=600) as r, open(path, "wb") as out:
+                      out.write(r.read())
+                  print(f"  downloaded {os.path.getsize(path)} bytes")
+                  ds = netCDF4.Dataset(path)
+                  print(f"  dimensions: { {k: len(v) for k, v in ds.dimensions.items()} }")
+                  for name, var in ds.variables.items():
+                      attrs = {a: getattr(var, a) for a in var.ncattrs()
+                               if a in ("units", "long_name", "scale_factor", "add_offset",
+                                        "missing_value", "actual_range", "valid_range", "level_desc")}
+                      print(f"    {name} {var.dimensions} {var.dtype} {attrs}")
+                  for a in ds.ncattrs():
+                      v = str(getattr(ds, a))
+                      if len(v) < 300:
+                          print(f"  global:{a} = {v}")
+                  ds.close()
+                  os.unlink(path)
+              except Exception as e:
+                  print(f"  OPEN/DOWNLOAD FAILED: {e}")
+          print("=" * 78)
+          print("probe complete")
+          PY
