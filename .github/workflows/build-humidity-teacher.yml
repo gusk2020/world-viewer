@@ -1,0 +1,52 @@
+name: Build humidity teacher
+
+# Builds Climate v1's Stage 5A humidity teacher (Earth's real annual-mean
+# surface pressure, near-surface air temperature and near-surface specific
+# humidity) from NCEP/NCAR Reanalysis 1.
+#
+# This runs on a runner because the user has only a phone and this project's
+# dev sandbox cannot reach downloads.psl.noaa.gov at all -- same arrangement
+# as the terrain, temperature and wind teachers.
+
+on:
+  workflow_dispatch:
+    inputs:
+      world:
+        description: "World directory to build the teacher for"
+        required: false
+        default: "worlds/kasoku-sekai"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: climate-v1-redesign
+
+      - name: Set up python
+        run: pip install --quiet numpy netCDF4
+
+      - name: Build the teacher
+        run: python3 tools/build_humidity_teacher.py --world "${{ inputs.world || 'worlds/kasoku-sekai' }}"
+
+      - name: Commit the result
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # Glob rather than a list of filenames: the wind teacher's commit
+          # step named its files explicitly and then silently stopped
+          # committing some of them when the field list grew.
+          git add "${{ inputs.world || 'worlds/kasoku-sekai' }}"/teacher/humidity-*
+          if git diff --cached --quiet; then
+            echo "no change"
+            exit 0
+          fi
+          git commit -m "Build the Stage 5A humidity teacher from NCEP/NCAR Reanalysis 1
+
+          Earth's real annual-mean surface pressure, near-surface air
+          temperature and near-surface specific humidity, for Climate v1
+          Stage 5A to be validated against. Built by
+          tools/build_humidity_teacher.py on a runner, since neither the
+          user's phone nor the dev sandbox can reach PSL."
+          git push origin HEAD:climate-v1-redesign
