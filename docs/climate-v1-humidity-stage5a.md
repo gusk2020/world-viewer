@@ -271,6 +271,78 @@ Re-run after the change:
 
 ---
 
+## 6.5. Real-data validation, and what it actually says
+
+Success criteria were declared **before** measuring, as this project does.
+Here is how they came out, stated straight rather than re-drawn to fit:
+
+| criterion, declared in advance | result | verdict |
+| --- | --- | --- |
+| pressure \|bias\| < 5 hPa globally | **+2.66 hPa** | **pass** |
+| pressure MAE < 10 hPa above 1000 m | 14.6–19.3 hPa | **missed** |
+| q_sat vs teacher-recomputed: r > 0.98 | 0.9661 | **missed** |
+| q_sat MAE < 1 g/kg | 1.663 g/kg | **missed** |
+| implied RH over ocean in 0.6–0.95 | 0.807 open, 0.778 tropical | **pass** |
+
+Three criteria missed. The decomposition says exactly why, and the answer is
+not "the pressure approximation is bad":
+
+```
+model q_sat      bias=+0.981 g/kg  MAE=1.663  r=0.9661
+our T, their p   bias=+0.978 g/kg  MAE=1.670  r=0.9657   <- reproduces the whole error
+their T, our p   bias=-0.012 g/kg  MAE=0.083  r=0.9999   <- our pressure is essentially exact
+```
+
+**Substituting our pressure into the teacher's own temperature reproduces
+the teacher's q_sat to r = 0.9999 and 0.083 g/kg.** Substituting our
+temperature reproduces the entire error. So Stage 5A's own new contribution
+— the pressure approximation — is validated about as hard as a comparison
+can validate anything, and the q_sat miss is **inherited from Stage 2's
+temperature field**, whose known regional biases (Tibet −6.1 °C, Greenland
+−7.9 °C, Europe −5.2 °C) are already documented.
+
+That is precisely what the one-input-at-a-time substitution was built to
+distinguish, and it is why the criteria were written per-input rather than
+as a single score.
+
+### The pressure MAE, decomposed
+
+The criterion "MAE < 10 hPa above 1000 m" was naive, and the reason is worth
+recording rather than papering over:
+
+- **Over open ocean the model's pressure is a constant 1013.25 hPa by
+  construction.** The real annual-mean ocean has a standard deviation of
+  **10.09 hPa** and a range of 946–1086 hPa — the subtropical highs and the
+  polar lows. A model with no surface mass redistribution cannot produce any
+  of that. This is the **same missing mechanism Stage 4 named for the wind**
+  (it assumes the surface geopotential anomaly is zero), showing up in a
+  second place, which is a useful corroboration rather than a new problem.
+- **Over land the dominant term is the two datasets disagreeing about where
+  the ground is.** NCEP's surface pressure sits on its own T62 model
+  orography (~200 km); ours is GEBCO at ~20 km. Inverting NCEP's pressure
+  back to the elevation it implies and comparing with our own: mean
+  difference **123 m**, rms **199 m**, correlation **0.9823**. At roughly
+  0.105 hPa/m that rms is of order **21 hPa** — the same size as the
+  observed land MAE of 14.6–19.3 hPa.
+
+So the land error is mostly an orography-definition difference and the sea
+error is entirely missing dynamics. Neither is the barometric relation being
+wrong, and the "their T, our p" line proves that independently.
+
+### One more diagnostic worth keeping
+
+Implied RH over all land has a 95th percentile of **1.951** — physically
+impossible, since RH cannot exceed 1. That is not a bug in the ratio: it is
+the model's temperature being too cold over high terrain, which makes
+`q_sat_model` too small and the ratio blow up. It points at the temperature
+stage from a third independent direction, agreeing with the decomposition
+above and with Stage 2's own documented regional biases.
+
+Both checkerboard halves agree to three decimals (MAE 8.27 vs 8.39 hPa),
+which is what should happen when nothing was fitted to either.
+
+---
+
 ## 7.5. The teacher, and three bugs it found
 
 **Source**: NCEP/NCAR Reanalysis 1 (NOAA/OAR/ESRL PSL), annual mean of the
@@ -342,6 +414,16 @@ left the first failure needing a guess to interpret.
    gradients.
 4. `body.gravityMs2` lives in the tools rather than in the world configs
    (§3).
+5. **The model has no sea-level pressure variation at all** (§6.5). Over
+   open ocean it is a constant where the real field varies by 10 hPa
+   standard deviation. Fixing it needs the surface mass redistribution
+   Stage 4 already identified as its own missing mechanism — it is the same
+   gap, not a second one, and it is a stage of its own rather than a
+   parameter.
+6. **The q_sat error is Stage 2's temperature, not Stage 5A** (§6.5).
+   Nothing in this stage can improve it; improving the temperature field
+   would, and the implied-RH-above-1 diagnostic gives a new, independent
+   handle on where that field is worst.
 
 ---
 
