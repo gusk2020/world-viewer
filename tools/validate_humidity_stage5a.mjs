@@ -37,6 +37,7 @@ import { buildTerrainField } from "../js/climate-v1/terrain.js";
 import { buildTemperatureField } from "../js/climate-v1/temperature.js";
 import { CLIMATE_V1_EARTH_TEMPERATURE_CALIBRATION } from "../js/climate-v1/earth-temperature-calibration.js";
 import { parseTeacherGrid } from "../js/climate-v1/humidity-teacher.js";
+import { loadOceanMask } from "./ocean_mask.mjs";
 import {
   buildHumidityField,
   saturationSpecificHumidity,
@@ -114,7 +115,7 @@ for (let i = 0; i < metres.length; i++) metres[i] = png.data[i * 3] * 256 + png.
 const sets = resolveClimateSets(config);
 const shipped = sets.sets.find((s) => s.id === sets.defaultId).values;
 const params = { ...shipped, ...CLIMATE_V1_EARTH_TEMPERATURE_CALIBRATION };
-const terrainField = buildTerrainField({ elevationGrid: { width: png.width, height: png.height, metres }, seaLevelMetres: 0 });
+const terrainField = buildTerrainField({ elevationGrid: { width: png.width, height: png.height, metres }, seaLevelMetres: 0, oceanMask: loadOceanMask(config, REPO) });
 const temperatureField = buildTemperatureField({ terrainField, axialTiltDegrees: config.body.axialTiltDegrees, params });
 const humidityField = buildHumidityField({
   terrainField, temperatureField, lapseRateCPerKm: params.lapseRateCPerKm,

@@ -239,7 +239,7 @@ than in the physics. It does:
 | --- | --- |
 | pressure, global | bias **+0.003 hPa**, r **1.0000** |
 | pressure, every elevation band | bias ≤ 0.006 hPa, r ≥ 0.9996 |
-| q_sat, and both one-input-substituted variants | bias ≤ 0.02 g/kg, r ≥ 0.9999 |
+| q_sat, and both one-input-substituted variants (identity teacher) | bias ≤ 0.02 g/kg, r ≥ 0.9999 |
 | implied RH, with humidity injected at 75% of capacity | **0.750** in every region |
 
 The 0.003 hPa residual is the two regridders' slightly different
@@ -295,11 +295,19 @@ their T, our p   bias=-0.012 g/kg  MAE=0.083  r=0.9999   <- our pressure is esse
 
 **Substituting our pressure into the teacher's own temperature reproduces
 the teacher's q_sat to r = 0.9999 and 0.083 g/kg.** Substituting our
-temperature reproduces the entire error. So Stage 5A's own new contribution
-— the pressure approximation — is validated about as hard as a comparison
-can validate anything, and the q_sat miss is **inherited from Stage 2's
-temperature field**, whose known regional biases (Tibet −6.1 °C, Greenland
-−7.9 °C, Europe −5.2 °C) are already documented.
+temperature reproduces the entire error. So the **error that our pressure
+contributes to q_sat is very small**, and the q_sat miss is **inherited from
+Stage 2's temperature field**, whose known regional biases (Tibet −6.1 °C,
+Greenland −7.9 °C, Europe −5.2 °C) are already documented.
+
+**Read that r = 0.9999 for what it is.** It is a correlation between two
+*q_sat* fields, not between two pressure fields — it says the pressure term
+contributes almost none of the q_sat error, which is a weaker and different
+claim than "the pressure field is accurate to r = 0.9999". The direct
+pressure comparison is §6.5's first table and is far less flattering:
+**r = 0.9814 globally, MAE 8.34 hPa**, with the error decomposed below. Both
+numbers are real; they answer different questions, and only the second one
+is about pressure itself.
 
 That is precisely what the one-input-at-a-time substitution was built to
 distinguish, and it is why the criteria were written per-input rather than
@@ -405,9 +413,12 @@ left the first failure needing a guess to interpret.
 
 ## 8. Open items
 
-1. **Below-sea-level land cannot occur** (§4). It needs a real land mask in
-   the terrain stage, which is a Stage 0-1 change and out of scope here. The
-   humidity side is ready for it.
+1. ~~**Below-sea-level land cannot occur** (§4).~~ **Fixed in Stage 5A.5** —
+   the land/sea rule is now topological (below sea level *and* connected to
+   the ocean) rather than a bare elevation test, so the Dead Sea basin, the
+   Jordan valley and Danakil are land and do get p > p0. See
+   `docs/climate-v1-land-sea-stage5a5.md`. The §4 text below is kept as the
+   record of how the limitation was found.
 2. **The ice-phase bias is documented but not corrected** (§5).
 3. **The Jensen bias from using an annual-mean temperature** (§5) will
    matter more once Stage 5B moves moisture, since transport is driven by

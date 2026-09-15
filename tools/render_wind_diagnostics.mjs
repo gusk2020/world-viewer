@@ -19,6 +19,7 @@ import { fileURLToPath } from "node:url";
 import { readPng } from "./png.mjs";
 import { resolveClimateSets } from "../js/climate.js";
 import { buildTerrainField } from "../js/climate-v1/terrain.js";
+import { loadOceanMask } from "./ocean_mask.mjs";
 import { buildTemperatureField } from "../js/climate-v1/temperature.js";
 import { parseWindGrid } from "../js/climate-v1/wind-teacher.js";
 import { currentModelWind, fitSpeedScaleK, nearestModelRow } from "../js/climate-v1/wind-diagnostic.js";
@@ -124,7 +125,7 @@ function main() {
   const g = (f) => parseWindGrid(readFileSync(path.join(worldDir, "teacher", f)), spec).values;
   const teacher = { width: spec.width, height: spec.height, u: g(spec.files.u), v: g(spec.files.v) };
 
-  const terrainField = buildTerrainField({ elevationGrid: { width: png.width, height: png.height, metres }, seaLevelMetres: 0 });
+  const terrainField = buildTerrainField({ elevationGrid: { width: png.width, height: png.height, metres }, seaLevelMetres: 0, oceanMask: loadOceanMask(config, REPO) });
   const temperatureField = buildTemperatureField({ terrainField, axialTiltDegrees: config.body.axialTiltDegrees, params });
   const newField = buildClimateV1Wind({
     terrainField, temperatureField, lapseRateCPerKm: params.lapseRateCPerKm,

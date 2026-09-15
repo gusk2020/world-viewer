@@ -15,6 +15,7 @@ import { fileURLToPath } from "node:url";
 import { readPng } from "./png.mjs";
 import { resolveClimateSets } from "../js/climate.js";
 import { buildTerrainField } from "../js/climate-v1/terrain.js";
+import { loadOceanMask } from "./ocean_mask.mjs";
 import { buildTemperatureField } from "../js/climate-v1/temperature.js";
 import { CLIMATE_V1_EARTH_TEMPERATURE_CALIBRATION } from "../js/climate-v1/earth-temperature-calibration.js";
 import {
@@ -228,7 +229,7 @@ console.log("\n11. Whole-Earth field: shape, finiteness, and physical range");
   const sets = resolveClimateSets(config);
   const shipped = sets.sets.find((s) => s.id === sets.defaultId).values;
   const params = { ...shipped, ...CLIMATE_V1_EARTH_TEMPERATURE_CALIBRATION };
-  const terrainField = buildTerrainField({ elevationGrid: { width: png.width, height: png.height, metres }, seaLevelMetres: 0 });
+  const terrainField = buildTerrainField({ elevationGrid: { width: png.width, height: png.height, metres }, seaLevelMetres: 0, oceanMask: loadOceanMask(config, REPO) });
   const temperatureField = buildTemperatureField({ terrainField, axialTiltDegrees: config.body.axialTiltDegrees, params });
 
   const t0 = Date.now();
@@ -250,26 +251,34 @@ console.log("\n11. Whole-Earth field: shape, finiteness, and physical range");
     if (terrainField.isSea[i]) { seaCells++; if (p === EARTH_ATMOSPHERE.seaLevelPressureHPa) seaExact++; }
   }
   check(`every cell finite and q_sat > 0 (${n} cells)`, finite);
-  check(`pressure range ${pMin.toFixed(1)}..${pMax.toFixed(1)} hPa is physical`, pMin > 300 && pMax < 1080);
+  // The upper bound allows for below-sea-level LAND, which Stage 5A.5 made
+  // possible. The cells that reach it are lake beds, not dry ground: the
+  // maximum is Lake Baikal's floor at -1138 m (107.8E 53.2N), and the
+  // Caspian's is 1139.9 hPa. Genuinely dry below-sea-level land tops out
+  // around 1054 hPa in the Dead Sea basin. See the lake caveat in
+  // docs/climate-v1-humidity-stage5a.md.
+  check(`pressure range ${pMin.toFixed(1)}..${pMax.toFixed(1)} hPa is physical`, pMin > 300 && pMax < 1200);
   check(`q_sat range ${(qMin * 1000).toFixed(3)}..${(qMax * 1000).toFixed(2)} g/kg is physical`, qMin * 1000 > 0.001 && qMax * 1000 < 45);
   check(`all ${seaCells} sea cells are exactly p0`, seaExact === seaCells);
   console.log(`  note  built ${field.width}x${field.height} in ${ms} ms`);
 
-  // A MEASURED LIMITATION OF THE TERRAIN STAGE, NOT OF THIS ONE.
+  // FIXED IN STAGE 5A.5.
   //
-  // Climate v1's land/sea mask is a plain elevation threshold
-  // (js/climate-v1/terrain.js: `isSea = source < seaLevelMetres`), so a cell
-  // below sea level is classified as sea by construction and dry land below
-  // sea level cannot occur anywhere on the real Earth raster. The Dead Sea
-  // shore, Turfan, Qattara and Danakil are all endorheic basins -- dry land
-  // that happens to lie below sea level -- and telling them apart from ocean
-  // needs a real land mask, which the terrain stage does not have and which
-  // Stage 5A must not add.
-  //
-  // So this asserts the state that actually holds, rather than one that
-  // does not, and the injection below proves the capability is present for
-  // the day the terrain stage can express it.
-  check(`Climate v1's mask yields no below-sea-level land today (${aboveP0} cells above p0)`, aboveP0 === 0);
+  // This assertion used to read "Climate v1's mask yields no below-sea-level
+  // land today (0 cells above p0)" and it was recording a real bug: the
+  // land/sea rule was a plain elevation threshold, so every endorheic basin
+  // on Earth was classified as ocean and dry land below sea level could not
+  // exist. Stage 5A.5 replaced that with a connectivity rule, so it now
+  // does exist and this asserts the corrected state.
+  check(`below-sea-level land exists and is not clamped (${aboveP0} cells above p0)`, aboveP0 > 0);
+  check("the Dead Sea basin is one of them",
+    (() => {
+      const x = Math.floor(((35.5 + 180) / 360) * field.width);
+      const y = Math.floor(((90 - 31.5) / 180) * field.height);
+      const i = y * field.width + x;
+      return !terrainField.isSea[i] && field.surfacePressureHPa[i] > EARTH_ATMOSPHERE.seaLevelPressureHPa;
+    })(),
+    "the basin Stage 5A could not represent");
 }
 
 // ---------------------------------------------------------------------------
