@@ -15,7 +15,7 @@ import assert from "node:assert/strict";
 import { readPng } from "./png.mjs";
 import { resolveClimateSets } from "../js/climate.js";
 import { buildTerrainField, sampleTerrainCell, sampleTerrainAt, TERRAIN_STATES } from "../js/climate-v1/terrain.js";
-import { loadOceanMask } from "./ocean_mask.mjs";
+import { loadOceanMask, loadWaterSurfaceMask } from "./ocean_mask.mjs";
 import { buildTemperatureField, sampleTemperatureAt } from "../js/climate-v1/temperature.js";
 import { currentModelWind, compareWindToTeacher } from "../js/climate-v1/wind-diagnostic.js";
 
@@ -34,6 +34,7 @@ function loadElevationGrid(config) {
 
 const config = JSON.parse(readFileSync(path.join(worldDir, "config.json"), "utf8"));
 const oceanMask = loadOceanMask(config, REPO);
+const waterSurfaceMask = loadWaterSurfaceMask(config, REPO);
 const elevationGrid = loadElevationGrid(config);
 const sets = resolveClimateSets(config);
 const baseParams = (sets.sets.find((s) => s.id === sets.defaultId) || sets.sets[0]).values;
@@ -54,7 +55,7 @@ const marianas = { lng: 142.2, lat: 11.35, label: "Mariana Trench" };
 const arcticSea = { lng: 0, lat: 85, label: "Arctic Ocean (near pole)" };
 
 for (const seaLevelMetres of seaLevels) {
-  const terrain = buildTerrainField({ elevationGrid, seaLevelMetres, oceanMask });
+  const terrain = buildTerrainField({ elevationGrid, seaLevelMetres, oceanMask, waterSurfaceMask });
   assert.equal(terrain.terrainState, TERRAIN_STATES.ICE_SURFACE, "default terrain state must be ice-surface");
 
   // Internal consistency, over the whole grid -- not just the cells this
@@ -109,8 +110,8 @@ console.log("=== Temperature field: relative- vs absolute-elevation check ===");
 {
   const seaLevelA = 0;
   const seaLevelB = -1000; // sea level 1000 m lower -> Everest's relative elevation 1000 m higher
-  const terrainA = buildTerrainField({ elevationGrid, seaLevelMetres: seaLevelA, oceanMask });
-  const terrainB = buildTerrainField({ elevationGrid, seaLevelMetres: seaLevelB, oceanMask });
+  const terrainA = buildTerrainField({ elevationGrid, seaLevelMetres: seaLevelA, oceanMask, waterSurfaceMask });
+  const terrainB = buildTerrainField({ elevationGrid, seaLevelMetres: seaLevelB, oceanMask, waterSurfaceMask });
   const tempA = buildTemperatureField({ terrainField: terrainA, axialTiltDegrees: config.body.axialTiltDegrees, params: baseParams });
   const tempB = buildTemperatureField({ terrainField: terrainB, axialTiltDegrees: config.body.axialTiltDegrees, params: baseParams });
 
@@ -139,7 +140,7 @@ console.log("=== Temperature field: relative- vs absolute-elevation check ===");
 // A land cell and a sea cell, so the isSea branch (ocean moderation, no
 // lapse) is exercised too, not just the land branch.
 {
-  const terrain = buildTerrainField({ elevationGrid, seaLevelMetres: 0, oceanMask });
+  const terrain = buildTerrainField({ elevationGrid, seaLevelMetres: 0, oceanMask, waterSurfaceMask });
   const temp = buildTemperatureField({ terrainField: terrain, axialTiltDegrees: config.body.axialTiltDegrees, params: baseParams });
   const land = sampleTerrainAt(terrain, everest.lng, everest.lat);
   const sea = sampleTerrainAt(terrain, arcticSea.lng, arcticSea.lat);

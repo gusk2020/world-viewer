@@ -24,7 +24,7 @@ import { fileURLToPath } from "node:url";
 import { readPng } from "./png.mjs";
 import { resolveClimateSets } from "../js/climate.js";
 import { buildTerrainField } from "../js/climate-v1/terrain.js";
-import { loadOceanMask } from "./ocean_mask.mjs";
+import { loadOceanMask, loadWaterSurfaceMask } from "./ocean_mask.mjs";
 import { buildTemperatureField } from "../js/climate-v1/temperature.js";
 import { parseWindGrid } from "../js/climate-v1/wind-teacher.js";
 import {
@@ -343,7 +343,7 @@ function main() {
   const synthetic = syntheticTests();
 
   // === 3. Build the Climate v1 temperature field once ========================
-  const terrainField = buildTerrainField({ elevationGrid: elevation, seaLevelMetres: 0, oceanMask: loadOceanMask(config, REPO) });
+  const terrainField = buildTerrainField({ elevationGrid: elevation, seaLevelMetres: 0, oceanMask: loadOceanMask(config, REPO), waterSurfaceMask: loadWaterSurfaceMask(config, REPO) });
   const temperatureField = buildTemperatureField({
     terrainField, axialTiltDegrees: config.body.axialTiltDegrees, params,
   });

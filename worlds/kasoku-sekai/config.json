@@ -150,6 +150,8 @@
       "type": "rg16-metres",
       "offsetMetres": 12000
     },
+    "waterSurfaceMask": "./worlds/kasoku-sekai/masks/water-surface.png",
+    "waterSurfaceMaskNote": "Where the surface photograph shows water -- ocean AND lakes. Read only by Climate v1 (js/climate-v1/terrain.js); the app never looks at it. Derived offline from this world's own committed photograph and elevation raster by tools/build_water_mask.py: no network, no external dataset.",
     "verify": {
       "checkWidth": 2048,
       "landmarks": [

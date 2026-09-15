@@ -120,7 +120,15 @@ genuinely different questions and Stage 5B will want both.
 
 ---
 
-## 5. The one real cost: lakes are land now
+## 5. The one real cost: lakes are land now — **resolved in Stage 5A.6**
+
+> **Update.** Everything in this section was the honest state at the end of
+> Stage 5A.5, and Stage 5A.6 resolved it: `isWaterSurface` now marks lakes as
+> water without touching `isSea`, and `surfaceElevationMetres` puts the
+> atmosphere on the lake's surface rather than its bed (Baikal 1163.7 →
+> 958.2 hPa). See `docs/climate-v1-water-surface-stage5a6.md`. The rest of
+> this section is kept as the record of the trade as it stood.
+
 
 `isSea` means **the world's ocean** — which is what sea level physically
 defines and what the temperature stage's ocean moderation assumes. So the

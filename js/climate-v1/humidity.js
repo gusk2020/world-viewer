@@ -223,11 +223,18 @@ export function buildHumidityField({
   const vapourPressureHPa = new Float32Array(count);
   const specificHumidity = new Float32Array(count);
 
+  // Where the atmosphere actually meets the surface. Stage 5A.6's
+  // relativeSurfaceElevationMetres answers this directly -- 0 over ocean,
+  // the lake's own level over a lake, the signed ground elevation on land --
+  // which retires the sea special case below AND stops a lake's pressure
+  // being computed at its bed. Before that field existed, Lake Baikal's
+  // cells came out at 1163.7 hPa, as if a kilometre of extra atmosphere
+  // filled the basin. Older terrain fields without it fall back to the sea
+  // special case, which is exactly what this code used to do.
+  const relativeSurface = terrainField.relativeSurfaceElevationMetres;
+
   for (let i = 0; i < count; i++) {
-    // Sea cells are the reference surface by definition, so z is exactly 0
-    // there -- not "approximately 0", and not the raster's own bathymetry.
-    // Land keeps the signed value, so below-sea-level ground gets p > p0.
-    const z = isSea[i] ? 0 : relativeElevationMetres[i];
+    const z = relativeSurface ? relativeSurface[i] : (isSea[i] ? 0 : relativeElevationMetres[i]);
     const tC = temperatureC[i];
     const p = hydrostaticSurfacePressureHPa({
       elevationMetres: z,

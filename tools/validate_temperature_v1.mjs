@@ -19,7 +19,7 @@ import { fileURLToPath } from "node:url";
 import { readPng } from "./png.mjs";
 import { resolveClimateSets, annualInsolationByLatitude } from "../js/climate.js";
 import { buildTerrainField, sampleTerrainAt } from "../js/climate-v1/terrain.js";
-import { loadOceanMask } from "./ocean_mask.mjs";
+import { loadOceanMask, loadWaterSurfaceMask } from "./ocean_mask.mjs";
 import { buildTemperatureField, sampleTemperatureAt } from "../js/climate-v1/temperature.js";
 import { parseTemperatureTeacher } from "../js/climate-v1/temperature-teacher.js";
 
@@ -199,7 +199,7 @@ function main() {
   const params = sets.sets.find((s) => s.id === sets.defaultId).values;
   const axialTiltDegrees = config.body.axialTiltDegrees;
 
-  const terrainField = buildTerrainField({ elevationGrid: elevation, seaLevelMetres: 0, oceanMask: loadOceanMask(config, REPO) });
+  const terrainField = buildTerrainField({ elevationGrid: elevation, seaLevelMetres: 0, oceanMask: loadOceanMask(config, REPO), waterSurfaceMask: loadWaterSurfaceMask(config, REPO) });
   const temperatureField = buildTemperatureField({ terrainField, axialTiltDegrees, params });
 
   // -- self-check: the decomposition's own reconstructed seaLevelC must
@@ -254,7 +254,7 @@ function main() {
   // task keeps asking for -- rebuilding twice and hashing catches any
   // accidental non-determinism (iteration order, uninitialised memory)
   // that a single run could never reveal.
-  const rebuiltTerrain = buildTerrainField({ elevationGrid: elevation, seaLevelMetres: 0, oceanMask: loadOceanMask(config, REPO) });
+  const rebuiltTerrain = buildTerrainField({ elevationGrid: elevation, seaLevelMetres: 0, oceanMask: loadOceanMask(config, REPO), waterSurfaceMask: loadWaterSurfaceMask(config, REPO) });
   const rebuiltTemperature = buildTemperatureField({ terrainField: rebuiltTerrain, axialTiltDegrees, params });
   let determinismOk = rebuiltTemperature.annualMeanTemperatureC.length === temperatureField.annualMeanTemperatureC.length;
   if (determinismOk) {

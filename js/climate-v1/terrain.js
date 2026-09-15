@@ -67,6 +67,58 @@ export const TERRAIN_STATES = {
  *                            as isSea -- see below.
  *   isSea                    below sea level AND connected to the world's
  *                            ocean. See THE LAND/SEA RULE below.
+ *   isWaterSurface           the atmosphere meets WATER here -- the ocean or
+ *                            a lake. A superset of isSea.
+ *   surfaceElevationMetres   where the atmosphere actually meets the surface:
+ *                            the ground on land, the SEA surface over ocean,
+ *                            the LAKE surface over a lake. Never a lake bed.
+ *   relativeSurfaceElevationMetres
+ *                            surfaceElevationMetres - seaLevelMetres.
+ *
+ * ---------------------------------------------------------------------------
+ * THREE DIFFERENT QUESTIONS, KEPT APART
+ *
+ * Stage 5A.5 collapsed two of these and Stage 5A.6 separated them, because
+ * a moisture model needs all three and they disagree:
+ *
+ *   isBelowSeaLevel   is this ground under the sea's level?
+ *   isSea             is this the world's ocean?
+ *   isWaterSurface    is there water here at all -- ocean or lake?
+ *
+ * The Caspian is the case that forces the distinction: below sea level, not
+ * ocean, and unmistakably water. `isSea` stays exactly what Stage 5A.5 made
+ * it (the ocean, nothing else) so every earlier stage is undisturbed;
+ * `isWaterSurface` is the new one, and it is what an evaporation source
+ * should be keyed off.
+ *
+ * ---------------------------------------------------------------------------
+ * SURFACE ELEVATION: THE LAKE BED IS NOT THE SURFACE
+ *
+ * Over a lake the raster holds bathymetry blended with the surrounding land,
+ * not the water's surface, so reading it as "where the atmosphere sits" puts
+ * the air at the bottom of the lake. Measured before this was fixed: Lake
+ * Baikal's cells produced **1163.7 hPa**, as if a kilometre of extra
+ * atmosphere filled the basin.
+ *
+ * `surfaceElevationMetres` answers the question the atmosphere actually
+ * cares about:
+ *   over ocean  -> seaLevelMetres, exactly (the sea surface is sea level);
+ *   over a lake -> that lake's own estimated surface level (below);
+ *   on land     -> sourceElevationMetres, the signed ground elevation, so
+ *                  dry land below sea level keeps its negative value.
+ *
+ * **Estimating a lake's level without naming any lake.** For each lake body,
+ * take the 10th percentile of the elevations of the cells ringing it. The
+ * water's edge is at the water's level by definition, so the shore ring is a
+ * direct measurement of it; the 10th percentile rather than the minimum
+ * because a single mixed or outlet cell drags the minimum down, and rather
+ * than the median because the ring also climbs away from the shore.
+ *
+ * Measured against ten real lakes spanning -28 m to 3812 m: **RMS error
+ * 15.2 m, worst case 27 m** (min: RMS 53, worst 150; median: RMS 107, worst
+ * 278). In pressure that worst case is about 3 hPa, against the 78 hPa the
+ * lake-bed reading was wrong by at Baikal. Nothing here reads a lake's name
+ * or a coordinate.
  *
  * ---------------------------------------------------------------------------
  * THE LAND/SEA RULE, AND WHY IT IS NOT JUST AN ELEVATION TEST
@@ -132,7 +184,7 @@ export const TERRAIN_STATES = {
  * slider) is cheap enough to do on every change.
  */
 export function buildTerrainField({
-  elevationGrid, seaLevelMetres, oceanMask = null,
+  elevationGrid, seaLevelMetres, oceanMask = null, waterSurfaceMask = null,
   terrainState = TERRAIN_STATES.ICE_SURFACE, terrainSourceLabel = "",
 }) {
   if (!elevationGrid || !elevationGrid.metres) {
@@ -154,6 +206,11 @@ export function buildTerrainField({
   }
 
   const isSea = floodOceanFrom(isBelowSeaLevel, width, height, deepest, oceanMask);
+  const { isWaterSurface, surfaceElevationMetres, lakeCount } =
+    resolveWaterSurface(metres, isSea, width, height, seaLevelMetres, waterSurfaceMask);
+
+  const relativeSurfaceElevationMetres = new Float32Array(n);
+  for (let i = 0; i < n; i++) relativeSurfaceElevationMetres[i] = surfaceElevationMetres[i] - seaLevelMetres;
 
   return {
     width, height, seaLevelMetres,
@@ -161,7 +218,12 @@ export function buildTerrainField({
     relativeElevationMetres,
     isBelowSeaLevel,
     isSea,
+    isWaterSurface,
+    surfaceElevationMetres,
+    relativeSurfaceElevationMetres,
     oceanMaskApplied: Boolean(oceanMask),
+    waterSurfaceMaskApplied: Boolean(waterSurfaceMask),
+    lakeCount,
     terrainState,
     terrainSourceLabel,
   };
@@ -227,6 +289,103 @@ function floodOceanFrom(isBelowSeaLevel, width, height, deepestIndex, oceanMask)
   return isSea;
 }
 
+/**
+ * Split "water" into ocean and lakes, and work out where the atmosphere
+ * actually meets the surface.
+ *
+ * Without a `waterSurfaceMask` this degrades cleanly: water is exactly the
+ * ocean, and the surface is sea level over it and the ground everywhere
+ * else -- which is what every world but Earth gets today, and is still
+ * correct, just blind to lakes.
+ */
+function resolveWaterSurface(metres, isSea, width, height, seaLevelMetres, waterSurfaceMask) {
+  const n = width * height;
+  const isWaterSurface = new Uint8Array(n);
+  const surfaceElevationMetres = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    isWaterSurface[i] = isSea[i];
+    surfaceElevationMetres[i] = isSea[i] ? seaLevelMetres : metres[i];
+  }
+  if (!waterSurfaceMask) return { isWaterSurface, surfaceElevationMetres, lakeCount: 0 };
+
+  const { width: mw, height: mh, isWater } = waterSurfaceMask;
+  if (!mw || !mh || !isWater) {
+    throw new Error("buildTerrainField's waterSurfaceMask needs { width, height, isWater }");
+  }
+  // Candidate lake cells: the mask says water, the ocean flood did not reach.
+  const candidate = new Uint8Array(n);
+  for (let y = 0; y < height; y++) {
+    const my = Math.min(mh - 1, Math.floor((y * mh) / height));
+    for (let x = 0; x < width; x++) {
+      const i = y * width + x;
+      if (isSea[i]) continue;
+      const mx = Math.min(mw - 1, Math.floor((x * mw) / width));
+      if (isWater[my * mw + mx]) candidate[i] = 1;
+    }
+  }
+
+  // A candidate body touching the ocean is coastal fringe -- a cell the
+  // photograph sees as part sea because it straddles the coast -- not an
+  // inland lake. Those are dropped: their water is already represented by the
+  // ocean cells beside them, and calling them water would put a band of
+  // pseudo-lake at positive elevations right along every shoreline.
+  const stack = new Int32Array(n);
+  const visited = new Uint8Array(n);
+  const body = new Int32Array(n);
+  let lakeCount = 0;
+  const idx = (y, x) => y * width + (x < 0 ? x + width : x >= width ? x - width : x);
+
+  for (let start = 0; start < n; start++) {
+    if (!candidate[start] || visited[start]) continue;
+    let top = 0, size = 0, touchesOcean = false;
+    stack[top++] = start; visited[start] = 1;
+    while (top > 0) {
+      const i = stack[--top];
+      body[size++] = i;
+      const x = i % width;
+      const y = (i - x) / width;
+      const neighbours = [
+        y > 0 ? idx(y - 1, x) : -1,
+        y < height - 1 ? idx(y + 1, x) : -1,
+        idx(y, x - 1),
+        idx(y, x + 1),
+      ];
+      for (const j of neighbours) {
+        if (j < 0) continue;
+        if (isSea[j]) { touchesOcean = true; continue; }
+        if (candidate[j] && !visited[j]) { visited[j] = 1; stack[top++] = j; }
+      }
+    }
+    if (touchesOcean) continue;
+
+    // The shore ring: every non-lake neighbour of the body. The water's edge
+    // sits at the water's level, so these elevations measure it directly.
+    const ring = [];
+    for (let k = 0; k < size; k++) {
+      const i = body[k];
+      const x = i % width;
+      const y = (i - x) / width;
+      const neighbours = [
+        y > 0 ? idx(y - 1, x) : -1,
+        y < height - 1 ? idx(y + 1, x) : -1,
+        idx(y, x - 1),
+        idx(y, x + 1),
+      ];
+      for (const j of neighbours) if (j >= 0 && !candidate[j]) ring.push(metres[j]);
+    }
+    if (ring.length === 0) continue;
+    ring.sort((a, b) => a - b);
+    const level = ring[Math.min(ring.length - 1, Math.floor(ring.length * 0.10))];
+
+    lakeCount++;
+    for (let k = 0; k < size; k++) {
+      isWaterSurface[body[k]] = 1;
+      surfaceElevationMetres[body[k]] = level;
+    }
+  }
+  return { isWaterSurface, surfaceElevationMetres, lakeCount };
+}
+
 /** One cell's four quantities, by flat index. For spot checks and tests --
  * the hot paths in temperature.js read the typed arrays directly. */
 export function sampleTerrainCell(field, index) {
@@ -236,6 +395,9 @@ export function sampleTerrainCell(field, index) {
     relativeElevationMetres: field.relativeElevationMetres[index],
     isBelowSeaLevel: Boolean(field.isBelowSeaLevel[index]),
     isSea: Boolean(field.isSea[index]),
+    isWaterSurface: Boolean(field.isWaterSurface[index]),
+    surfaceElevationMetres: field.surfaceElevationMetres[index],
+    relativeSurfaceElevationMetres: field.relativeSurfaceElevationMetres[index],
   };
 }
 

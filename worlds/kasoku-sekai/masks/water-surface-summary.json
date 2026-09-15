@@ -1,0 +1,54 @@
+{
+ "_note": "Where the world's surface photograph shows a water surface: ocean AND lakes. Derived offline from assets already in this repo -- no network and no external dataset. Splitting this into ocean and lake depends on sea level and is done by js/climate-v1/terrain.js, not here. See docs/climate-v1-water-surface-stage5a6.md.",
+ "source": {
+  "photograph": "./worlds/kasoku-sekai/textures/globe.jpg",
+  "elevationLevel": "./worlds/kasoku-sekai/terrain/gebco2026_ice_2048x1024.png",
+  "detector": "js/surface.js's blue-ratio test, (b-r)/b > WATER_BLUE_RATIO",
+  "waterBlueRatio": 0.3
+ },
+ "width": 2048,
+ "height": 1024,
+ "waterFractionOfGlobe": 0.6983868374623379,
+ "checks": [
+  {
+   "name": "water covers 50-80% of the globe",
+   "passed": true,
+   "measured": "69.84%"
+  },
+  {
+   "name": "the mid-Pacific is water",
+   "passed": true,
+   "measured": ""
+  },
+  {
+   "name": "the Sahara is not water",
+   "passed": true,
+   "measured": ""
+  },
+  {
+   "name": "the Amazon basin is not water",
+   "passed": true,
+   "measured": ""
+  },
+  {
+   "name": "Antarctica's interior is not water",
+   "passed": true,
+   "measured": ""
+  },
+  {
+   "name": "the Caspian Sea is water",
+   "passed": true,
+   "measured": ""
+  },
+  {
+   "name": "Lake Baikal is water",
+   "passed": true,
+   "measured": ""
+  },
+  {
+   "name": "the dry Jordan valley is not water",
+   "passed": true,
+   "measured": ""
+  }
+ ]
+}

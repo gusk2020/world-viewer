@@ -49,3 +49,26 @@ export function loadOceanMask(config, repoRoot) {
   }
   return { width: png.width, height: png.height, isOcean, source: mapUrl };
 }
+
+/**
+ * The world's water-surface mask: where its surface photograph shows water,
+ * ocean AND lakes. Built offline by tools/build_water_mask.py from assets
+ * already in the repo, because the photograph is a JPEG and this project has
+ * no dependency that could decode one in node.
+ *
+ * Optional, like the ocean mask: a world without one still gets a correct
+ * ocean, just no lakes.
+ */
+export function loadWaterSurfaceMask(config, repoRoot) {
+  const url = config?.terrain?.waterSurfaceMask;
+  if (!url) return null;
+  const file = path.join(repoRoot, url.replace(/^\.\//, ""));
+  if (!existsSync(file)) return null;
+  const png = readPng(file);
+  if (png.channels !== 1) {
+    throw new Error(`expected a paletted water-surface mask, got ${png.channels} channels from ${url}`);
+  }
+  const isWater = new Uint8Array(png.width * png.height);
+  for (let i = 0; i < isWater.length; i++) isWater[i] = png.data[i] ? 1 : 0;
+  return { width: png.width, height: png.height, isWater, source: url };
+}
