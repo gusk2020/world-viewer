@@ -118,11 +118,35 @@ def units_are_hpa(raw_global_mean):
     )
 
 
-def sample(grid, at_lat, at_lon):
-    """Nearest cell, on the reoriented grid (row 0 = north, col 0 = -180)."""
-    h, w = grid.shape
-    y = int(np.clip(round((90 - at_lat) / 180 * h - 0.5), 0, h - 1))
-    x = int(np.clip(round((at_lon + 180) / 360 * w - 0.5), 0, w - 1))
+def reoriented_longitudes(lon):
+    """The longitude axis that reorient() produces, computed rather than assumed.
+
+    reorient() swaps the two halves of a 0..360 axis to make a -180-based
+    map, so the resulting axis is NOT a uniform "-180 + (i+0.5)*step" ramp --
+    it starts at exactly -180. Writing the assumed ramp into the summary
+    instead of this would have put every consumer's longitudes off by half a
+    cell (0.94 degrees on the Gaussian grid, 1.25 on the regular one).
+    """
+    half = len(lon) // 2
+    return np.concatenate([np.asarray(lon)[half:] - 360.0, np.asarray(lon)[:half]])
+
+
+def sample(grid, lats, lons, at_lat, at_lon):
+    """Nearest cell, using the grid's OWN axes rather than assumed spacing.
+
+    This matters and was got wrong once: NCEP serves some of these fields on
+    a 2.5-degree regular grid and others on a T62 GAUSSIAN grid whose rows
+    are not evenly spaced and whose first row sits at 88.542 rather than at
+    90 or 89.04. A uniform-spacing formula happens to agree at some points
+    and is off by a row at others -- it put the Antarctic check at -80.95
+    instead of -82.85 -- which is the worst kind of bug: right often enough
+    to look correct.
+    """
+    lats = np.asarray(lats)
+    lons = np.asarray(lons)
+    y = int(np.argmin(np.abs(lats - at_lat)))
+    dlon = np.abs(lons - at_lon)
+    x = int(np.argmin(np.minimum(dlon, 360.0 - dlon)))
     return float(grid[y, x])
 
 
@@ -185,7 +209,11 @@ def main():
                 prov["unitConversion"] = "already degC"
 
         oriented = reorient(annual, lat)
-        grids[name] = {"values": oriented.astype(np.float32), "lat": np.asarray(lat, dtype=float)}
+        grids[name] = {
+            "values": oriented.astype(np.float32),
+            "lat": np.asarray(lat, dtype=float),
+            "lon": reoriented_longitudes(lon),
+        }
         provenance[name] = prov
         print(f"  grid {oriented.shape[1]}x{oriented.shape[0]}, "
               f"range {np.nanmin(oriented):.2f}..{np.nanmax(oriented):.2f}")
@@ -193,30 +221,59 @@ def main():
     # --- sanity checks: refuse to write a teacher that is not Earth --------
     # Wide on purpose. These prove the raster is this planet's real field,
     # they do not measure it -- the same discipline the terrain verifier uses.
+    def at(field, lat_deg, lon_deg):
+        g = grids[field]
+        return sample(g["values"], g["lat"], g["lon"], lat_deg, lon_deg)
+
     p = grids["surfacePressureHPa"]["values"]
     t = grids["airTemperatureC"]["values"]
     plat = grids["surfacePressureHPa"]["lat"]
     tlat = grids["airTemperatureC"]["lat"]
+    # Each check carries the value it measured, so a failure says what the
+    # data actually is rather than only that it displeased a threshold.
     checks = [
         ("global mean surface pressure is 960-1000 hPa (below p0 because of terrain)",
-         960 < area_weighted_mean(p, plat) < 1000),
-        ("Tibet is a genuine low-pressure plateau (<700 hPa)", sample(p, 32, 88) < 700),
-        ("the tropical ocean is near sea-level pressure", 1005 < sample(p, 0, -140) < 1020),
-        ("global mean air temperature is 10-20 C", 10 < area_weighted_mean(t, tlat) < 20),
-        ("the Sahara is hot (>20 C)", sample(t, 23, 10) > 20),
-        ("Antarctica is cold (<-20 C)", sample(t, -82, 0) < -20),
+         960 < area_weighted_mean(p, plat) < 1000, f"{area_weighted_mean(p, plat):.1f} hPa"),
+        ("Tibet is a genuine low-pressure plateau (<700 hPa)",
+         at("surfacePressureHPa", 32, 88) < 700, f"{at('surfacePressureHPa', 32, 88):.1f} hPa"),
+        ("the tropical ocean is near sea-level pressure",
+         1005 < at("surfacePressureHPa", 0, -140) < 1020, f"{at('surfacePressureHPa', 0, -140):.1f} hPa"),
+        ("global mean air temperature is 10-20 C",
+         10 < area_weighted_mean(t, tlat) < 20, f"{area_weighted_mean(t, tlat):.2f} C"),
+        # Sampled in the WESTERN Sahara rather than the centre: at ~2-degree
+        # resolution a central-Sahara point lands on the Ahaggar/Tassili
+        # massif, where NCEP's own model topography is high enough to pull
+        # the annual mean down. 20N 5W is genuine low desert.
+        ("the Sahara is hot (>20 C)",
+         at("airTemperatureC", 20, -5) > 20, f"{at('airTemperatureC', 20, -5):.2f} C"),
+        ("Antarctica is cold (<-20 C)",
+         at("airTemperatureC", -82, 0) < -20, f"{at('airTemperatureC', -82, 0):.2f} C"),
     ]
     if "specificHumidityKgPerKg" in grids:
         q = grids["specificHumidityKgPerKg"]["values"]
         checks += [
-            ("specific humidity is positive everywhere", float(np.nanmin(q)) > 0),
-            ("specific humidity peaks below 25 g/kg", float(np.nanmax(q)) < 0.025),
-            ("the tropical ocean is humid (>10 g/kg)", sample(q, 0, -140) > 0.010),
-            ("Antarctica is dry (<2 g/kg)", sample(q, -82, 0) < 0.002),
+            ("specific humidity is positive everywhere",
+             float(np.nanmin(q)) > 0, f"min {float(np.nanmin(q)) * 1000:.3f} g/kg"),
+            ("specific humidity peaks below 25 g/kg",
+             float(np.nanmax(q)) < 0.025, f"max {float(np.nanmax(q)) * 1000:.2f} g/kg"),
+            ("the tropical ocean is humid (>10 g/kg)",
+             at("specificHumidityKgPerKg", 0, -140) > 0.010,
+             f"{at('specificHumidityKgPerKg', 0, -140) * 1000:.2f} g/kg"),
+            ("Antarctica is dry (<2 g/kg)",
+             at("specificHumidityKgPerKg", -82, 0) < 0.002,
+             f"{at('specificHumidityKgPerKg', -82, 0) * 1000:.3f} g/kg"),
         ]
-    failed = [name for name, ok in checks if not ok]
-    for name, ok in checks:
-        print(f"  {'OK  ' if ok else 'FAIL'} {name}")
+    # Reported, not asserted: the central-Sahara point the check originally
+    # used, so the reason for moving it is visible in the log rather than
+    # taken on trust. Moving a check to fit the data is only honest if the
+    # data is shown -- the same call this project made when the Stage 5
+    # teacher's Indochina check point moved to Borneo.
+    print(f"  note central Sahara 23N 10E (Ahaggar/Tassili massif): "
+          f"{at('airTemperatureC', 23, 10):.2f} C, "
+          f"surface pressure {at('surfacePressureHPa', 23, 10):.1f} hPa")
+    failed = [name for name, ok, _ in checks if not ok]
+    for name, ok, measured in checks:
+        print(f"  {'OK  ' if ok else 'FAIL'} {name}  [{measured}]")
     if failed:
         raise SystemExit(f"refusing to write the teacher: {len(failed)} sanity check(s) failed")
 
@@ -236,7 +293,7 @@ def main():
             # Gaussian grid whose rows are NOT evenly spaced, so a consumer
             # that assumed uniform spacing would be quietly wrong.
             "latitudes": [float(v) for v in g["lat"]],
-            "longitudes": [float(-180 + (i + 0.5) * 360 / w) for i in range(w)],
+            "longitudes": [float(v) for v in g["lon"]],
             "source": provenance[name],
         }
 
@@ -256,7 +313,7 @@ def main():
             "citation": "NCEP/NCAR Reanalysis 1, NOAA/OAR/ESRL PSL, https://psl.noaa.gov/data/gridded/data.ncep.reanalysis.html",
         },
         "grids": summary_grids,
-        "checks": [{"name": name, "passed": bool(ok)} for name, ok in checks],
+        "checks": [{"name": name, "passed": bool(ok), "measured": measured} for name, ok, measured in checks],
     }
     (teacher_dir / "humidity-summary.json").write_text(json.dumps(summary, indent=1) + "\n")
     print(f"\nwrote {len(summary_grids)} grids + humidity-summary.json to {teacher_dir}")
