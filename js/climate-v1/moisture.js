@@ -110,7 +110,7 @@ export const MOISTURE_PARAMETERS = {
       "never reported as skill.",
   },
   moistureResidenceDays: {
-    default: 3,
+    default: 8,
     kind: "empirical",
     search: true,
     min: 0.25,
@@ -122,15 +122,23 @@ export const MOISTURE_PARAMETERS = {
       "never per-region or per-latitude.",
   },
   eddyDiffusivityM2PerS: {
-    default: 2e5,
+    default: 0,
     kind: "physical",
-    search: true,
-    min: 1e4,
+    search: false,
+    min: 0,
     max: 3e6,
     note:
-      "Horizontal eddy diffusivity: transport by everything the annual-mean wind averages " +
-      "away, chiefly mid-latitude storms. Values of 1e5-1e6 m^2/s are the standard range " +
-      "for large-scale atmospheric eddy mixing.",
+      "EXPLICIT horizontal eddy diffusivity, fixed at 0 and deliberately NOT searched. " +
+      "First-order upwind already carries an implicit numerical diffusion of |u|.dx/2, " +
+      "measured at an area-mean 3.41e5 m^2/s with the observed 850 hPa wind on this grid " +
+      "(1.89e5 with Stage 4's). That already sits inside the 1e5-5e5 m^2/s band usually " +
+      "quoted for large-scale horizontal eddy mixing of moisture, so adding explicit " +
+      "diffusion on top would double-count the same physics. " +
+      "Stage 5B's search picked 3e6 because it minimised land MAE; that is an order of " +
+      "magnitude above any published value, has no justification independent of the " +
+      "teacher, and it flattened the desert/rainforest contrast (Amazon/Sahara 5.22 -> " +
+      "1.57 against a teacher of 4.06). Choosing K by land MAE is now forbidden -- see " +
+      "docs/climate-v1-moisture-baseline-stage5b2.md.",
   },
 };
 
