@@ -165,6 +165,33 @@ function averageToTeacher(fine, grid, mask) {
   return out;
 }
 
+// Teacher grids do NOT all share a shape. The first real build came back with
+// surface pressure and sig995 air temperature on NCEP's 144x73 regular grid
+// but 2m specific humidity on its 192x94 GAUSSIAN grid, whose rows are not
+// even evenly spaced. Indexing them all with one flat index would silently
+// compare the wrong cells -- so every teacher grid is sampled by coordinate,
+// through its own latitude/longitude arrays, and only the pressure grid
+// defines the comparison points.
+//
+// The synthetic-teacher check could not have caught this, because it built
+// every grid at the same shape. Worth remembering: a harness test proves the
+// harness against the case it was given, not against the case the real data
+// turns out to be.
+function nearestInAxis(axis, value, wrap = false) {
+  let best = 0, bestD = Infinity;
+  for (let i = 0; i < axis.length; i++) {
+    let d = Math.abs(axis[i] - value);
+    if (wrap) d = Math.min(d, 360 - d);
+    if (d < bestD) { bestD = d; best = i; }
+  }
+  return best;
+}
+function sampleTeacher(grid, lat, lng) {
+  const j = nearestInAxis(grid.latitudes, lat);
+  const i = nearestInAxis(grid.longitudes.map((l) => (l > 180 ? l - 360 : l)), lng, true);
+  return grid.values[j * grid.width + i];
+}
+
 const teacherGridSpec = grids.surfacePressureHPa;
 const modelP = averageToTeacher(humidityField.surfacePressureHPa, teacherGridSpec);
 const modelQ = averageToTeacher(humidityField.saturationSpecificHumidityKgPerKg, teacherGridSpec);
@@ -180,7 +207,11 @@ const weightOf = (t) => Math.cos((latOf(t) * Math.PI) / 180);
 const out = { stage: "5A", note: "validates formula/units/grid/inputs, not climate skill" };
 console.log("Climate v1 Stage 5A -- humidity thermodynamics against real Earth data");
 console.log(`teacher: ${summary.source.product}`);
-console.log(`grid: ${W}x${H}\n`);
+console.log(`comparison grid: ${W}x${H} (surface pressure)`);
+for (const [name, g] of Object.entries(grids)) {
+  console.log(`  ${name.padEnd(26)} ${g.width}x${g.height} ${g.units}${g.width !== W || g.height !== H ? "  <- different grid, sampled by coordinate" : ""}`);
+}
+console.log("");
 console.log("NOTE: q_sat is a CAPACITY, not the real humidity. These numbers test the");
 console.log("      formula, units, grid, temperature input and pressure approximation.");
 console.log("      Real humidity skill is a Stage 5B question and is not asked here.\n");
@@ -214,7 +245,8 @@ if (!haveTeacherT) {
   const qsatFrom = (tC, p) => saturationSpecificHumidity(saturationVapourPressureHPa(tC), p, EPS) * 1000;
   const all = [], onlyT = [], onlyP = [];
   for (let t = 0; t < W * H; t++) {
-    const tt = grids.airTemperatureC.values[t], tp = grids.surfacePressureHPa.values[t];
+    const tt = sampleTeacher(grids.airTemperatureC, latOf(t), lngOf(t));
+    const tp = grids.surfacePressureHPa.values[t];
     if (!Number.isFinite(tt) || !Number.isFinite(tp) || !Number.isFinite(modelQ[t])) continue;
     const w = weightOf(t);
     const reference = qsatFrom(tt, tp);
@@ -244,7 +276,7 @@ if (!grids.specificHumidityKgPerKg) {
   };
   const acc = Object.fromEntries(Object.keys(regions).map((k) => [k, []]));
   for (let t = 0; t < W * H; t++) {
-    const q = grids.specificHumidityKgPerKg.values[t];
+    const q = sampleTeacher(grids.specificHumidityKgPerKg, latOf(t), lngOf(t));
     if (!Number.isFinite(q) || !Number.isFinite(modelQ[t]) || modelQ[t] <= 0) continue;
     const rh = q / modelQ[t];
     const lat = latOf(t), lng = lngOf(t), w = weightOf(t);

@@ -157,6 +157,25 @@ def main():
                 prov["unitConversion"] = "Pa -> hPa (divided by 100, decided from the value's magnitude)"
             else:
                 prov["unitConversion"] = "already hPa (decided from the value's magnitude)"
+        elif name == "specificHumidityKgPerKg":
+            # NCEP/NCAR R1 stores near-surface specific humidity in GRAMS per
+            # kg, not kg/kg. Found the hard way: the first build's sanity
+            # checks failed with a peak of 20.55, which is textbook-correct
+            # for g/kg and three orders of magnitude off for kg/kg. Decided
+            # from the value rather than from a units attribute, for the same
+            # reason the pressure conversion is -- Stage 3 was bitten by
+            # trusting a units convention over the data.
+            peak = float(np.nanmax(annual))
+            if 1.0 < peak < 60.0:
+                annual = annual / 1000.0
+                prov["unitConversion"] = "g/kg -> kg/kg (divided by 1000, decided from the value's magnitude)"
+            elif peak < 0.06:
+                prov["unitConversion"] = "already kg/kg (decided from the value's magnitude)"
+            else:
+                raise SystemExit(
+                    f"specific humidity peak {peak:.3f} is neither g/kg-like (~20) nor "
+                    f"kg/kg-like (~0.02) -- refusing to guess"
+                )
         elif name == "airTemperatureC":
             raw_mean = float(area_weighted_mean(annual, lat))
             if raw_mean > 100:  # kelvin
