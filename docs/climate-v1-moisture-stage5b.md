@@ -152,6 +152,18 @@ Nothing was rescued with a threshold change or a regional coefficient.
 
 ## 6. Why it failed, diagnosed rather than guessed
 
+> **CORRECTED BY STAGE 5B.1.** The claim below that a missing land moisture
+> source is "the whole story" is an overclaim and was disproved by the oracle
+> test in `docs/climate-v1-moisture-diagnosis-stage5b1.md`. With the real
+> observed wind and a physically ordinary diffusivity, the Sahara comes out at
+> 4.5 g/kg against the teacher's 4.7 and Australia at 6.7 against 7.1 — no
+> recycling required. What survives is a ~21% Amazon deficit. Two further
+> errors in the reasoning below: the transect was run at the DEFAULT
+> diffusivity rather than the fitted one (at the fitted value the Amazon does
+> receive moisture), and holding tau fixed while concluding about the source
+> skipped the two terms that actually dominate. The section is kept unchanged
+> as the record of what was believed at the time.
+
 **The model has no land moisture source, and that is the whole story.**
 
 A transect along 4°S from the Atlantic into the Amazon, at three residence
