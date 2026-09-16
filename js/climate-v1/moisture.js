@@ -194,6 +194,14 @@ export function buildMoistureField({
   // sweeps while the field had not moved since sweep 200.
   maxSweeps = 2000,
   convergenceKgPerKg = 1e-7,
+  // An optional extra source over land, in kg/kg per second, one value per
+  // transport cell. **Null by default, and a null makes this function
+  // bit-identical to what it was before the argument existed** -- nothing in
+  // Stage 5B's equation changes. It exists so Stage 5C-alpha can feed a
+  // surface source back in without editing the solver; the term enters the
+  // same numerator as advection and diffusion, which is where a source
+  // belongs in `u.grad q = -q/tau + K grad^2 q + S`.
+  landSourceKgPerKgPerS = null,
 }) {
   if (!terrainField || !temperatureField || !humidityField) {
     throw new Error("buildMoistureField requires terrainField, temperatureField and humidityField");
@@ -226,6 +234,11 @@ export function buildMoistureField({
     isSource[i] = waterFraction[i] >= 0.5 ? 1 : 0;
     q[i] = isSource[i] ? params.surfaceRelativeHumidity * qSat[i] : 0;
   }
+
+  if (landSourceKgPerKgPerS !== null && landSourceKgPerKgPerS.length !== n) {
+    throw new Error(`landSourceKgPerKgPerS must have ${n} entries, got ${landSourceKgPerKgPerS.length}`);
+  }
+  const src = landSourceKgPerKgPerS;
 
   const R = body.radiusMetres;
   const dy = (Math.PI * R) / H;
@@ -287,7 +300,8 @@ export function buildMoistureField({
 
         const numerator =
           a * q[upX] + b * q[upY] +
-          dxx * (q[east] + q[west]) + dyy * (q[north] + q[south]);
+          dxx * (q[east] + q[west]) + dyy * (q[north] + q[south]) +
+          (src === null ? 0 : src[i]);
         const denominator = a + b + 1 / tauSeconds + 2 * dxx + 2 * dyy;
         let next = numerator / denominator;
         if (next > cap[i]) next = cap[i];
@@ -322,7 +336,8 @@ export function buildMoistureField({
       const upY = vv[i] >= 0 ? south : north;
       const dxx = K / (dx * dx), dyy = K / (dy * dy);
       const unconstrained =
-        (a * q[upX] + b * q[upY] + dxx * (q[east] + q[west]) + dyy * (q[north] + q[south])) /
+        (a * q[upX] + b * q[upY] + dxx * (q[east] + q[west]) + dyy * (q[north] + q[south]) +
+          (src === null ? 0 : src[i])) /
         (a + b + 1 / tauSeconds + 2 * dxx + 2 * dyy);
       condensation[i] = Math.max(0, unconstrained - cap[i]);
     }
@@ -347,6 +362,7 @@ export function buildMoistureField({
       windMode,
       referenceTransportSpeedMs: windMode === WIND_MODES.DIRECTION ? REFERENCE_TRANSPORT_SPEED_MS : null,
       sweeps, residual,
+      landSourceApplied: src !== null,
       converged: residual < convergenceKgPerKg,
       params,
       unknownParameters: unknown,
