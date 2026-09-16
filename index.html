@@ -75,6 +75,28 @@
         <span id="axis-readout">0°</span>
         <button type="button" id="graticule-toggle" class="pill">線 なし</button>
       </div>
+      <!-- Climate v1 preview. EXPERIMENTAL: a separate pipeline from the 地表
+           colouring above, off until asked for, and it changes nothing about
+           what 標準 / 岩 / 陸地塗り分け / 教師 draw. -->
+      <div class="control-row" id="climatev1-row" hidden>
+        <label>v1</label>
+        <div id="climatev1-mode" class="segmented">
+          <button type="button" data-v1="off" class="selected">切</button>
+          <button type="button" data-v1="temperature">気温</button>
+          <button type="button" data-v1="humidity">湿度</button>
+        </div>
+      </div>
+      <div class="control-row" id="climatev1-options" hidden>
+        <div id="climatev1-cooling" class="segmented">
+          <button type="button" data-cooling="off" class="selected">蒸発冷却 切</button>
+          <button type="button" data-cooling="on">入</button>
+        </div>
+        <div id="climatev1-wind" class="segmented">
+          <button type="button" data-wind="model" class="selected">現行風</button>
+          <button type="button" data-wind="observed">観測風</button>
+        </div>
+      </div>
+      <p id="climatev1-readout" hidden></p>
     </div>
   </div>
   <div id="scale-bar" hidden>

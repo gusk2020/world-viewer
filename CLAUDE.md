@@ -2889,6 +2889,49 @@ smoke-tested (trial cap, `--resume`, `--merge` all verified working) but
 **deliberately not run at the 10,000-trial scale this round**. The user
 reviews this round's small-scale result first.
 
+## Climate v1 preview: experimental evaporative cooling (touchable)
+
+The first time the app imports anything from `js/climate-v1/`. Full write-up:
+`docs/climate-v1-evaporative-cooling-preview.md`.
+
+**Off by default and reversible in one number.** `evaporativeCoolingC` is 0,
+the preview opens off, and the cooling pass returns the *same object* it was
+given, so an off run cannot differ even by a Float32 round trip. Nothing in
+the 標準 / 岩 / 陸地塗り分け / 教師 colouring calls into it.
+
+**The cooling** is `dT = -evaporativeCoolingC * q^2/(q^2 + qHalf^2)` over land
+only, keyed on the model's own specific humidity. Geography-blind by
+construction (no place, no latitude, no teacher is reachable from that file),
+saturating, and quadratic at small q so a desert is left alone. A psychrometric
+wet-bulb form was built first and **rejected**: the wet-bulb depression is
+*largest* over deserts (Sahara ~9.8 C against the Amazon's ~6.3 C), so every
+multiplicative version of it cools the Sahara hard.
+
+With the observed wind: アマゾン 30.9 -> 25.9 C (bias +6.2 -> +1.2),
+インドネシア 30.0 -> 25.5, サハラ -0.6, オーストラリア -1.2, **the ocean exactly
+0.0 by construction**. インド is over-cooled (-0.9 -> -3.2) and コンゴ barely
+moves because Stage 5B only delivers 4.4 g/kg there.
+
+**The wind toggle exists because of a real finding**: with the frozen Stage 4
+wind the model gives アマゾン **0.0 g/kg**, so the cooling can do nothing there.
+The preview offers 現行風 / 観測風 side by side rather than hiding that. 観測風 is
+a diagnostic teacher only.
+
+**Where the UI went**: the v1 rows are in the *bottom* panel with 天体 and
+軸/線, so the top panel stays at **137 px** exactly as before. The bottom group
+goes 123 -> 155 px on Earth, 232 px while the preview is on.
+
+**Preview resolution is halved (1024x512)** in the app; every command-line tool
+still runs the full 2048x1024. The transport grid is 256x128 either way.
+
+**Two harness traps re-confirmed this round**, both already in this file and
+both hit again: copying the production `index.html` over the vendored test
+site silently points three.js at jsdelivr (which this sandbox cannot reach),
+and the axis readout goes live from inside `initGlobe3D` **before** `loadWorld`
+finishes wiring the panel -- wait for a panel row, not the readout. A third:
+`pkill -f "node test.mjs"` kills the shell running it, since that shell's own
+command line contains the pattern.
+
 ## The panel move (after Stage 6)
 
 The user's fix for the panel growing again: **put the 天体 row and the 軸/線 row

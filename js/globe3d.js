@@ -503,6 +503,40 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
     return surfaceMode;
   }
 
+  // Paints an arbitrary coarse scalar field onto the globe, for the Climate
+  // v1 preview. Deliberately generic: this module knows nothing about
+  // temperature, humidity or Climate v1 -- it is handed a grid and a colour
+  // function and paints them onto the same canvas the climate colouring uses,
+  // so no second texture or second megabyte is allocated.
+  //
+  // Nearest-neighbour on purpose. The field is 256x128 and the texture is
+  // 2048x1024; interpolating would suggest detail the model does not have.
+  function showScalarField({ width: fw, height: fh, values, colourAt }) {
+    if (!supportsClimate) return surfaceMode;
+    ensureClimateTexture();
+    const w = elevation.width, h = elevation.height;
+    const data = climatePixels.data;
+    const rgb = [0, 0, 0];
+    for (let y = 0; y < h; y++) {
+      const fy = Math.min(fh - 1, Math.floor((y * fh) / h));
+      for (let x = 0; x < w; x++) {
+        const fx = Math.min(fw - 1, Math.floor((x * fw) / w));
+        colourAt(values[fy * fw + fx], rgb);
+        const p = (y * w + x) * 4;
+        data[p] = rgb[0]; data[p + 1] = rgb[1]; data[p + 2] = rgb[2]; data[p + 3] = 255;
+      }
+    }
+    climateContext.putImageData(climatePixels, 0, 0);
+    climateTexture.needsUpdate = true;
+    globe.material.map = climateTexture;
+    globe.material.needsUpdate = true;
+    // Not a climate-model surface mode: pressing 標準 later must restore the
+    // photograph, and the score line must not claim to describe this.
+    surfaceMode = "field";
+    climateScore = null;
+    return surfaceMode;
+  }
+
   // Axial tilt. The button offers two positions -- upright, and the body's
   // real obliquity from its config -- and "upright" has to mean upright no
   // matter how the globe has been dragged around, so this sets an absolute
@@ -734,6 +768,15 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
     getClimateScore: () => climateScore,
     setGraticule,
     getMetresPerPixel,
+    // --- Climate v1 preview seam -------------------------------------------
+    // The decoded height raster, so main.js can build Climate v1's own terrain
+    // field from exactly the grid the globe is drawn from rather than
+    // downloading and decoding it a second time.
+    getElevation: () => ({
+      width: elevation.width, height: elevation.height,
+      metres: elevation.metres, seaLevelMetres,
+    }),
+    showScalarField,
     dispose,
   };
 }

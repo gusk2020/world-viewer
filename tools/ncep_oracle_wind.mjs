@@ -37,39 +37,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { parseWindGrid } from "../js/climate-v1/wind-teacher.js";
-
-function harmonicFill(values, width, height, masked, { maxIterations = 20000, tolerance = 1e-7 } = {}) {
-  const out = Float64Array.from(values);
-  let sum = 0, n = 0;
-  for (let i = 0; i < out.length; i++) if (!masked[i]) { sum += out[i]; n++; }
-  if (n === 0) throw new Error("harmonicFill: every cell is masked");
-  const seed = sum / n;
-  for (let i = 0; i < out.length; i++) if (masked[i]) out[i] = seed;
-
-  let iterations = 0, residual = Infinity;
-  for (let it = 0; it < maxIterations; it++) {
-    residual = 0;
-    for (let y = 0; y < height; y++) {
-      const row = y * width;
-      // Longitude wraps. The pole rows have no neighbour beyond them, so the
-      // row itself stands in -- a no-flux edge, not an invented value.
-      const north = y === 0 ? row : row - width;
-      const south = y === height - 1 ? row : row + width;
-      for (let x = 0; x < width; x++) {
-        const i = row + x;
-        if (!masked[i]) continue;
-        const next = (out[row + ((x + 1) % width)] + out[row + ((x + width - 1) % width)] +
-          out[north + x] + out[south + x]) / 4;
-        const d = Math.abs(next - out[i]);
-        if (d > residual) residual = d;
-        out[i] = next;
-      }
-    }
-    iterations = it + 1;
-    if (residual < tolerance) break;
-  }
-  return { values: out, iterations, residual };
-}
+import { buildOracleWind } from "../js/climate-v1/oracle-wind.js";
 
 const nearestIn = (axis, v, wrap) => {
   let best = 0, bd = Infinity;
@@ -96,28 +64,24 @@ export function loadNcepOracleWind({ teacherDir, levelKey = "level850hPa", width
     throw new Error(`loadNcepOracleWind: no usable axes for ${levelKey} at ${spec.width}x${spec.height}`);
   }
 
-  const masked = new Uint8Array(spec.width * spec.height);
-  let maskedCount = 0;
-  for (let i = 0; i < masked.length; i++) {
-    if (!Number.isFinite(u[i]) || !Number.isFinite(v[i])) { masked[i] = 1; maskedCount++; }
-  }
-  const fu = maskedCount > 0 ? harmonicFill(u, spec.width, spec.height, masked) : { values: Float64Array.from(u), iterations: 0, residual: 0 };
-  const fv = maskedCount > 0 ? harmonicFill(v, spec.width, spec.height, masked) : { values: Float64Array.from(v), iterations: 0, residual: 0 };
-
-  const uu = new Float64Array(width * height), vv = new Float64Array(width * height);
+  const built = buildOracleWind({
+    u, v, width: spec.width, height: spec.height, latitudes: lats, longitudes: lons,
+    targetWidth: width, targetHeight: height,
+  });
   const wasMasked = new Uint8Array(width * height);
-  for (let y = 0; y < height; y++) {
-    const j = nearestIn(lats, 90 - ((y + 0.5) * 180) / height);
-    for (let x = 0; x < width; x++) {
-      const i = j * spec.width + nearestIn(lons, -180 + ((x + 0.5) * 360) / width, true);
-      const k = y * width + x;
-      uu[k] = fu.values[i]; vv[k] = fv.values[i]; wasMasked[k] = masked[i];
+  {
+    const m = new Uint8Array(spec.width * spec.height);
+    for (let i = 0; i < m.length; i++) m[i] = Number.isFinite(u[i]) && Number.isFinite(v[i]) ? 0 : 1;
+    for (let y = 0; y < height; y++) {
+      const j = nearestIn(lats, 90 - ((y + 0.5) * 180) / height);
+      for (let x = 0; x < width; x++) wasMasked[y * width + x] = m[j * spec.width + nearestIn(lons, -180 + ((x + 0.5) * 360) / width, true)];
     }
   }
+  const { uWindMs: uu, vWindMs: vv, maskedCount } = built;
   if (!quiet) {
     console.log(`  ${levelKey}: ${spec.width}x${spec.height} -> ${width}x${height}, ` +
       `${maskedCount} below-ground cells harmonically filled ` +
-      `(u ${fu.iterations} iters residual ${fu.residual.toExponential(1)}, v ${fv.iterations} iters ${fv.residual.toExponential(1)})`);
+      `(${built.fillIterations} iterations, residual ${built.fillResidual.toExponential(1)})`);
   }
   return { width, height, uWindMs: uu, vWindMs: vv, wasMasked, maskedCount, spec };
 }

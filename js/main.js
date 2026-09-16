@@ -1,5 +1,15 @@
 import { initGlobe3D } from "./globe3d.js";
 import { initMap2D } from "./map2d.js";
+// Climate v1 preview -- EXPERIMENTAL. This is the first time the app imports
+// anything from js/climate-v1/, and it is deliberately one-way: nothing in
+// the existing 地表 colouring calls into it, and with the preview switched
+// off not a line of it runs.
+import { buildTerrainField } from "./climate-v1/terrain.js";
+import { buildClimateV1Preview, PREVIEW_GRID } from "./climate-v1/preview.js";
+import { EVAPORATIVE_COOLING_PREVIEW_C } from "./climate-v1/evaporative-cooling.js";
+import { buildOracleWind } from "./climate-v1/oracle-wind.js";
+import { CLIMATE_V1_EARTH_TEMPERATURE_CALIBRATION } from "./climate-v1/earth-temperature-calibration.js";
+import { resolveClimateSets } from "./climate.js";
 
 // Which worlds exist, and which one opens first. Everything else about a
 // world -- its radius, its terrain data, its colours, its sea-level range --
@@ -35,6 +45,9 @@ async function main() {
   const scaleBar = document.getElementById("scale-bar");
   const scaleBarLine = document.getElementById("scale-bar-line");
   const scaleBarLabel = document.getElementById("scale-bar-label");
+  const climateV1Row = document.getElementById("climatev1-row");
+  const climateV1Options = document.getElementById("climatev1-options");
+  const climateV1Readout = document.getElementById("climatev1-readout");
   const worldButtons = document.getElementById("world-switch");
   const virtualNote = document.getElementById("virtual-sea-note");
   const loading = document.getElementById("loading");
@@ -87,6 +100,10 @@ async function main() {
     // meaningful, and switching away from Earth forces the view back to 3D.
     // The axis and graticule are 3D-only, so that row goes with the panel.
     axisRow.hidden = mode !== "3d";
+    // The preview paints the 3D globe, so it goes away with the 3D view --
+    // same rule as the axis/graticule row beside it.
+    climateV1Row.hidden = mode !== "3d" || !(globe3d && globe3d.supportsClimate);
+    if (mode !== "3d") { climateV1Options.hidden = true; climateV1Readout.hidden = true; }
     // The scale bar is derived from the 3D camera, so it would be quietly
     // wrong sitting on top of the 2D map -- which draws its own.
     scaleBar.hidden = mode !== "3d" || GRATICULE_STATES[graticuleIndex].mode === "off";
@@ -131,6 +148,7 @@ async function main() {
   surfaceButtons.forEach((button) => {
     button.addEventListener("click", () => {
       surfaceMode = button.dataset.surface;
+      if (v1Mode !== "off") { v1Mode = "off"; applyV1Buttons(); climateV1Options.hidden = true; climateV1Readout.hidden = true; }
       applySurfaceButtons();
       requestAnimationFrame(() => {
         globe3d.setSurfaceMode(surfaceMode);
@@ -152,6 +170,264 @@ async function main() {
     applyClimateScore();
     applyClimateCompareLine(climateSetRow.hidden ? null : globe3d.getClimateSet());
   }
+
+  // ---------------------------------------------------------------------
+  // Climate v1 preview (EXPERIMENTAL)
+  //
+  // A second, independent pipeline: terrain -> temperature -> humidity ->
+  // wind -> moisture, with an experimental evaporative cooling that can be
+  // switched on and off from the phone. It paints its own field onto the
+  // globe through globe3d.showScalarField, so the 地表 colouring above is
+  // untouched and pressing 標準 restores the photograph.
+  //
+  // Everything here is lazy: no mask is fetched and no field is computed
+  // until 気温 or 湿度 is pressed for the first time.
+  // ---------------------------------------------------------------------
+  let v1Mode = "off";           // off | temperature | humidity
+  let v1Cooling = "off";        // off | on
+  let v1Wind = "model";         // model | observed
+  let v1TerrainField = null;    // built once per world
+  let v1OracleWind = null;      // fetched once, only if 観測風 is asked for
+  let v1Cache = new Map();      // "cooling|wind" -> preview
+  let v1Busy = false;
+
+  const v1Buttons = document.querySelectorAll("#climatev1-mode button");
+  const v1CoolingButtons = document.querySelectorAll("#climatev1-cooling button");
+  const v1WindButtons = document.querySelectorAll("#climatev1-wind button");
+
+  // Two small masks the Climate v1 land/sea rule already uses offline. Both
+  // are paletted PNGs, and a canvas hands back colours rather than palette
+  // indices, so each is matched by its own distinctive colour -- magenta for
+  // Köppen's "no data" (i.e. ocean) and blue for water in the surface mask.
+  async function loadMaskByColour(url, matches) {
+    const image = await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error(`failed to load ${url}`));
+      img.src = url;
+    });
+    const canvas = document.createElement("canvas");
+    canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    ctx.drawImage(image, 0, 0);
+    const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const out = new Uint8Array(canvas.width * canvas.height);
+    for (let i = 0; i < out.length; i++) {
+      out[i] = matches(data[i * 4], data[i * 4 + 1], data[i * 4 + 2]) ? 1 : 0;
+    }
+    return { width: canvas.width, height: canvas.height, mask: out };
+  }
+
+  // The preview runs Climate v1 on a halved height raster. The pipeline's
+  // fine-grid stages (the land/sea flood, the distance transform, temperature
+  // and saturation) are all O(cells), so halving each side is roughly four
+  // times faster -- measured 4.6 s -> 1.4 s in the browser -- and a preview
+  // whose transport grid is 256x128 anyway cannot show the difference. It is
+  // a preview setting, not a change to Climate v1: every command-line tool
+  // still runs at the full 2048x1024.
+  const V1_PREVIEW_WIDTH = 1024;
+
+  function coarsenElevation(elevation, targetWidth) {
+    const { width, height, metres } = elevation;
+    if (width <= targetWidth) return { width, height, metres };
+    const factor = Math.round(width / targetWidth);
+    const w = Math.floor(width / factor), h = Math.floor(height / factor);
+    const out = new Int16Array(w * h);
+    const per = factor * factor;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        let sum = 0;
+        for (let dy = 0; dy < factor; dy++) {
+          const row = (y * factor + dy) * width + x * factor;
+          for (let dx = 0; dx < factor; dx++) sum += metres[row + dx];
+        }
+        // Area-averaged, the same rule the terrain pipeline itself uses when
+        // it builds a coarser level -- never point decimation, which drops
+        // peaks and trenches outright.
+        out[y * w + x] = Math.round(sum / per);
+      }
+    }
+    return { width: w, height: h, metres: out };
+  }
+
+  async function ensureV1Terrain() {
+    if (v1TerrainField) return v1TerrainField;
+    const elevation = globe3d.getElevation();
+    const config = world.config;
+    let oceanMask = null, waterSurfaceMask = null;
+    // Optional: without them Climate v1 falls back to connectivity alone,
+    // which loses the Black Sea and the lakes but still works.
+    try {
+      if (config.teacherStructure && config.teacherStructure.map) {
+        const m = await loadMaskByColour(config.teacherStructure.map, (r, g, b) => r > 200 && g < 60 && b > 200);
+        oceanMask = { width: m.width, height: m.height, isOcean: m.mask, source: config.teacherStructure.map };
+      }
+    } catch (error) { console.warn("Climate v1: no ocean mask", error); }
+    try {
+      if (config.terrain.waterSurfaceMask) {
+        const m = await loadMaskByColour(config.terrain.waterSurfaceMask, (r, g, b) => b > 128 && r < 128);
+        waterSurfaceMask = { width: m.width, height: m.height, isWater: m.mask, source: config.terrain.waterSurfaceMask };
+      }
+    } catch (error) { console.warn("Climate v1: no water-surface mask", error); }
+    v1TerrainField = buildTerrainField({
+      elevationGrid: coarsenElevation(elevation, V1_PREVIEW_WIDTH),
+      seaLevelMetres: elevation.seaLevelMetres,
+      oceanMask, waterSurfaceMask,
+    });
+    return v1TerrainField;
+  }
+
+  // The observed wind is a DIAGNOSTIC teacher, never the model. It is only
+  // downloaded if the user actually asks for 観測風.
+  async function ensureV1OracleWind() {
+    if (v1OracleWind) return v1OracleWind;
+    const summary = await (await fetch("./worlds/kasoku-sekai/teacher/wind-summary.json")).json();
+    const spec = summary.grids.level850hPa;
+    const read = async (file) => new Float32Array(
+      await (await fetch(`./worlds/kasoku-sekai/teacher/${file}`)).arrayBuffer()
+    );
+    const [u, v] = await Promise.all([read(spec.files.u), read(spec.files.v)]);
+    v1OracleWind = buildOracleWind({
+      u, v, width: spec.width, height: spec.height,
+      latitudes: spec.latitudes, longitudes: spec.longitudes,
+      targetWidth: PREVIEW_GRID.width, targetHeight: PREVIEW_GRID.height,
+    });
+    return v1OracleWind;
+  }
+
+  const V1_REGIONS = [
+    ["アマゾン", -70, -55, -8, 2], ["コンゴ", 15, 28, -5, 5],
+    ["インドネシア", 100, 130, -8, 6], ["サハラ", -8, 28, 18, 28],
+  ];
+
+  function v1RegionLine(preview) {
+    const t = preview.temperatureField, m = preview.moistureField;
+    const parts = V1_REGIONS.map(([name, l0, l1, a0, a1]) => {
+      let sT = 0, wT = 0, sQ = 0, wQ = 0;
+      for (let y = 0; y < t.height; y++) {
+        const lat = 90 - ((y + 0.5) * 180) / t.height;
+        if (lat < a0 || lat > a1) continue;
+        const w = Math.cos((lat * Math.PI) / 180);
+        for (let x = 0; x < t.width; x++) {
+          const lng = -180 + ((x + 0.5) * 360) / t.width;
+          if (lng < l0 || lng > l1) continue;
+          const i = y * t.width + x;
+          if (preview.terrainField.isSea[i]) continue;
+          sT += w * t.annualMeanTemperatureC[i]; wT += w;
+        }
+      }
+      for (let y = 0; y < m.height; y++) {
+        const lat = 90 - ((y + 0.5) * 180) / m.height;
+        if (lat < a0 || lat > a1) continue;
+        const w = Math.cos((lat * Math.PI) / 180);
+        for (let x = 0; x < m.width; x++) {
+          const lng = -180 + ((x + 0.5) * 360) / m.width;
+          if (lng < l0 || lng > l1) continue;
+          sQ += w * m.specificHumidityKgPerKg[y * m.width + x] * 1000; wQ += w;
+        }
+      }
+      return `${name} ${wT > 0 ? (sT / wT).toFixed(1) : "-"}℃ ${wQ > 0 ? (sQ / wQ).toFixed(1) : "-"}g/kg`;
+    });
+    return `実験表示（本番の地表色には影響しません）\n${parts.join(" ／ ")}`;
+  }
+
+  // Colour ramps. Both are deliberately coarse and readable rather than
+  // pretty: this is an instrument, not a picture.
+  function temperatureColour(celsius, rgb) {
+    const t = Math.min(1, Math.max(0, (celsius + 40) / 80));
+    // cold blue -> pale -> warm red, through a light middle so a coastline
+    // stays legible against it.
+    const r = t < 0.5 ? 40 + 380 * t * 0.5 : 235;
+    const g = t < 0.5 ? 70 + 300 * t : 235 - 300 * (t - 0.5);
+    const b = t < 0.5 ? 200 - 60 * t : 220 - 380 * (t - 0.5);
+    rgb[0] = Math.max(0, Math.min(255, r | 0));
+    rgb[1] = Math.max(0, Math.min(255, g | 0));
+    rgb[2] = Math.max(0, Math.min(255, b | 0));
+  }
+  function humidityColour(gPerKg, rgb) {
+    const t = Math.min(1, Math.max(0, gPerKg / 22));
+    rgb[0] = Math.max(0, Math.min(255, (232 - 210 * t) | 0));
+    rgb[1] = Math.max(0, Math.min(255, (220 - 80 * t) | 0));
+    rgb[2] = Math.max(0, Math.min(255, (170 + 70 * t) | 0));
+  }
+
+  async function applyClimateV1() {
+    const showsV1 = v1Mode !== "off" && Boolean(globe3d && globe3d.supportsClimate);
+    climateV1Options.hidden = !showsV1;
+    climateV1Readout.hidden = !showsV1;
+    if (!showsV1) {
+      if (surfaceMode) globe3d.setSurfaceMode(surfaceMode);
+      return;
+    }
+    if (v1Busy) return;
+    v1Busy = true;
+    climateV1Readout.textContent = "計算中…";
+    try {
+      const terrain = await ensureV1Terrain();
+      const oracleWind = v1Wind === "observed" ? await ensureV1OracleWind() : null;
+      const key = `${v1Cooling}|${v1Wind}`;
+      let preview = v1Cache.get(key);
+      if (!preview) {
+        const sets = resolveClimateSets(world.config);
+        const values = sets.sets.find((s) => s.id === sets.defaultId).values;
+        preview = buildClimateV1Preview({
+          terrainField: terrain, body: world.config.body,
+          // Climate v1 carries its own Earth temperature calibration; it is
+          // internal to v1 and never touches the shipped v0.8 parameters.
+          params: { ...values, ...CLIMATE_V1_EARTH_TEMPERATURE_CALIBRATION },
+          oracleWind,
+          evaporativeCooling: v1Cooling === "on"
+            ? { evaporativeCoolingC: EVAPORATIVE_COOLING_PREVIEW_C } : {},
+        });
+        v1Cache.set(key, preview);
+      }
+      if (v1Mode === "temperature") {
+        const t = preview.temperatureField;
+        globe3d.showScalarField({
+          width: t.width, height: t.height, values: t.annualMeanTemperatureC, colourAt: temperatureColour,
+        });
+      } else {
+        const m = preview.moistureField;
+        const g = new Float32Array(m.specificHumidityKgPerKg.length);
+        for (let i = 0; i < g.length; i++) g[i] = m.specificHumidityKgPerKg[i] * 1000;
+        globe3d.showScalarField({ width: m.width, height: m.height, values: g, colourAt: humidityColour });
+      }
+      climateV1Readout.textContent = v1RegionLine(preview);
+    } catch (error) {
+      console.error("Climate v1 preview failed", error);
+      climateV1Readout.textContent = "実験表示の計算に失敗しました";
+    } finally {
+      v1Busy = false;
+    }
+  }
+
+  function applyV1Buttons() {
+    v1Buttons.forEach((b) => b.classList.toggle("selected", b.dataset.v1 === v1Mode));
+    v1CoolingButtons.forEach((b) => b.classList.toggle("selected", b.dataset.cooling === v1Cooling));
+    v1WindButtons.forEach((b) => b.classList.toggle("selected", b.dataset.wind === v1Wind));
+  }
+
+  v1Buttons.forEach((button) => {
+    button.addEventListener("click", () => {
+      v1Mode = button.dataset.v1;
+      applyV1Buttons();
+      requestAnimationFrame(() => { applyClimateV1(); });
+    });
+  });
+  v1CoolingButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      v1Cooling = button.dataset.cooling;
+      applyV1Buttons();
+      requestAnimationFrame(() => { applyClimateV1(); });
+    });
+  });
+  v1WindButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      v1Wind = button.dataset.wind;
+      applyV1Buttons();
+      requestAnimationFrame(() => { applyClimateV1(); });
+    });
+  });
 
   // The temporary comparison feature's own precomputed A/B numbers (see
   // js/globe3d.js's "sea-ice-round comparison feature" block). Static
@@ -400,8 +676,17 @@ async function main() {
     // colouring can be compared with it by eye on the phone. Only worlds
     // that carry teacher data offer it.
     teacherButton.hidden = !globe3d.hasTeacher;
-    // A newly built globe always starts on its own standard surface.
+    // A newly built globe always starts on its own standard surface, and the
+    // experimental preview starts off -- its terrain field and cached runs
+    // belong to the world that has just been replaced.
     surfaceMode = "standard";
+    v1Mode = "off";
+    v1TerrainField = null;
+    v1Cache = new Map();
+    climateV1Row.hidden = !globe3d.supportsClimate;
+    applyV1Buttons();
+    climateV1Options.hidden = true;
+    climateV1Readout.hidden = true;
     buildClimateSetButtons();
     applySurfaceButtons();
     seabedRow.hidden = !hasPhoto;
