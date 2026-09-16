@@ -1,5 +1,16 @@
 # Stage 5C-alpha — the RH-dependent recycling hypothesis, and its identification test
 
+> **Correction (oracle-wind harness fix).** Every NCEP 850 hPa oracle number
+> in this document was computed with the teacher's below-ground cells regridded
+> as `u = v = 0`, i.e. as dead calm. They are not calm, they are unobserved,
+> and in the Stage 5B solver a calm cell with `K = 0` has exactly zero moisture
+> as its solution. Those cells are now filled by harmonic (Laplace) extension
+> — see `tools/ncep_oracle_wind.mjs` and
+> `docs/climate-v1-dry-tail-diagnosis-stage5b.md`. The old numbers are kept
+> here as the record; the recomputed ones are in
+> `docs/climate-v1-oracle-wind-fix.md`.
+
+
 No parameter was fitted. The wind model, the humidity model and Stage 5B's
 transport equation are unchanged, and `js/climate.js` (what the app draws) was
 not touched. Verification runs on the **NCEP 850 hPa oracle wind**, so nothing

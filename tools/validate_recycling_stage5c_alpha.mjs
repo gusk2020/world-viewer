@@ -20,7 +20,7 @@ import { buildTemperatureField } from "../js/climate-v1/temperature.js";
 import { CLIMATE_V1_EARTH_TEMPERATURE_CALIBRATION } from "../js/climate-v1/earth-temperature-calibration.js";
 import { buildHumidityField } from "../js/climate-v1/humidity.js";
 import { parseTeacherGrid } from "../js/climate-v1/humidity-teacher.js";
-import { parseWindGrid } from "../js/climate-v1/wind-teacher.js";
+import { loadNcepOracleWind } from "./ncep_oracle_wind.mjs";
 import { buildMoistureField, WIND_MODES } from "../js/climate-v1/moisture.js";
 import { buildRecycledMoistureField } from "../js/climate-v1/recycling.js";
 
@@ -66,19 +66,11 @@ const teacherQ = (lat, lng) => {
 };
 
 // ------------------------------------------------------- NCEP oracle wind ---
-const wsum = JSON.parse(readFileSync(path.join(TEACHER, "wind-summary.json"), "utf8"));
-const spec = wsum.grids.level850hPa;
-const tu = parseWindGrid(readFileSync(path.join(TEACHER, spec.files.u)), spec).values;
-const tv = parseWindGrid(readFileSync(path.join(TEACHER, spec.files.v)), spec).values;
-const oracle = { width: W, height: H, uWindMs: new Float64Array(W * H), vWindMs: new Float64Array(W * H) };
-for (let y = 0; y < H; y++) {
-  const j = nearestIn(spec.latitudes, 90 - ((y + 0.5) * 180) / H);
-  for (let x = 0; x < W; x++) {
-    const i = j * spec.width + nearestIn(spec.longitudes, -180 + ((x + 0.5) * 360) / W, true);
-    if (!Number.isFinite(tu[i]) || !Number.isFinite(tv[i])) continue; // below ground -> calm
-    oracle.uWindMs[y * W + x] = tu[i]; oracle.vWindMs[y * W + x] = tv[i];
-  }
-}
+// Below-ground 850 hPa cells are harmonically filled, never treated as calm.
+// See tools/ncep_oracle_wind.mjs for why, and
+// docs/climate-v1-dry-tail-diagnosis-stage5b.md for what the old treatment
+// cost. Every number in this file after 2026-09 uses the filled wind.
+const oracle = loadNcepOracleWind({ teacherDir: TEACHER, width: W, height: H });
 
 // ------------------------------------------------------------ eval points ---
 const waterFrac = (() => {

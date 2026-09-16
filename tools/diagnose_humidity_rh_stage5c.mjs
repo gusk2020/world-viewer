@@ -16,7 +16,7 @@ import { buildTemperatureField } from "../js/climate-v1/temperature.js";
 import { CLIMATE_V1_EARTH_TEMPERATURE_CALIBRATION } from "../js/climate-v1/earth-temperature-calibration.js";
 import { buildHumidityField, saturationVapourPressureHPa, saturationSpecificHumidity } from "../js/climate-v1/humidity.js";
 import { parseTeacherGrid } from "../js/climate-v1/humidity-teacher.js";
-import { parseWindGrid } from "../js/climate-v1/wind-teacher.js";
+import { loadNcepOracleWind } from "./ncep_oracle_wind.mjs";
 import { buildClimateV1Wind } from "../js/climate-v1/wind.js";
 import { buildMoistureField, WIND_MODES } from "../js/climate-v1/moisture.js";
 
@@ -62,19 +62,9 @@ const sampleT = (name, lat, lng) => {
 };
 
 // ------------------------------------------------------------------ winds ---
-const wsum = JSON.parse(readFileSync(path.join(TEACHER, "wind-summary.json"), "utf8"));
-const spec850 = wsum.grids.level850hPa;
-const tu = parseWindGrid(readFileSync(path.join(TEACHER, spec850.files.u)), spec850).values;
-const tv = parseWindGrid(readFileSync(path.join(TEACHER, spec850.files.v)), spec850).values;
-const oracle = { width: W, height: H, uWindMs: new Float64Array(W * H), vWindMs: new Float64Array(W * H) };
-for (let y = 0; y < H; y++) {
-  const j = nearestIn(spec850.latitudes, 90 - ((y + 0.5) * 180) / H);
-  for (let x = 0; x < W; x++) {
-    const i = j * spec850.width + nearestIn(spec850.longitudes, -180 + ((x + 0.5) * 360) / W, true);
-    if (!Number.isFinite(tu[i]) || !Number.isFinite(tv[i])) continue;
-    oracle.uWindMs[y * W + x] = tu[i]; oracle.vWindMs[y * W + x] = tv[i];
-  }
-}
+// Below-ground 850 hPa cells are harmonically filled, never calm -- see
+// tools/ncep_oracle_wind.mjs and docs/climate-v1-dry-tail-diagnosis-stage5b.md.
+const oracle = loadNcepOracleWind({ teacherDir: TEACHER, width: W, height: H });
 const stage4 = buildClimateV1Wind({
   terrainField, temperatureField, lapseRateCPerKm: params.lapseRateCPerKm, body: config.body,
   atmosphere: { specificGasConstantJPerKgK: 287, surfacePressureHPa: 1000, levelPressureHPa: 850 },

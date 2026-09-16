@@ -33,7 +33,7 @@ import { buildHumidityField, saturationSpecificHumidity, saturationVapourPressur
 import { buildClimateV1Wind } from "../js/climate-v1/wind.js";
 import { currentModelWind, nearestModelRow } from "../js/climate-v1/wind-diagnostic.js";
 import { parseTeacherGrid } from "../js/climate-v1/humidity-teacher.js";
-import { parseWindGrid } from "../js/climate-v1/wind-teacher.js";
+import { loadNcepOracleWind } from "./ncep_oracle_wind.mjs";
 import { buildMoistureField, WIND_MODES, MOISTURE_PARAMETERS } from "../js/climate-v1/moisture.js";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -79,46 +79,21 @@ const sampleTeacher = (g, lat, lng) => g.values[nearestIn(g.latitudes, lat) * g.
 const teacherQ = (lat, lng) => sampleTeacher(TG.specificHumidityKgPerKg, lat, lng);
 
 // ------------------------------------------------------- the NCEP winds -----
-// Regridded to 256x128 BY COORDINATE, using each source grid's own axes.
-// The 10 m wind is on NCEP's T62 Gaussian grid (192x94) whose rows are NOT
-// evenly spaced; its axes are borrowed from the humidity teacher's 2 m fields,
-// which come from the same surface_gauss product family on the same grid. The
-// dimensions are asserted rather than assumed.
-const wsum = JSON.parse(readFileSync(path.join(TEACHER, "wind-summary.json"), "utf8"));
-function ncepWind(levelKey, label) {
-  const spec = wsum.grids[levelKey];
-  const u = parseWindGrid(readFileSync(path.join(TEACHER, spec.files.u)), spec).values;
-  const v = parseWindGrid(readFileSync(path.join(TEACHER, spec.files.v)), spec).values;
-  let lats, lons;
-  if (spec.width === 144 && spec.height === 73) {
-    lats = Array.from({ length: 73 }, (_, j) => 90 - j * 2.5);
-    lons = Array.from({ length: 144 }, (_, i) => -180 + i * 2.5);
-  } else if (spec.width === TG.specificHumidityKgPerKg.width && spec.height === TG.specificHumidityKgPerKg.height) {
-    lats = TG.specificHumidityKgPerKg.latitudes;
-    lons = TG.specificHumidityKgPerKg.longitudes.map((l) => (l > 180 ? l - 360 : l));
-  } else {
-    throw new Error(`no axes known for ${levelKey} at ${spec.width}x${spec.height}`);
-  }
-  const uu = new Float64Array(W * H), vv = new Float64Array(W * H);
-  let masked = 0;
-  for (let y = 0; y < H; y++) {
-    const lat = 90 - ((y + 0.5) * 180) / H;
-    const j = nearestIn(lats, lat);
-    for (let x = 0; x < W; x++) {
-      const lng = -180 + ((x + 0.5) * 360) / W;
-      const i = j * spec.width + nearestIn(lons, lng, true);
-      if (!Number.isFinite(u[i]) || !Number.isFinite(v[i])) { masked++; continue; } // below ground at 850 hPa -> calm
-      uu[y * W + x] = u[i]; vv[y * W + x] = v[i];
-    }
-  }
-  console.log(`  ${label}: ${spec.width}x${spec.height} -> ${W}x${H}, ${masked} cells masked (treated as calm)`);
-  return { width: W, height: H, uWindMs: uu, vWindMs: vv };
-}
-
+// Regridded by coordinate, with 850 hPa's below-ground cells HARMONICALLY
+// FILLED rather than treated as calm. The original version of this file wrote
+// them as u = v = 0, which put 16.5% of land at exactly zero humidity and
+// corrupted every oracle-wind number below; see
+// tools/ncep_oracle_wind.mjs and
+// docs/climate-v1-dry-tail-diagnosis-stage5b.md. The 10 m level is on NCEP's
+// T62 Gaussian grid, whose axes come from the humidity teacher's own fields
+// on that same grid.
 console.log("Stage 5B.1 -- failure diagnosis. No mechanism added; moisture.js unchanged.\n");
 console.log("regridding the observed winds by coordinate:");
-const ncep850 = ncepWind("level850hPa", "NCEP 850 hPa");
-const ncep10m = ncepWind("level10m", "NCEP 10 m");
+const ncep850 = loadNcepOracleWind({ teacherDir: TEACHER, levelKey: "level850hPa", width: W, height: H });
+const ncep10m = loadNcepOracleWind({
+  teacherDir: TEACHER, levelKey: "level10m", width: W, height: H,
+  axes: { latitudes: TG.specificHumidityKgPerKg.latitudes, longitudes: TG.specificHumidityKgPerKg.longitudes },
+});
 
 const stage4 = buildClimateV1Wind({
   terrainField, temperatureField, lapseRateCPerKm: params.lapseRateCPerKm, body: config.body,

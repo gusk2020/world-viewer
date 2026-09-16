@@ -1,5 +1,16 @@
 # Stage 5C diagnosis — why the model's land relative humidity is so low
 
+> **Correction (oracle-wind harness fix).** Every NCEP 850 hPa oracle number
+> in this document was computed with the teacher's below-ground cells regridded
+> as `u = v = 0`, i.e. as dead calm. They are not calm, they are unobserved,
+> and in the Stage 5B solver a calm cell with `K = 0` has exactly zero moisture
+> as its solution. Those cells are now filled by harmonic (Laplace) extension
+> — see `tools/ncep_oracle_wind.mjs` and
+> `docs/climate-v1-dry-tail-diagnosis-stage5b.md`. The old numbers are kept
+> here as the record; the recomputed ones are in
+> `docs/climate-v1-oracle-wind-fix.md`.
+
+
 Diagnosis only. Nothing fitted, no mechanism added, no model changed. The
 teacher's own RH is built from the teacher's own q, T and p through the **same
 Stage 5A formulas** the model uses, so the two sides differ only in inputs.

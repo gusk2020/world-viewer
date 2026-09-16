@@ -1,5 +1,16 @@
 # Climate v1 Stage 5B.1 — separating Stage 5B's failure
 
+> **Correction (oracle-wind harness fix).** Every NCEP 850 hPa oracle number
+> in this document was computed with the teacher's below-ground cells regridded
+> as `u = v = 0`, i.e. as dead calm. They are not calm, they are unobserved,
+> and in the Stage 5B solver a calm cell with `K = 0` has exactly zero moisture
+> as its solution. Those cells are now filled by harmonic (Laplace) extension
+> — see `tools/ncep_oracle_wind.mjs` and
+> `docs/climate-v1-dry-tail-diagnosis-stage5b.md`. The old numbers are kept
+> here as the record; the recomputed ones are in
+> `docs/climate-v1-oracle-wind-fix.md`.
+
+
 Diagnosis only. **No mechanism was added and `js/climate-v1/moisture.js` was
 not modified** — every case here is produced by changing the solver's
 *inputs*, never its code. Stage 5B's failing result stands unchanged.
