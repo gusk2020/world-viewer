@@ -17,7 +17,7 @@ import {
 } from "./geoConvert.js";
 import { decodeElevationGrid, pickElevationLevel, sampleMetres } from "./elevation.js";
 import { buildCubeSphere } from "./cubeSphere.js";
-import { buildHypsometricRamp } from "./hypsometric.js";
+import { buildHypsometricRamp, buildHypsometricLookup} from "./hypsometric.js";
 import { buildGraticule } from "./graticule.js";
 import {
   paintBareRock,
@@ -355,7 +355,7 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
       // temporary feature. Its .values/.palette are untouched.
       const defaultSet = climateSets.sets.find((set) => set.id === climateSets.defaultId);
       if (defaultSet) {
-        defaultSet.label = "現行";
+        defaultSet.label = "最新";
         defaultSet.note = shipped.why || defaultSet.note;
         defaultSet.compareInfo = compareInfo(shipped);
       }
@@ -371,8 +371,8 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
         return { id, label, note: entry.why || "", compareInfo: compareInfo(entry), ...resolved };
       };
       climateSets.sets.push(
-        buildCompareSet("real-season-itcz-snow-new-seaice", "旧季節", oldSeason),
-        buildCompareSet("large-search-teacher-b", "新季節", newSeason)
+        buildCompareSet("real-season-itcz-snow-new-seaice", "0910a版", oldSeason),
+        buildCompareSet("large-search-teacher-b", "0910b版", newSeason)
       );
     }
   }
@@ -390,6 +390,7 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
   let climateContext = null;
   let climatePixels = null;
   let climateTexture = null;
+  let hypsometricLookup = null;
 
   function ensureClimateTexture() {
     if (climateTexture) return;
@@ -452,7 +453,8 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
     if (!supportsClimate) return surfaceMode;
     // Anything unrecognised means the world's own surface, not bare rock --
     // which is what an unknown name used to fall through to.
-    const known = mode === "climate" || mode === "rock" || (mode === "teacher" && hasTeacher);
+    const known = mode === "climate" || mode === "rock" || mode === "hypsometric"
+      || (mode === "teacher" && hasTeacher);
     surfaceMode = known ? mode : "standard";
     if (surfaceMode !== "climate") climateScore = null;
     if (surfaceMode === "standard" || surfaceMode === "teacher") {
@@ -461,6 +463,32 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
       return surfaceMode;
     }
     ensureClimateTexture();
+    // 未調整: the terrain with nothing added. Earth's mesh carries map UVs
+    // rather than height-as-u, so the ramp is painted into the surface
+    // texture here instead of being a 1-D texture on the mesh; both routes
+    // read the same display.hypsometric.stops (see js/hypsometric.js).
+    if (surfaceMode === "hypsometric") {
+      if (!hypsometricLookup) {
+        const stops = worldConfig.display && worldConfig.display.hypsometric
+          ? worldConfig.display.hypsometric.stops : null;
+        if (!stops) { surfaceMode = "standard"; globe.material.map = texture; globe.material.needsUpdate = true; return surfaceMode; }
+        hypsometricLookup = buildHypsometricLookup(stops);
+      }
+      const data = climatePixels.data;
+      const rgb = [0, 0, 0];
+      for (let i = 0; i < elevation.metres.length; i++) {
+        // Relative to the sea slider, exactly as the 1-D-texture route is:
+        // the same height is the same colour whichever way it is drawn.
+        hypsometricLookup.colourAt(elevation.metres[i] - seaLevelMetres, rgb);
+        const p = i * 4;
+        data[p] = rgb[0]; data[p + 1] = rgb[1]; data[p + 2] = rgb[2]; data[p + 3] = 255;
+      }
+      climateContext.putImageData(climatePixels, 0, 0);
+      climateTexture.needsUpdate = true;
+      globe.material.map = climateTexture;
+      globe.material.needsUpdate = true;
+      return surfaceMode;
+    }
     if (surfaceMode === "climate") {
       // A local, not a field: the coarse grids are about a megabyte and are
       // read once, on the next line. Holding them for the life of the globe

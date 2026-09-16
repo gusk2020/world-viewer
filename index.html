@@ -21,14 +21,18 @@
   <div id="map2d" hidden></div>
   <div id="loading">読み込み中…</div>
   <div id="sea-level-control" class="panel">
-    <div class="control-row">
+    <!-- Hidden for now, deliberately NOT removed: these come back when the
+         standard conditions reproduce the real Earth well enough to be worth
+         adjusting. js/main.js keeps them hidden rather than re-showing them
+         per world. -->
+    <div class="control-row" id="sea-level-row" hidden>
       <label for="sea-level-slider" id="sea-level-label">海面の高さ</label>
       <input type="range" id="sea-level-slider" min="-300" max="100" step="1" value="0" />
       <span id="sea-level-readout">±0m</span>
     </div>
     <p id="virtual-sea-note" hidden>※実際には海はありません。「ここまで水があったら
       どこが海になるか」を見るための仮想の海面です。</p>
-    <div class="control-row">
+    <div class="control-row" id="water-opacity-row" hidden>
       <label for="water-opacity-slider">海の濃さ</label>
       <input type="range" id="water-opacity-slider" min="0" max="100" step="5" value="40" />
       <span id="water-opacity-readout">40%</span>
@@ -36,6 +40,7 @@
     <div class="control-row" id="surface-row">
       <label>地表</label>
       <div id="surface-mode" class="segmented">
+        <button type="button" data-surface="hypsometric">未調整</button>
         <button type="button" data-surface="standard" class="selected">標準</button>
         <button type="button" data-surface="rock">岩</button>
         <button type="button" data-surface="climate">陸地塗り分け</button>
@@ -53,7 +58,7 @@
     </div>
     <p id="climate-score" hidden></p>
     <p id="climate-compare-score" hidden></p>
-    <div class="control-row" id="seabed-row">
+    <div class="control-row" id="seabed-row" hidden>
       <label>海底の色</label>
       <div id="seabed-style" class="segmented">
         <button type="button" data-style="photo" class="selected">写真</button>
@@ -63,13 +68,12 @@
       </div>
     </div>
   </div>
+  <!-- One button per corner, clear of the globe: the body cycles, the view
+       toggles. Neither needs a row in a panel. -->
+  <button type="button" id="world-cycle" class="corner-button">天体 地球</button>
+  <button id="view-toggle" class="corner-button">2Dに切替</button>
   <div id="bottom-controls">
-    <button id="view-toggle">2Dに切替</button>
     <div id="bottom-panel" class="panel">
-      <div class="control-row">
-        <label>天体</label>
-        <div id="world-switch" class="segmented"></div>
-      </div>
       <div class="control-row" id="axis-row">
         <button type="button" id="axis-toggle" class="pill">軸 垂直</button>
         <span id="axis-readout">0°</span>
@@ -86,14 +90,20 @@
           <button type="button" data-v1="humidity">湿度</button>
         </div>
       </div>
+      <div class="control-row" id="climatev1-source-row" hidden>
+        <div id="climatev1-source" class="segmented">
+          <button type="button" data-source="model" class="selected">モデル</button>
+          <button type="button" data-source="teacher" title="実測データ（気温 Berkeley/NCEP 年平均、湿度 NCEP 2m）">教師</button>
+        </div>
+      </div>
       <div class="control-row" id="climatev1-options" hidden>
         <div id="climatev1-cooling" class="segmented">
           <button type="button" data-cooling="off" class="selected">蒸発冷却 切</button>
           <button type="button" data-cooling="on">入</button>
         </div>
         <div id="climatev1-wind" class="segmented">
-          <button type="button" data-wind="model" class="selected">現行風</button>
-          <button type="button" data-wind="observed">観測風</button>
+          <button type="button" data-wind="model" class="selected" title="モデル計算風（Climate v1 Stage 4）">現行風</button>
+          <button type="button" data-wind="observed" title="NCEP 850hPa 観測風・診断用">観測風</button>
         </div>
       </div>
       <p id="climatev1-readout" hidden></p>

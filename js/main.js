@@ -46,9 +46,10 @@ async function main() {
   const scaleBarLine = document.getElementById("scale-bar-line");
   const scaleBarLabel = document.getElementById("scale-bar-label");
   const climateV1Row = document.getElementById("climatev1-row");
+  const climateV1SourceRow = document.getElementById("climatev1-source-row");
   const climateV1Options = document.getElementById("climatev1-options");
   const climateV1Readout = document.getElementById("climatev1-readout");
-  const worldButtons = document.getElementById("world-switch");
+  const worldCycleButton = document.getElementById("world-cycle");
   const virtualNote = document.getElementById("virtual-sea-note");
   const loading = document.getElementById("loading");
 
@@ -103,7 +104,7 @@ async function main() {
     // The preview paints the 3D globe, so it goes away with the 3D view --
     // same rule as the axis/graticule row beside it.
     climateV1Row.hidden = mode !== "3d" || !(globe3d && globe3d.supportsClimate);
-    if (mode !== "3d") { climateV1Options.hidden = true; climateV1Readout.hidden = true; }
+    if (mode !== "3d") { climateV1SourceRow.hidden = true; climateV1Options.hidden = true; climateV1Readout.hidden = true; }
     // The scale bar is derived from the 3D camera, so it would be quietly
     // wrong sitting on top of the 2D map -- which draws its own.
     scaleBar.hidden = mode !== "3d" || GRATICULE_STATES[graticuleIndex].mode === "off";
@@ -148,7 +149,7 @@ async function main() {
   surfaceButtons.forEach((button) => {
     button.addEventListener("click", () => {
       surfaceMode = button.dataset.surface;
-      if (v1Mode !== "off") { v1Mode = "off"; applyV1Buttons(); climateV1Options.hidden = true; climateV1Readout.hidden = true; }
+      if (v1Mode !== "off") { v1Mode = "off"; applyV1Buttons(); climateV1SourceRow.hidden = true; climateV1Options.hidden = true; climateV1Readout.hidden = true; }
       applySurfaceButtons();
       requestAnimationFrame(() => {
         globe3d.setSurfaceMode(surfaceMode);
@@ -166,7 +167,7 @@ async function main() {
     const sets = globe3d && globe3d.supportsClimate ? globe3d.climateSets : [];
     const showsClimate = surfaceMode === "climate" && Boolean(globe3d && globe3d.supportsClimate);
     climateSetRow.hidden = !showsClimate || sets.length < 2;
-    climateTempRow.hidden = !showsClimate;
+    climateTempRow.hidden = true; // hidden for now, see loadWorld
     applyClimateScore();
     applyClimateCompareLine(climateSetRow.hidden ? null : globe3d.getClimateSet());
   }
@@ -186,6 +187,8 @@ async function main() {
   let v1Mode = "off";           // off | temperature | humidity
   let v1Cooling = "off";        // off | on
   let v1Wind = "model";         // model | observed
+  let v1Source = "model";       // model | teacher
+  let v1Teacher = null;         // { temperature, humidity } on the preview grid
   let v1TerrainField = null;    // built once per world
   let v1OracleWind = null;      // fetched once, only if 観測風 is asked for
   let v1Cache = new Map();      // "cooling|wind" -> preview
@@ -194,6 +197,7 @@ async function main() {
   const v1Buttons = document.querySelectorAll("#climatev1-mode button");
   const v1CoolingButtons = document.querySelectorAll("#climatev1-cooling button");
   const v1WindButtons = document.querySelectorAll("#climatev1-wind button");
+  const v1SourceButtons = document.querySelectorAll("#climatev1-source button");
 
   // Two small masks the Climate v1 land/sea rule already uses offline. Both
   // are paletted PNGs, and a canvas hands back colours rather than palette
@@ -295,10 +299,82 @@ async function main() {
     return v1OracleWind;
   }
 
+  // The teacher fields, resampled onto the preview grid FOR DISPLAY ONLY --
+  // the committed .bin files are read and never written. Same units and the
+  // same colour ramp as the model, so the two can be compared by eye:
+  // temperature in °C, humidity in g/kg.
+  async function ensureV1Teacher() {
+    if (v1Teacher) return v1Teacher;
+    const dir = "./worlds/kasoku-sekai/teacher";
+    const nearest = (axis, v, wrap) => {
+      let best = 0, bd = Infinity;
+      for (let i = 0; i < axis.length; i++) {
+        let d = Math.abs(axis[i] - v);
+        if (wrap) d = Math.min(d, 360 - d);
+        if (d < bd) { bd = d; best = i; }
+      }
+      return best;
+    };
+    const resample = (values, sw, sh, lats, lons) => {
+      const out = new Float32Array(PREVIEW_GRID.width * PREVIEW_GRID.height);
+      for (let y = 0; y < PREVIEW_GRID.height; y++) {
+        const j = nearest(lats, 90 - ((y + 0.5) * 180) / PREVIEW_GRID.height);
+        for (let x = 0; x < PREVIEW_GRID.width; x++) {
+          const i = nearest(lons, -180 + ((x + 0.5) * 360) / PREVIEW_GRID.width, true);
+          out[y * PREVIEW_GRID.width + x] = values[j * sw + i];
+        }
+      }
+      return out;
+    };
+    const [tSummary, hSummary] = await Promise.all([
+      (await fetch(`${dir}/temperature-summary.json`)).json(),
+      (await fetch(`${dir}/humidity-summary.json`)).json(),
+    ]);
+    const tGrid = tSummary.grid;
+    const tValues = new Float32Array(await (await fetch(`${dir}/${tGrid.valuesFile}`)).arrayBuffer());
+    // A plain 1-degree cell-centred grid; its own summary states row 0 is the
+    // north pole's cell centre and column 0 is about -179.5.
+    const tLats = Array.from({ length: tGrid.height }, (_, j) => 90 - (j + 0.5) * (180 / tGrid.height));
+    const tLons = Array.from({ length: tGrid.width }, (_, i) => -180 + (i + 0.5) * (360 / tGrid.width));
+    const hGrid = hSummary.grids.specificHumidityKgPerKg;
+    const hValues = new Float32Array(await (await fetch(`${dir}/${hGrid.file}`)).arrayBuffer());
+    const hLons = hGrid.longitudes.map((l) => (l > 180 ? l - 360 : l));
+    const humidity = resample(hValues, hGrid.width, hGrid.height, hGrid.latitudes, hLons);
+    for (let i = 0; i < humidity.length; i++) humidity[i] *= 1000; // kg/kg -> g/kg
+    v1Teacher = {
+      temperature: resample(tValues, tGrid.width, tGrid.height, tLats, tLons),
+      humidity,
+    };
+    return v1Teacher;
+  }
+
   const V1_REGIONS = [
     ["アマゾン", -70, -55, -8, 2], ["コンゴ", 15, 28, -5, 5],
     ["インドネシア", 100, 130, -8, 6], ["サハラ", -8, 28, 18, 28],
   ];
+
+  // The same four regions, read off two coarse fields. Used for the teacher,
+  // where there is no preview object to read a fine temperature grid from.
+  function v1RegionLineFromFields(temperatureGPerCell, humidityGPerKg, heading) {
+    const W = PREVIEW_GRID.width, H = PREVIEW_GRID.height;
+    const parts = V1_REGIONS.map(([name, l0, l1, a0, a1]) => {
+      let sT = 0, wT = 0, sQ = 0, wQ = 0;
+      for (let y = 0; y < H; y++) {
+        const lat = 90 - ((y + 0.5) * 180) / H;
+        if (lat < a0 || lat > a1) continue;
+        const w = Math.cos((lat * Math.PI) / 180);
+        for (let x = 0; x < W; x++) {
+          const lng = -180 + ((x + 0.5) * 360) / W;
+          if (lng < l0 || lng > l1) continue;
+          const t = temperatureGPerCell[y * W + x], q = humidityGPerKg[y * W + x];
+          if (Number.isFinite(t)) { sT += w * t; wT += w; }
+          if (Number.isFinite(q)) { sQ += w * q; wQ += w; }
+        }
+      }
+      return `${name} ${wT > 0 ? (sT / wT).toFixed(1) : "-"}℃ ${wQ > 0 ? (sQ / wQ).toFixed(1) : "-"}g/kg`;
+    });
+    return `${heading}\n${parts.join(" ／ ")}`;
+  }
 
   function v1RegionLine(preview) {
     const t = preview.temperatureField, m = preview.moistureField;
@@ -334,6 +410,7 @@ async function main() {
   // Colour ramps. Both are deliberately coarse and readable rather than
   // pretty: this is an instrument, not a picture.
   function temperatureColour(celsius, rgb) {
+    if (!Number.isFinite(celsius)) { rgb[0] = 90; rgb[1] = 90; rgb[2] = 96; return; }
     const t = Math.min(1, Math.max(0, (celsius + 40) / 80));
     // cold blue -> pale -> warm red, through a light middle so a coastline
     // stays legible against it.
@@ -345,6 +422,7 @@ async function main() {
     rgb[2] = Math.max(0, Math.min(255, b | 0));
   }
   function humidityColour(gPerKg, rgb) {
+    if (!Number.isFinite(gPerKg)) { rgb[0] = 90; rgb[1] = 90; rgb[2] = 96; return; }
     const t = Math.min(1, Math.max(0, gPerKg / 22));
     rgb[0] = Math.max(0, Math.min(255, (232 - 210 * t) | 0));
     rgb[1] = Math.max(0, Math.min(255, (220 - 80 * t) | 0));
@@ -353,7 +431,10 @@ async function main() {
 
   async function applyClimateV1() {
     const showsV1 = v1Mode !== "off" && Boolean(globe3d && globe3d.supportsClimate);
-    climateV1Options.hidden = !showsV1;
+    climateV1SourceRow.hidden = !showsV1;
+    // The cooling and wind buttons describe how the MODEL was run, so they
+    // mean nothing while the teacher is on screen.
+    climateV1Options.hidden = !showsV1 || v1Source !== "model";
     climateV1Readout.hidden = !showsV1;
     if (!showsV1) {
       if (surfaceMode) globe3d.setSurfaceMode(surfaceMode);
@@ -363,13 +444,24 @@ async function main() {
     v1Busy = true;
     climateV1Readout.textContent = "計算中…";
     try {
+      const colourAt = v1Mode === "temperature" ? temperatureColour : humidityColour;
+      if (v1Source === "teacher") {
+        const teacher = await ensureV1Teacher();
+        const values = v1Mode === "temperature" ? teacher.temperature : teacher.humidity;
+        globe3d.showScalarField({
+          width: PREVIEW_GRID.width, height: PREVIEW_GRID.height, values, colourAt,
+        });
+        climateV1Readout.textContent =
+          v1RegionLineFromFields(teacher.temperature, teacher.humidity, "教師データ（実測）");
+        return;
+      }
       const terrain = await ensureV1Terrain();
       const oracleWind = v1Wind === "observed" ? await ensureV1OracleWind() : null;
       const key = `${v1Cooling}|${v1Wind}`;
       let preview = v1Cache.get(key);
       if (!preview) {
         const sets = resolveClimateSets(world.config);
-        const values = sets.sets.find((s) => s.id === sets.defaultId).values;
+        const values = sets.sets.find((set) => set.id === sets.defaultId).values;
         preview = buildClimateV1Preview({
           terrainField: terrain, body: world.config.body,
           // Climate v1 carries its own Earth temperature calibration; it is
@@ -384,13 +476,13 @@ async function main() {
       if (v1Mode === "temperature") {
         const t = preview.temperatureField;
         globe3d.showScalarField({
-          width: t.width, height: t.height, values: t.annualMeanTemperatureC, colourAt: temperatureColour,
+          width: t.width, height: t.height, values: t.annualMeanTemperatureC, colourAt,
         });
       } else {
         const m = preview.moistureField;
         const g = new Float32Array(m.specificHumidityKgPerKg.length);
         for (let i = 0; i < g.length; i++) g[i] = m.specificHumidityKgPerKg[i] * 1000;
-        globe3d.showScalarField({ width: m.width, height: m.height, values: g, colourAt: humidityColour });
+        globe3d.showScalarField({ width: m.width, height: m.height, values: g, colourAt });
       }
       climateV1Readout.textContent = v1RegionLine(preview);
     } catch (error) {
@@ -405,6 +497,7 @@ async function main() {
     v1Buttons.forEach((b) => b.classList.toggle("selected", b.dataset.v1 === v1Mode));
     v1CoolingButtons.forEach((b) => b.classList.toggle("selected", b.dataset.cooling === v1Cooling));
     v1WindButtons.forEach((b) => b.classList.toggle("selected", b.dataset.wind === v1Wind));
+    v1SourceButtons.forEach((b) => b.classList.toggle("selected", b.dataset.source === v1Source));
   }
 
   v1Buttons.forEach((button) => {
@@ -417,6 +510,13 @@ async function main() {
   v1CoolingButtons.forEach((button) => {
     button.addEventListener("click", () => {
       v1Cooling = button.dataset.cooling;
+      applyV1Buttons();
+      requestAnimationFrame(() => { applyClimateV1(); });
+    });
+  });
+  v1SourceButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      v1Source = button.dataset.source;
       applyV1Buttons();
       requestAnimationFrame(() => { applyClimateV1(); });
     });
@@ -685,20 +785,22 @@ async function main() {
     v1Cache = new Map();
     climateV1Row.hidden = !globe3d.supportsClimate;
     applyV1Buttons();
+    climateV1SourceRow.hidden = true;
     climateV1Options.hidden = true;
     climateV1Readout.hidden = true;
     buildClimateSetButtons();
     applySurfaceButtons();
-    seabedRow.hidden = !hasPhoto;
+    // Hidden for now at the user's request -- not removed. They come back
+    // when the standard conditions reproduce the real Earth well enough for
+    // adjusting them to mean something.
+    seabedRow.hidden = true;
     toggleButton.hidden = !hasPhoto;
     // Say plainly that these oceans are not real. The point of the slider on
     // an airless body is "if there were water up to here, where would the
     // coast be" -- worth stating rather than implying.
     virtualNote.hidden = hasPhoto;
 
-    worldButtons.querySelectorAll("button").forEach((button) => {
-      button.classList.toggle("selected", button.dataset.world === entry.id);
-    });
+    worldCycleButton.textContent = `天体 ${entry.label}`;
 
     applySeaLevel();
     applyWaterOpacity();
@@ -708,22 +810,20 @@ async function main() {
     loading.classList.add("hidden");
   }
 
-  index.worlds.forEach((entry) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.textContent = entry.label;
-    button.dataset.world = entry.id;
-    button.addEventListener("click", () => {
-      if (world && world.entry.id === entry.id) return;
-      // Let the pressed state and the loading overlay paint before the mesh
-      // build blocks the thread for a moment.
-      requestAnimationFrame(() => {
-        // loadWorld handles its own failures -- it has to, because it is the
-        // only place that knows whether anything was disposed yet.
-        loadWorld(entry);
-      });
+  // One button that cycles 地球 -> 月 -> 火星 -> 地球, rather than a row of
+  // three. It shows the body currently drawn, which is what a corner button
+  // has room to say.
+  worldCycleButton.addEventListener("click", () => {
+    if (!world) return;
+    const at = index.worlds.findIndex((entry) => entry.id === world.entry.id);
+    const next = index.worlds[(at + 1) % index.worlds.length];
+    if (!next || next.id === world.entry.id) return;
+    // Let the loading overlay paint before the mesh build blocks the thread.
+    requestAnimationFrame(() => {
+      // loadWorld handles its own failures -- it has to, because it is the
+      // only place that knows whether anything was disposed yet.
+      loadWorld(next);
     });
-    worldButtons.appendChild(button);
   });
 
   toggleButton.addEventListener("click", () => {

@@ -2889,6 +2889,54 @@ smoke-tested (trial cap, `--resume`, `--merge` all verified working) but
 **deliberately not run at the 10,000-trial scale this round**. The user
 reviews this round's small-scale result first.
 
+## The UI tidy-up after the Pixel 7a preview confirmation
+
+The user confirmed the Climate v1 preview on their phone and then asked for
+the screen to be reorganised. Nothing about the physics changed in this round.
+
+**Four rows are hidden, not deleted** — 海面の高さ, 海の濃さ, 平均気温, 海底の色.
+They come back when the standard conditions reproduce the real Earth well
+enough for adjusting them to mean something. `index.html` carries `hidden` on
+each and `main.js` no longer un-hides them per world. 地表 stays.
+
+**Measured**: the top panel is **41 px** (the 地表 row alone) against 137, and
+the bottom panel **73 px** (the 軸/線 row alone) against 155. The 2D/3D and
+天体 buttons left the panels for the bottom corners, so they cost the globe
+nothing in the middle of the screen.
+
+**The V0.8 comparison sets were renamed, labels only.** 現行 → **最新**,
+旧季節 → **0910a版** (`real-season-itcz-snow-new-seaice`), 新季節 → **0910b版**
+(`large-search-teacher-b`). Both are 2026-09-10 results, so the older of the
+day is a and the newer b. **The convention from here is `MMDD版`, and
+`MMDDa版 / MMDDb版 / …` when a day has more than one.** 最新 always means
+whatever is currently adopted. Not one parameter value moved — the labels are
+three string literals in `js/globe3d.js`'s temporary comparison block.
+
+**未調整 is a surface mode, not a climate set.** It paints the same
+height-to-colour ramp Mars and the Moon are drawn with, from Earth's own GEBCO
+metres, with no climate parameter and no teacher anywhere in it. Earth's mesh
+carries map UVs rather than height-as-u, so it cannot use `hypsometric.js`'s
+1-D-texture route; `buildHypsometricLookup` is the same ramp as a plain colour
+lookup, and both routes now share one `rampBytes` so a body's two drawing
+paths cannot mean different colours for the same height. Earth's stops are new
+in `display.hypsometric`.
+
+**天体 is one cycling button** in the bottom-left (地球 → 月 → 火星 → 地球),
+showing the body currently drawn; 2D/3D is in the bottom-right. Both are
+`position: fixed` corner buttons rather than panel rows.
+
+**Climate v1 gained a second axis**: 変数 (気温 / 湿度) × 表示元 (モデル / 教師).
+The teacher is the repo's own committed `temperature-annual-mean-c.bin`
+(360x180, 1 degree, cell-centred) and
+`humidity-specificHumidityKgPerKg.bin` (192x94 T62 Gaussian, axes from its own
+summary), nearest-resampled onto the 256x128 preview grid **for display only**
+— the files are read and never written. Same units and the same colour ramp as
+the model (°C and g/kg), which is the whole point: the two can be compared by
+eye. A missing teacher cell paints grey rather than being clamped to an end of
+the ramp. The 蒸発冷却 and 現行風/観測風 buttons describe how the *model* was
+run, so they hide while the teacher is on screen; 現行風 and 観測風 now carry
+`title` text saying "モデル計算風" and "NCEP 850hPa 観測風・診断用".
+
 ## Climate v1 preview: experimental evaporative cooling (touchable)
 
 The first time the app imports anything from `js/climate-v1/`. Full write-up:
