@@ -27,9 +27,16 @@ atmosphere is not at 0.5 where it is humid; the model is.
 | **tropical land, teacher** | 0.280 | 0.517 | **0.750** | 0.886 | 0.967 |
 | **tropical land, model** | 0.042 | 0.170 | **0.409** | 0.623 | 0.719 |
 
-**The model produces exactly zero humidity over more than a quarter of the
-land** (p25 = 0.000). Reality never does — the teacher's driest decile is 0.48.
-That is a structural fact about Stage 5B, not a tuning error.
+**The model produces near-zero humidity over a large part of the land**
+(p25 = 0.000 at this print precision). Reality never does — the teacher's
+driest decile is 0.48.
+
+**Corrected by the later dry-tail diagnosis** (`docs/climate-v1-dry-tail-diagnosis-stage5b.md`):
+measured directly rather than through a 3-decimal RH percentile, the land area
+with q < 0.001 g/kg is **16.5%** under the oracle wind and **8.6%** under the
+shipped Stage 4 wind — smaller than "a quarter". Most of it is a harness bug
+(NCEP's below-ground 850 hPa cells regridded as calm), and none of it is in
+the Amazon, Sahara, Australia, Europe, India or Indonesia.
 
 ## 2. How far the teacher's annual-mean ratio can be trusted
 
@@ -103,10 +110,12 @@ another's.
 
 **No — NOT_READY.** Two things come first, in this order:
 
-1. **The dry tail.** A quarter of the land at q = 0 exactly. Nothing about
-   recycling, and no value of tau, changes that; it is the transport model
-   having no source anywhere but open water. This is also exactly what would
-   make a recycling term look useful for the wrong reason.
+1. **The dry tail.** ~16% of land at q = 0 under the oracle wind. Nothing
+   about recycling, and no value of tau, changes that. **Now diagnosed** —
+   see `docs/climate-v1-dry-tail-diagnosis-stage5b.md`: two thirds of it is a
+   diagnostic-harness bug and the rest is `K = 0` leaving advectively isolated
+   cells with no path to any source. It is smaller and more local than this
+   section assumed, and it does not touch the regions below.
 2. **The wet-tropics warm bias.** +6.2 °C in the Amazon and +2.4 °C in
    Indonesia, inflating q_sat by 44% and 15%. That belongs to Stage 2's
    temperature field, not to any humidity stage, and it is the larger half of
