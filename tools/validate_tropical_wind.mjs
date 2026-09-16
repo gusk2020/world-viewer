@@ -18,6 +18,7 @@ import { buildHadleyCirculation, buildGillCirculation } from "../js/climate-v1/t
 import { parseWindGrid } from "../js/climate-v1/wind-teacher.js";
 import { parseTeacherGrid } from "../js/climate-v1/humidity-teacher.js";
 import { buildMoistureField, WIND_MODES } from "../js/climate-v1/moisture.js";
+import { scoreWindBands, formatWindBandTable, WIND_LATITUDE_BANDS } from "../js/climate-v1/wind-diagnostic.js";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const WORLD = path.join(REPO, "worlds", "kasoku-sekai"), TD = path.join(WORLD, "teacher");
@@ -60,32 +61,15 @@ const wsum = JSON.parse(readFileSync(path.join(TD, "wind-summary.json"), "utf8")
 const spec = wsum.grids.level850hPa;
 const tu = parseWindGrid(readFileSync(path.join(TD, spec.files.u)), spec).values;
 const tv = parseWindGrid(readFileSync(path.join(TD, spec.files.v)), spec).values;
-const tLat = (j) => 90 - j * 2.5, tLng = (i) => -180 + i * 2.5;
-function compare(wind, latMin, latMax) {
-  let sw = 0, sdir = 0, sa = 0, sb = 0, rows = [], svec = 0;
-  for (let j = 0; j < spec.height; j++) {
-    const lat = tLat(j); if (Math.abs(lat) < latMin || Math.abs(lat) > latMax) continue;
-    const w = Math.cos((lat * Math.PI) / 180);
-    const y = Math.min(HH - 1, Math.max(0, Math.floor(((90 - lat) / 180) * HH)));
-    for (let i = 0; i < spec.width; i++) {
-      const k = j * spec.width + i; if (!Number.isFinite(tu[k])) continue;
-      const x = Math.min(W - 1, Math.max(0, Math.floor(((tLng(i) + 180) / 360) * W)));
-      const mu = wind.uWindMs[y * W + x], mv = wind.vWindMs[y * W + x];
-      const tm = Math.hypot(tu[k], tv[k]), mm = Math.hypot(mu, mv);
-      if (tm > 1 && mm > 1e-6) {
-        const c = Math.min(1, Math.max(-1, (mu * tu[k] + mv * tv[k]) / (tm * mm)));
-        sdir += w * (Math.acos(c) * 180) / Math.PI; sw += w;
-      }
-      rows.push([mm, tm, w]); sa += w * mm; sb += w * tm;
-      svec += w * ((mu - tu[k]) ** 2 + (mv - tv[k]) ** 2);
-    }
-  }
-  let tw = 0; for (const [, , w] of rows) tw += w;
-  const ma = sa / tw, mb = sb / tw;
-  let saa = 0, sbb = 0, sab = 0;
-  for (const [a, b, w] of rows) { saa += w * (a - ma) ** 2; sbb += w * (b - mb) ** 2; sab += w * (a - ma) * (b - mb); }
-  return { dir: sdir / sw, r: sab / Math.sqrt(saa * sbb), vecRmse: Math.sqrt(svec / tw) };
-}
+const tLat = (j) => spec.latitudes[j], tLng = (i) => spec.longitudes[i];
+// The teacher, carrying its own axes so the shared metric core never has to
+// assume a cell-centred grid. There is no local compare() any more: every
+// number below comes from js/climate-v1/wind-diagnostic.js, the same code
+// validate_wind_model_stage4.mjs scores with.
+const teacher = { width: spec.width, height: spec.height, u: tu, v: tv,
+  latitudes: spec.latitudes, longitudes: spec.longitudes };
+const score = (wind) => scoreWindBands({ modelField: wind, teacher });
+
 // zonal wind over the tropical Atlantic feeding the Amazon
 function amazonZonal(wind) {
   let s = 0, n = 0;
@@ -124,19 +108,25 @@ console.log("Stage 5C-wind -- axisymmetric Hadley surface pressure. NCEP = diagn
 const gill = (o) => buildGillCirculation({ temperatureField: coarseTemp, body: config.body,
   atmosphere: { specificGasConstantJPerKgK: 287, gravityMs2: G }, dragTimescaleDays: WIND_PARAMS.dragTimescaleDays, params: o });
 const CASES = [["Stage 4 (baseline)", null]];
+// The axisymmetric Hadley response, kept so all three rejected families are
+// re-scored by the unified validator in one run.
+for (const [H, a] of [[100, 2], [250, 2]]) {
+  CASES.push([`Hadley A=${a} H=${H}`, hadley({ equivalentDepthMetres: H, heatingResponseStrength: a }).surfaceGeopotentialM2S2]);
+}
 // A = zonal only, B = longitudinal only, C = both. Same solver, same depth.
 for (const H of [100, 250]) {
   for (const [tag, z, l] of [["A z", 1, 0], ["A z", 2, 0], ["B l", 0, 1], ["B l", 0, 2], ["C both", 1, 1], ["C both", 1, 2], ["C both", 2, 2]]) {
     CASES.push([`${tag}=${z}/${l} H=${H}`, gill({ equivalentDepthMetres: H, zonalHeatingStrength: z, longitudinalHeatingStrength: l }).surfaceGeopotentialM2S2]);
   }
 }
-console.log(`${"case".padEnd(20)} ${"trop dir".padStart(9)} ${"midlat dir".padStart(11)} ${"midlat r".padStart(9)} ${"vecRMSE".padStart(9)} ${"Amazon u".padStart(9)}`);
+console.log(`${"case".padEnd(20)} ${"tropDir".padStart(8)} ${"midDir".padStart(7)} ${"extDir".padStart(7)} ${"mid r".padStart(7)} ${"ext r".padStart(7)} ${"mid anom r".padStart(11)} ${"vecRMSE".padStart(8)} ${"Amazon u".padStart(9)}`);
 const out = {};
 for (const [label, sg] of CASES) {
   const wind = makeWind(sg);
-  const tr = compare(wind, 0, 30), ml = compare(wind, 30, 60), gl = compare(wind, 0, 90);
-  out[label] = { wind, tr, ml, gl, u: amazonZonal(wind) };
-  console.log(`${label.padEnd(20)} ${tr.dir.toFixed(1).padStart(9)} ${ml.dir.toFixed(1).padStart(11)} ${ml.r.toFixed(3).padStart(9)} ${gl.vecRmse.toFixed(3).padStart(9)} ${out[label].u.toFixed(2).padStart(9)}`);
+  const b = score(wind);
+  out[label] = { wind, b, tr: b.tropics, ml: b.midlatitude, ex: b.extratropics, gl: b.global, u: amazonZonal(wind) };
+  const w = (k, m, d = 3) => b[k].weighted[m].toFixed(d);
+  console.log(`${label.padEnd(20)} ${w("tropics", "directionMeanErrorDeg", 1).padStart(8)} ${w("midlatitude", "directionMeanErrorDeg", 1).padStart(7)} ${w("extratropics", "directionMeanErrorDeg", 1).padStart(7)} ${w("midlatitude", "speedCorrelation").padStart(7)} ${w("extratropics", "speedCorrelation").padStart(7)} ${w("midlatitude", "anomalySpeedCorrelation").padStart(11)} ${w("global", "vectorRmseMS").padStart(8)} ${out[label].u.toFixed(2).padStart(9)}`);
 }
 console.log("\n(teacher zonal wind over the same Atlantic box, for reference)");
 {
@@ -151,21 +141,32 @@ const base = out["Stage 4 (baseline)"];
 let best = null;
 for (const [label, v] of Object.entries(out)) {
   if (label.startsWith("Stage 4")) continue;
-  if (v.u < 0 && (best === null || v.tr.dir < out[best].tr.dir)) best = label;
+  const d = (x) => x.tr.weighted.directionMeanErrorDeg;
+  if (v.u < 0 && (best === null || d(v) < d(out[best]))) best = label;
 }
 if (!best) { console.log("  no case produced an easterly Amazon zonal wind"); }
 else {
   const b = out[best];
   const aq = amazonQ(b.wind), bq = amazonQ(base.wind);
+  const D = (r) => r.weighted.directionMeanErrorDeg, R = (r) => r.weighted.speedCorrelation;
   const C = [
-    ["tropical direction error <= 70 deg (Stage 4: 125.9)", b.tr.dir <= 70, b.tr.dir.toFixed(1)],
+    [`tropical direction error <= 70 deg (Stage 4: ${D(base.tr).toFixed(1)})`, D(b.tr) <= 70, D(b.tr).toFixed(1)],
     ["Amazon-box zonal wind easterly (u < 0)", b.u < 0, b.u.toFixed(2)],
-    ["mid-latitude direction error <= 38 deg (Stage 4: 35.3)", b.ml.dir <= 38, b.ml.dir.toFixed(1)],
-    ["mid-latitude speed r >= 0.30 (Stage 4: 0.334)", b.ml.r >= 0.30, b.ml.r.toFixed(3)],
-    ["global vector RMSE not worse than Stage 4", b.gl.vecRmse <= base.gl.vecRmse, `${b.gl.vecRmse.toFixed(3)} vs ${base.gl.vecRmse.toFixed(3)}`],
+    // Measured on the SAME band as the baseline it is compared with. The
+    // earlier thresholds (38 deg, r >= 0.30) came from the Stage 4 validator's
+    // |lat|>=30 numbers while being tested at 30-60 -- two different bands.
+    [`midlat (30-60) direction error not worse than Stage 4 (${D(base.ml).toFixed(1)})`, D(b.ml) <= D(base.ml), D(b.ml).toFixed(1)],
+    [`midlat (30-60) speed r not worse than Stage 4 (${R(base.ml).toFixed(3)})`, R(b.ml) >= R(base.ml), R(b.ml).toFixed(3)],
+    [`extratropics (>=30) speed r not worse than Stage 4 (${R(base.ex).toFixed(3)})`, R(b.ex) >= R(base.ex), R(b.ex).toFixed(3)],
+    ["global vector RMSE not worse than Stage 4", b.gl.weighted.vectorRmseMS <= base.gl.weighted.vectorRmseMS, `${b.gl.weighted.vectorRmseMS.toFixed(3)} vs ${base.gl.weighted.vectorRmseMS.toFixed(3)}`],
     ["Amazon q >= 8 g/kg with Stage 5B unchanged (Stage 4: 0.0)", aq.model >= 8, `${aq.model.toFixed(2)} (Stage 4 gives ${bq.model.toFixed(2)}, teacher ${aq.teacher.toFixed(2)})`],
   ];
   console.log(`  best case: ${best}`);
+  console.log("\n  full band table -- Stage 4 baseline:");
+  console.log(formatWindBandTable(base.b, { indent: "    " }));
+  console.log(`\n  full band table -- ${best}:`);
+  console.log(formatWindBandTable(b.b, { indent: "    " }));
+  console.log("");
   let pass = 0;
   for (const [n, ok, val] of C) { if (ok) pass++; console.log(`    ${ok ? "PASS" : "FAIL"}  ${n}  [${val}]`); }
   console.log(`    ${pass}/${C.length}`);

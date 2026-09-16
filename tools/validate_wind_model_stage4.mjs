@@ -28,8 +28,7 @@ import { loadOceanMask, loadWaterSurfaceMask } from "./ocean_mask.mjs";
 import { buildTemperatureField } from "../js/climate-v1/temperature.js";
 import { parseWindGrid } from "../js/climate-v1/wind-teacher.js";
 import {
-  currentModelWind, compareWindToTeacher, compareWindFieldToTeacher, fitSpeedScaleK, nearestModelRow,
-} from "../js/climate-v1/wind-diagnostic.js";
+  currentModelWind, compareWindToTeacher, compareWindFieldToTeacher, fitSpeedScaleK, nearestModelRow, scoreWindBands, formatWindBandTable} from "../js/climate-v1/wind-diagnostic.js";
 import { buildClimateV1Wind, buildWindFromTemperature } from "../js/climate-v1/wind.js";
 import { CLIMATE_V1_EARTH_TEMPERATURE_CALIBRATION } from "../js/climate-v1/earth-temperature-calibration.js";
 
@@ -62,7 +61,7 @@ function loadWindTeacher(worldDir) {
   const summary = JSON.parse(readFileSync(path.join(worldDir, "teacher", "wind-summary.json"), "utf8"));
   const loadLevel = (key) => {
     const spec = summary.grids[key];
-    const out = { width: spec.width, height: spec.height };
+    const out = { width: spec.width, height: spec.height, latitudes: spec.latitudes, longitudes: spec.longitudes };
     for (const [name, file] of Object.entries(spec.files)) {
       out[name] = parseWindGrid(readFileSync(path.join(worldDir, "teacher", file)), spec).values;
     }
@@ -71,23 +70,29 @@ function loadWindTeacher(worldDir) {
   return { summary, level850hPa: loadLevel("level850hPa"), level10m: loadLevel("level10m") };
 }
 
-const teacherUV = (level) => ({ width: level.width, height: level.height, u: level.u, v: level.v });
-const latOfRow = (y, h) => 90 - (y + 0.5) * (180 / h);
-const lngOfCol = (x, w) => -180 + (x + 0.5) * (360 / w);
+// Carries the teacher's own axes, so the shared metric core places every row
+// at NCEP's real node latitude instead of assuming a cell centre.
+const teacherUV = (level) => ({
+  width: level.width, height: level.height, u: level.u, v: level.v,
+  latitudes: level.latitudes, longitudes: level.longitudes,
+});
+// restrict() works in the teacher's own coordinates too.
+const latOfRow = (y, h, level) => (level && level.latitudes ? level.latitudes[y] : 90 - (y + 0.5) * (180 / h));
+const lngOfCol = (x, w, level) => (level && level.longitudes ? level.longitudes[x] : -180 + (x + 0.5) * (360 / w));
 
 function restrict(teacher, keep) {
   const { width, height, u, v } = teacher;
   const ru = new Float64Array(width * height).fill(NaN);
   const rv = new Float64Array(width * height).fill(NaN);
   for (let y = 0; y < height; y++) {
-    const lat = latOfRow(y, height);
+    const lat = latOfRow(y, height, teacher);
     for (let x = 0; x < width; x++) {
-      if (!keep(lngOfCol(x, width), lat, x, y)) continue;
+      if (!keep(lngOfCol(x, width, teacher), lat, x, y)) continue;
       const i = y * width + x;
       ru[i] = u[i]; rv[i] = v[i];
     }
   }
-  return { width, height, u: ru, v: rv };
+  return { width, height, u: ru, v: rv, latitudes: teacher.latitudes, longitudes: teacher.longitudes };
 }
 
 const LAT_BANDS = [
@@ -294,13 +299,19 @@ function main() {
   const t10m = teacherUV(teacherData.level10m);
 
   // === 1. Stage 3 baseline, asserted to reproduce ============================
+  // Stage 3's published numbers were measured before the metric audit, on the
+  // cell-centred latitude assumption. They are reproduced here against that
+  // same legacy teacher **so the historical check stays a real check** rather
+  // than being quietly re-baselined; the corrected-axis values are printed
+  // beside them. Nothing else in this file uses the legacy teacher.
+  const t850Legacy = { width: t850.width, height: t850.height, u: t850.u, v: t850.v };
   const oldWind = currentModelWind({
     rows: OLD_MODEL_ROWS, dayLengthHours: config.body.dayLengthHours,
     rotationDirection: config.body.rotationDirection, params: shipped, subsolarDeg: 0,
   });
   const kRows = [];
   for (let y = 0; y < t850.height; y++) {
-    const lat = latOfRow(y, t850.height);
+    const lat = latOfRow(y, t850.height, null); // legacy convention, see above
     const weight = Math.cos((lat * Math.PI) / 180);
     const modelSpeed = oldWind.magnitude[nearestModelRow(lat, oldWind.rows)];
     for (let x = 0; x < t850.width; x++) {
@@ -310,7 +321,7 @@ function main() {
     }
   }
   const k850 = fitSpeedScaleK(kRows).k;
-  const oldBaseline = compareWindToTeacher({ modelWind: oldWind, teacher: t850, modelSpeedScaleMS: k850 });
+  const oldBaseline = compareWindToTeacher({ modelWind: oldWind, teacher: t850Legacy, modelSpeedScaleMS: k850 });
   const near = (got, want, tol, what) =>
     assert.ok(Math.abs(got - want) <= tol, `Stage 3 baseline did not reproduce: ${what} = ${got}, expected ~${want}`);
   near(k850, 6.545, 0.01, "K");
@@ -320,6 +331,8 @@ function main() {
   near(oldBaseline.speedMaeMS, 2.863, 0.01, "speed MAE");
   near(oldBaseline.uRmseMS, 5.035, 0.01, "u RMSE");
   near(oldBaseline.vRmseMS, 1.924, 0.01, "v RMSE");
+  // The same Stage 3 baseline on the corrected axes, reported not asserted.
+  const oldCorrected = compareWindToTeacher({ modelWind: oldWind, teacher: t850, modelSpeedScaleMS: k850 });
   // The old model needs its own K per level, since it has no real units.
   const fitKFor = (teacher) => {
     const rows = [];
@@ -493,7 +506,11 @@ function main() {
 
   const f = (v, d = 3) => (v === null || v === undefined ? "  -  " : v.toFixed(d));
   const line = (label, m) =>
-    `  ${label.padEnd(22)} r=${f(m.weighted.speedCorrelation)}  dirMean=${f(m.directionErrorDeg, 1)}  ` +
+    // dirMeanU is UNWEIGHTED, kept only because Stage 3's published baseline
+    // is that number; the area-weighted direction error is dirMeanW and is
+    // what the unified band table below reports.
+    `  ${label.padEnd(22)} r=${f(m.weighted.speedCorrelation)}  dirMeanU=${f(m.directionErrorDeg, 1)}  ` +
+    `dirMeanW=${f(m.weighted.directionMeanErrorDeg, 1)}  ` +
     `dirMed=${f(m.directionMedianErrorDeg, 1)}  dirSW=${f(m.weighted.directionSpeedWeightedErrorDeg, 1)}  ` +
     `bias=${f(m.weighted.biasMS)}  spdMAE=${f(m.speedMaeMS)}  spdRMSE=${f(m.speedRmseMS)}  ` +
     `uRMSE=${f(m.uRmseMS)}  vRMSE=${f(m.vRmseMS)}  vecRMSE=${f(m.weighted.vectorRmseMS)}`;
@@ -533,6 +550,14 @@ function main() {
   console.log(line("  tropics     new", splits.tropics.new));
   console.log(line("  extratrop.  old", splits.extratropics.old));
   console.log(line("  extratrop.  new", splits.extratropics.new));
+  console.log("");
+  console.log("unified metric (js/climate-v1/wind-diagnostic.js, teacher's own axes, cos-lat weighted):");
+  console.log("  Stage 4 (new, calibrated):");
+  console.log(formatWindBandTable(scoreWindBands({ modelField: bestField, teacher: t850 }), { indent: "    " }));
+  console.log("  Climate v0.8 (old, K-scaled):");
+  console.log(formatWindBandTable(scoreWindBands({ modelWind: oldWind, modelSpeedScaleMS: k850, teacher: t850 }), { indent: "    " }));
+  console.log("  C alone never decides: D is the zonal-mean profile error and E the");
+  console.log("  within-row anomaly correlation, which a matching profile cannot earn.");
   console.log("");
   console.log("zonal-mean u by band (m/s) -- the hemisphere-asymmetry test:");
   for (const z of zonalRows) {

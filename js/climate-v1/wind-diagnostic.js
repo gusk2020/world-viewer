@@ -126,10 +126,13 @@ function angleBetweenDeg(eastA, northA, eastB, northB) {
  */
 export function compareWindToTeacher({
   modelWind, teacher, modelSpeedScaleMS = 1, minTeacherSpeedForDirectionMS = 1,
+  latMinDeg = null, latMaxDeg = null,
 }) {
   const result = compareSamplerToTeacher({
     teacher,
     minTeacherSpeedForDirectionMS,
+    latMinDeg,
+    latMaxDeg,
     sampleModelRow: (latDeg) => {
       const modelRow = nearestModelRow(latDeg, modelWind.rows);
       return [modelWind.east[modelRow] * modelSpeedScaleMS, modelWind.north[modelRow] * modelSpeedScaleMS];
@@ -150,7 +153,9 @@ export function compareWindToTeacher({
  * and offering a K here would reintroduce exactly the fitted-magnitude
  * crutch Stage 4 exists to remove.
  */
-export function compareWindFieldToTeacher({ modelField, teacher, minTeacherSpeedForDirectionMS = 1 }) {
+export function compareWindFieldToTeacher({
+  modelField, teacher, minTeacherSpeedForDirectionMS = 1, latMinDeg = null, latMaxDeg = null,
+}) {
   if (!modelField || !modelField.uWindMs || !modelField.vWindMs) {
     throw new Error("compareWindFieldToTeacher requires { width, height, uWindMs, vWindMs } in m/s");
   }
@@ -159,13 +164,64 @@ export function compareWindFieldToTeacher({ modelField, teacher, minTeacherSpeed
   return compareSamplerToTeacher({
     teacher,
     minTeacherSpeedForDirectionMS,
+    latMinDeg,
+    latMaxDeg,
+    // Genuinely nearest cell. The model grid IS cell-centred, so the nearest
+    // column to a longitude is round(...-0.5), not floor(...): floor is only
+    // "nearest" if the sampled coordinate is itself a cell centre, which a
+    // node-centred teacher axis is not.
     sampleModelCell: (lngDeg, latDeg) => {
-      const mx = Math.min(mw - 1, Math.max(0, Math.floor(((lngDeg + 180) / 360) * mw)));
-      const my = Math.min(mh - 1, Math.max(0, Math.floor(((90 - latDeg) / 180) * mh)));
+      let mx = Math.round(((lngDeg + 180) / 360) * mw - 0.5) % mw;
+      if (mx < 0) mx += mw;
+      const my = Math.min(mh - 1, Math.max(0, Math.round(((90 - latDeg) / 180) * mh - 0.5)));
       const i = my * mw + mx;
       return [modelField.uWindMs[i], modelField.vWindMs[i]];
     },
   });
+}
+
+/**
+ * The latitude bands every wind report uses, so no two tools can quietly
+ * disagree about what "mid-latitude" means. **30-90 is `extratropics`, never
+ * "mid-latitude"** -- the metric audit found those two being conflated, and a
+ * band that includes 60-90 scores very differently from one that does not.
+ */
+export const WIND_LATITUDE_BANDS = [
+  { id: "tropics", label: "tropics |lat|<30", latMinDeg: null, latMaxDeg: 30 },
+  { id: "midlatitude", label: "midlat 30-60", latMinDeg: 30, latMaxDeg: 60 },
+  { id: "highLatitude", label: "high lat 60-90", latMinDeg: 60, latMaxDeg: null },
+  { id: "extratropics", label: "extratrop |lat|>=30", latMinDeg: 30, latMaxDeg: null },
+  { id: "global", label: "global", latMinDeg: null, latMaxDeg: null },
+];
+
+/**
+ * Scores one model against one teacher over every band at once, through the
+ * shared core. `score` is either a 2-D field ({ uWindMs, vWindMs }) or a
+ * per-row model ({ modelWind, modelSpeedScaleMS }).
+ */
+export function scoreWindBands({ modelField = null, modelWind = null, modelSpeedScaleMS = 1, teacher, minTeacherSpeedForDirectionMS = 1 }) {
+  const out = {};
+  for (const band of WIND_LATITUDE_BANDS) {
+    const args = { teacher, minTeacherSpeedForDirectionMS, latMinDeg: band.latMinDeg, latMaxDeg: band.latMaxDeg };
+    out[band.id] = modelField
+      ? compareWindFieldToTeacher({ modelField, ...args })
+      : compareWindToTeacher({ modelWind, modelSpeedScaleMS, ...args });
+  }
+  return out;
+}
+
+/** The five measures the audit requires be reported separately: a scalar
+ * speed correlation alone cannot tell pattern skill from a matching
+ * zonal-mean profile, so it must never decide pass/fail on its own. */
+export function formatWindBandTable(bands, { indent = "  " } = {}) {
+  const f = (v, d = 3) => (v === null || v === undefined || !Number.isFinite(v) ? "  --  " : v.toFixed(d));
+  const lines = [`${indent}${"band".padEnd(21)} ${"A dirErr".padStart(9)} ${"B vecRMSE".padStart(10)} ${"C speed r".padStart(10)} ${"D zonalRMSE".padStart(12)} ${"E anomaly r".padStart(12)}   n`];
+  for (const band of WIND_LATITUDE_BANDS) {
+    const r = bands[band.id];
+    if (!r) continue;
+    lines.push(`${indent}${band.label.padEnd(21)} ${f(r.weighted.directionMeanErrorDeg, 1).padStart(9)} ${f(r.weighted.vectorRmseMS).padStart(10)} ${f(r.weighted.speedCorrelation).padStart(10)} ${f(r.weighted.zonalMeanSpeedRmseMS).padStart(12)} ${f(r.weighted.anomalySpeedCorrelation).padStart(12)}   ${r.n}`);
+  }
+  return lines.join("\n");
 }
 
 /**
@@ -175,11 +231,20 @@ export function compareWindFieldToTeacher({ modelField, teacher, minTeacherSpeed
  */
 function compareSamplerToTeacher({
   teacher, sampleModelRow = null, sampleModelCell = null, minTeacherSpeedForDirectionMS = 1,
+  latMinDeg = null, latMaxDeg = null,
 }) {
   if (!teacher || !teacher.u || !teacher.v) {
     throw new Error("comparing to a teacher requires a grid { width, height, u, v } in m/s");
   }
   const { width, height, u: teacherU, v: teacherV } = teacher;
+  // The teacher's own axes when it publishes them. NCEP/NCAR R1's 2.5-degree
+  // grid is **node**-centred -- row 0 is the pole itself -- so assuming cell
+  // centres misplaces every row by up to 1.23 degrees. That assumption is the
+  // fallback only, for grids that carry no axes.
+  const teacherLat = Array.isArray(teacher.latitudes) && teacher.latitudes.length === height
+    ? (y) => teacher.latitudes[y] : (y) => latitudeDegOfRow(y, height);
+  const teacherLng = Array.isArray(teacher.longitudes) && teacher.longitudes.length === width
+    ? (x) => teacher.longitudes[x] : (x) => -180 + ((x + 0.5) * 360) / width;
   let n = 0;
   let sumAbsSpeedErr = 0;
   let sumSqSpeedErr = 0;
@@ -193,9 +258,18 @@ function compareSamplerToTeacher({
   let swModelSpeed = 0, swTeacherSpeed = 0, swModelSpeedSq = 0, swTeacherSpeedSq = 0, swSpeedCov = 0;
   let swDirCount = 0, swDirWeightSum = 0, swSumDirErr = 0, swSumDirWeight = 0, swSumDirWeightedErr = 0;
   const dirErrors = [];
+  // Kept per cell, only for the two zonal measures below, which need each
+  // row's own mean before any anomaly can be formed. Everything else stays
+  // in the single-pass accumulators above, unchanged.
+  const cellRow = [], cellWeight = [], cellModelSpeed = [], cellTeacherSpeed = [];
+  const rowWeight = new Float64Array(height);
+  const rowModelSpeed = new Float64Array(height);
+  const rowTeacherSpeed = new Float64Array(height);
 
   for (let y = 0; y < height; y++) {
-    const latDeg = latitudeDegOfRow(y, height);
+    const latDeg = teacherLat(y);
+    if (latMinDeg !== null && Math.abs(latDeg) < latMinDeg) continue;
+    if (latMaxDeg !== null && Math.abs(latDeg) > latMaxDeg) continue;
     const weight = Math.cos((latDeg * Math.PI) / 180);
     // A row-only model is sampled once per row; a 2-D field once per cell.
     let rowEastMS = 0, rowNorthMS = 0;
@@ -206,10 +280,7 @@ function compareSamplerToTeacher({
       const tV = teacherV[i];
       if (!Number.isFinite(tU) || !Number.isFinite(tV)) continue; // e.g. a land mask on an ocean-only product, or below-ground at 850hPa
       let modelEastMS = rowEastMS, modelNorthMS = rowNorthMS;
-      if (sampleModelCell) {
-        const lngDeg = -180 + ((x + 0.5) * 360) / width;
-        [modelEastMS, modelNorthMS] = sampleModelCell(lngDeg, latDeg);
-      }
+      if (sampleModelCell) [modelEastMS, modelNorthMS] = sampleModelCell(teacherLng(x), latDeg);
       const modelSpeedMS = Math.hypot(modelEastMS, modelNorthMS);
       const teacherSpeedMS = Math.hypot(tU, tV);
 
@@ -231,6 +302,11 @@ function compareSamplerToTeacher({
       swModelSpeedSq += weight * modelSpeedMS * modelSpeedMS;
       swTeacherSpeedSq += weight * teacherSpeedMS * teacherSpeedMS;
       swSpeedCov += weight * modelSpeedMS * teacherSpeedMS;
+      cellRow.push(y); cellWeight.push(weight);
+      cellModelSpeed.push(modelSpeedMS); cellTeacherSpeed.push(teacherSpeedMS);
+      rowWeight[y] += weight;
+      rowModelSpeed[y] += weight * modelSpeedMS;
+      rowTeacherSpeed[y] += weight * teacherSpeedMS;
 
       if (teacherSpeedMS >= minTeacherSpeedForDirectionMS) {
         const angle = angleBetweenDeg(modelEastMS, modelNorthMS, tU, tV);
@@ -253,6 +329,33 @@ function compareSamplerToTeacher({
       ? dirErrors[(dirErrors.length - 1) / 2]
       : (dirErrors[dirErrors.length / 2 - 1] + dirErrors[dirErrors.length / 2]) / 2)
     : null;
+
+  // D. Zonal-mean profile error: how well the model reproduces the teacher's
+  //    speed *by latitude*, with no credit for anything within a row.
+  // E. Anomaly correlation: each row's own zonal mean removed from both
+  //    fields first, so a matching profile earns nothing and only within-row
+  //    placement counts. The audit showed C alone conflates the two.
+  let zonalSqErr = 0, zonalWeight = 0;
+  for (let y = 0; y < height; y++) {
+    if (!(rowWeight[y] > 0)) continue;
+    const d = rowModelSpeed[y] / rowWeight[y] - rowTeacherSpeed[y] / rowWeight[y];
+    zonalSqErr += rowWeight[y] * d * d;
+    zonalWeight += rowWeight[y];
+  }
+  let anomModelSq = 0, anomTeacherSq = 0, anomCov = 0;
+  for (let c = 0; c < cellRow.length; c++) {
+    const y = cellRow[c], w = cellWeight[c];
+    const da = cellModelSpeed[c] - rowModelSpeed[y] / rowWeight[y];
+    const db = cellTeacherSpeed[c] - rowTeacherSpeed[y] / rowWeight[y];
+    anomModelSq += w * da * da; anomTeacherSq += w * db * db; anomCov += w * da * db;
+  }
+  // A latitude-only model has *no* within-row variance, so its anomaly
+  // correlation is undefined rather than zero. Floating-point row means leave
+  // a residue around 1e-31 there, which would otherwise print as a confident
+  // 0.000, so the test is relative to the field's own scale, not against 0.
+  const anomalyFloor = 1e-12 * swModelSpeedSq;
+  const anomalySpeedCorrelation = anomModelSq > anomalyFloor && anomTeacherSq > 0
+    ? anomCov / Math.sqrt(anomModelSq * anomTeacherSq) : null;
 
   const meanModelSpeed = swModelSpeed / sw, meanTeacherSpeed = swTeacherSpeed / sw;
   const varModel = swModelSpeedSq / sw - meanModelSpeed * meanModelSpeed;
@@ -279,6 +382,8 @@ function compareSamplerToTeacher({
       vRmseMS: Math.sqrt(swSqVErr / sw),
       vectorRmseMS: Math.sqrt((swSqUErr + swSqVErr) / sw),
       speedCorrelation,
+      zonalMeanSpeedRmseMS: zonalWeight > 0 ? Math.sqrt(zonalSqErr / zonalWeight) : null,
+      anomalySpeedCorrelation,
       directionMeanErrorDeg: swDirWeightSum > 0 ? swSumDirErr / swDirWeightSum : null,
       directionSpeedWeightedErrorDeg: swSumDirWeight > 0 ? swSumDirWeightedErr / swSumDirWeight : null,
     },

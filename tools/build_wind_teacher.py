@@ -228,6 +228,15 @@ def reorient(grid, lat):
     return np.concatenate([grid[:, half:], grid[:, :half]], axis=1)
 
 
+def reorient_axis(lon):
+    """The longitude axis that `reorient` produces: the same half-swap, with
+    the eastern half re-expressed as negative degrees so the axis runs
+    -180, -177.5, ... 177.5 -- i.e. column 0 really is -180, not 180."""
+    half = len(lon) // 2
+    swapped = np.concatenate([lon[half:], lon[:half]])
+    return np.where(swapped >= 180.0, swapped - 360.0, swapped)
+
+
 def area_weighted_mean(values, lat_deg):
     w = np.cos(np.deg2rad(lat_deg))[:, None] * np.ones((1, values.shape[1]))
     finite = np.isfinite(values)
@@ -297,7 +306,8 @@ def build_level(cache_dir, level_hpa, u_url, v_url, label, below_ground_mask=Non
         "djfU": reorient(djf_u, lat).astype(np.float32), "djfV": reorient(djf_v, lat).astype(np.float32),
         "jjaU": reorient(jja_u, lat).astype(np.float32), "jjaV": reorient(jja_v, lat).astype(np.float32),
         "width": annual_mean_u.shape[1], "height": annual_mean_u.shape[0],
-        "lat": lat_north_to_south, "hadMissingBelowGround": had_missing,
+        "lat": lat_north_to_south, "lon": reorient_axis(lon),
+        "hadMissingBelowGround": had_missing,
         "periodLabel": period_label,
     }
 
@@ -379,6 +389,12 @@ def main():
         print(f"  wrote {len(FIELDS)} grids for {prefix} ({level['width']}x{level['height']})")
         return {
             "width": level["width"], "height": level["height"],
+            # Published so a consumer never has to guess whether the grid is
+            # node- or cell-centred. NCEP/NCAR R1 is node-centred: row 0 is
+            # the pole itself. See docs/climate-v1-wind-metric-audit.md for
+            # the check that confirms this from the data rather than assuming.
+            "latitudes": [round(float(v), 6) for v in level["lat"]],
+            "longitudes": [round(float(v), 6) for v in level["lon"]],
             "files": files,
             "dtype": "float32le", "units": "m/s",
             "hadMissingBelowGround": level["hadMissingBelowGround"],

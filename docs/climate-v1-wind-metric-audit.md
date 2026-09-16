@@ -119,3 +119,107 @@ confidence in the criterion itself: the mid-latitude speed correlation is
 computed against a model field with 5% of the teacher's variance, and 78% of
 its positive value at 30–90 is the zonal-mean profile rather than pattern
 skill. Recommend replacing or supplementing it before it gates another stage.
+
+---
+
+# Follow-up — the unified validator
+
+The wind model and its parameters are **unchanged**; only how it is measured
+changed. One metric core now serves every wind tool.
+
+## What was unified
+
+- **`compareSamplerToTeacher`** (`js/climate-v1/wind-diagnostic.js`) is the
+  only implementation. `validate_tropical_wind.mjs`'s private `compare()` is
+  deleted.
+- **The teacher's own axes.** `wind-summary.json` now publishes
+  `latitudes`/`longitudes` per grid, and `build_wind_teacher.py` writes them,
+  so nothing downstream guesses whether the grid is node- or cell-centred.
+  Verified from the data, not assumed: **row 0's speed is constant across all
+  144 columns to 0.54%** while row 1 varies by 25%, and row 0's `u` is a pure
+  wavenumber-1 in longitude with amplitude equal to the full speed — the
+  signature of one physical vector at the pole. Row 0 *is* the pole.
+  The 10 m grid's T62 Gaussian axes are the ones the humidity teacher already
+  publishes for the identical NCEP grid.
+- **Genuinely nearest-cell sampling.** `floor` is "nearest" only when the
+  sampled coordinate is a cell centre, which a node-centred axis is not.
+- **cos(lat) weighting, both components required finite, explicit bands.**
+
+## The five measures, reported separately
+
+| | measure | what it can and cannot see |
+| --- | --- | --- |
+| A | direction error (cos-weighted) | direction only, blind to speed |
+| B | vector RMSE | everything at once, but says nothing about which part failed |
+| C | scalar speed correlation | **conflates a matching zonal profile with local skill** |
+| D | zonal-mean speed RMSE (m/s) | the profile alone; no credit for anything within a row |
+| E | anomaly correlation, each row's own zonal mean removed | within-row placement only; a perfect profile earns nothing |
+
+**C never decides pass/fail on its own.** D and E are the split the audit
+showed C was hiding. A latitude-only model has no within-row variance, so E is
+reported as `--` for it rather than a meaningless 0.
+
+## The bands
+
+`tropics |lat|<30`, `midlat 30-60`, `high lat 60-90`, `extratrop |lat|>=30`,
+`global`. **30–90 is `extratropics`, never "mid-latitude"** — the two were
+being conflated, and they score very differently.
+
+## Stage 4 baseline, on the unified metric
+
+| band | A dir | B vecRMSE | C speed r | D zonal RMSE | E anomaly r | n |
+| --- | --- | --- | --- | --- | --- | --- |
+| tropics <30 | 119.0° | 5.774 | −0.122 | 2.007 | +0.042 | 3534 |
+| midlat 30–60 | 20.2° | 5.771 | −0.294 | 5.178 | −0.318 | 3608 |
+| high lat 60–90 | 53.4° | 4.263 | +0.580 | 3.077 | −0.285 | 2801 |
+| extratrop ≥30 | 27.8° | 5.432 | **+0.252** | 4.732 | −0.306 | 6121 |
+| global | 75.0° | 5.691 | +0.157 | 3.665 | −0.030 | 9384 |
+
+Climate v0.8's latitude-only model for comparison: tropics 50.7°/+0.258,
+midlat 32.2°/+0.212, high lat 128.2°/−0.284, extratropics 50.0°/+0.096,
+global 50.7°/+0.126, E `--` everywhere.
+
+**E is the number worth staring at.** Stage 4's within-row anomaly correlation
+is **negative in every extratropical band** (−0.318 at 30–60, −0.306 at ≥30):
+once the zonal-mean profile is removed, the model's longitudinal structure is
+mildly *anti*-correlated with the real atmosphere's. Its genuine gain over
+v0.8 is direction (50.0° → 27.8° in the extratropics), not speed pattern.
+
+## Re-evaluation — the rejections stand
+
+| case | trop dir | mid dir | ext dir | mid r | ext r | mid anom r | global vecRMSE | Amazon u |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Stage 4 baseline | 119.0° | 20.2° | 27.8° | −0.294 | **+0.252** | −0.318 | **5.691** | +1.51 |
+| Hadley A=2 H=100 | 63.0° | 78.7° | 74.7° | −0.455 | −0.269 | −0.075 | 10.066 | −3.57 |
+| Gill z=2 H=100 | 62.9° | 77.6° | 73.9° | −0.455 | −0.270 | −0.075 | 10.082 | −3.69 |
+| Gill l=2 H=100 | 117.1° | 37.3° | 40.5° | −0.432 | −0.339 | −0.359 | 10.657 | +0.14 |
+| Gill z=2 l=2 H=100 | 63.8° | 90.4° | 83.0° | −0.564 | −0.423 | −0.337 | 13.151 | −5.07 |
+
+**3 of 7** for the best case, the same three passes and the same failures as
+before. The extratropical speed correlation changes sign (+0.252 → −0.270),
+the direction error nearly triples and the global vector RMSE still doubles.
+Nothing is rescued by the wider band or by the corrected axes.
+
+## One criterion defect fixed in the same pass
+
+The declared criteria compared the tropical validator's **30–60** measurements
+against thresholds (38°, r ≥ 0.30) taken from the Stage 4 validator's
+**|lat| ≥ 30** numbers — two different bands. They now compare against this
+validator's own Stage 4 baseline **on the same band**, and an extratropical
+row was added. That is stricter, not looser: 7 criteria instead of 6, and the
+verdict is unchanged.
+
+## What is deliberately not unified
+
+`tools/validate_wind_v1.mjs` (Stage 3) and the Stage 3 reproduction block
+inside `validate_wind_model_stage4.mjs` still use the legacy cell-centred
+convention, because their job is to reproduce published historical numbers.
+Re-baselining them would turn a real check into a tautology. The Stage 4
+validator prints the corrected value beside the legacy one (`dirMeanU`
+unweighted, kept for that assertion; `dirMeanW` area-weighted).
+
+## Retired names and measures
+
+- "mid-latitude" for |lat| ≥ 30 — use **extratropics**.
+- A bare scalar speed correlation as a pass/fail criterion — always with D and E.
+- Any threshold quoted from a band other than the one being measured.
