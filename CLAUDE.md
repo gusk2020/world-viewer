@@ -2921,9 +2921,24 @@ lookup, and both routes now share one `rampBytes` so a body's two drawing
 paths cannot mean different colours for the same height. Earth's stops are new
 in `display.hypsometric`.
 
-**天体 is one cycling button** in the bottom-left (地球 → 月 → 火星 → 地球),
-showing the body currently drawn; 2D/3D is in the bottom-right. Both are
-`position: fixed` corner buttons rather than panel rows.
+**天体 is one cycling button** in the bottom-left, showing the body currently
+drawn; 2D/3D is in the bottom-right. Both are `position: fixed` corner buttons
+rather than panel rows. **The cycle order is `worlds/index.json`'s own order**,
+which was reordered to 地球 → 月 → 火星 so the button reads as asked; adding a
+body means putting it where it belongs in that list, not editing `main.js`.
+
+**The `[hidden]` CSS trap, for the third time.** `.panel { display: flex }`
+outranks the browser's own `[hidden] { display: none }`, so hiding the whole
+bottom panel in 2D left an empty 11 px pill over the map. `.panel[hidden]`
+now sits beside the existing `.panel [hidden]` rule — note the space: they are
+different selectors and both are needed.
+
+**Two temperature teachers disagree and this is now visible on the phone.**
+The repo's designated temperature teacher (`temperature-annual-mean-c.bin`,
+what 教師 draws) puts アマゾン at **28.0 °C**, while the NCEP 2 m field the
+Stage 2 bias diagnosis used puts it at **24.7 °C**. So the model's アマゾン
+warm bias reads +2.9 against one and +6.2 against the other. Worth settling
+before any Stage 2 work leans on the number.
 
 **Climate v1 gained a second axis**: 変数 (気温 / 湿度) × 表示元 (モデル / 教師).
 The teacher is the repo's own committed `temperature-annual-mean-c.bin`

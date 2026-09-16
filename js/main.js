@@ -46,6 +46,7 @@ async function main() {
   const scaleBarLine = document.getElementById("scale-bar-line");
   const scaleBarLabel = document.getElementById("scale-bar-label");
   const climateV1Row = document.getElementById("climatev1-row");
+  const bottomPanel = document.getElementById("bottom-panel");
   const climateV1SourceRow = document.getElementById("climatev1-source-row");
   const climateV1Options = document.getElementById("climatev1-options");
   const climateV1Readout = document.getElementById("climatev1-readout");
@@ -101,6 +102,9 @@ async function main() {
     // meaningful, and switching away from Earth forces the view back to 3D.
     // The axis and graticule are 3D-only, so that row goes with the panel.
     axisRow.hidden = mode !== "3d";
+    // Every row inside it is a 3D control, so the box itself goes too --
+    // otherwise its padding leaves an empty 11 px pill over the 2D map.
+    bottomPanel.hidden = mode !== "3d";
     // The preview paints the 3D globe, so it goes away with the 3D view --
     // same rule as the axis/graticule row beside it.
     climateV1Row.hidden = mode !== "3d" || !(globe3d && globe3d.supportsClimate);
@@ -810,9 +814,10 @@ async function main() {
     loading.classList.add("hidden");
   }
 
-  // One button that cycles 地球 -> 月 -> 火星 -> 地球, rather than a row of
-  // three. It shows the body currently drawn, which is what a corner button
-  // has room to say.
+  // One button that cycles through worlds/index.json in the order that file
+  // lists them -- 地球 -> 月 -> 火星 -> 地球 -- rather than a row of three. It
+  // shows the body currently drawn, which is what a corner button has room
+  // to say.
   worldCycleButton.addEventListener("click", () => {
     if (!world) return;
     const at = index.worlds.findIndex((entry) => entry.id === world.entry.id);

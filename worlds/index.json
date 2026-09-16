@@ -1,8 +1,21 @@
 {
+  "_note": "The order here is the order the 天体 button cycles in: 地球 -> 月 -> 火星 -> 地球. Adding a body means putting it where it belongs in this list.",
   "default": "kasoku-sekai",
   "worlds": [
-    { "id": "kasoku-sekai", "label": "地球", "config": "./worlds/kasoku-sekai/config.json" },
-    { "id": "mars", "label": "火星", "config": "./worlds/mars/config.json" },
-    { "id": "moon", "label": "月", "config": "./worlds/moon/config.json" }
+    {
+      "id": "kasoku-sekai",
+      "label": "地球",
+      "config": "./worlds/kasoku-sekai/config.json"
+    },
+    {
+      "id": "moon",
+      "label": "月",
+      "config": "./worlds/moon/config.json"
+    },
+    {
+      "id": "mars",
+      "label": "火星",
+      "config": "./worlds/mars/config.json"
+    }
   ]
 }

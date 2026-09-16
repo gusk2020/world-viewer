@@ -132,6 +132,14 @@ html, body {
   display: none;
 }
 
+/* ...and the same trap for the box itself: `.panel { display: flex }`
+   outranks the browser's own [hidden] rule, so hiding the whole bottom panel
+   in 2D mode left an empty 11 px pill floating over the map. Third time this
+   project has hit this; see CLAUDE.md. */
+.panel[hidden] {
+  display: none;
+}
+
 .panel label {
   white-space: nowrap;
   min-width: 4.6em;
