@@ -2889,6 +2889,40 @@ smoke-tested (trial cap, `--resume`, `--merge` all verified working) but
 **deliberately not run at the 10,000-trial scale this round**. The user
 reviews this round's small-scale result first.
 
+## Two temperature teachers, and which one is the teacher
+
+Full audit: `docs/climate-v1-temperature-teacher-audit.md`. Tool:
+`tools/audit_temperature_teachers.mjs`. Nothing was fitted and Stage 2 is
+unchanged.
+
+**A = `temperature-annual-mean-c.bin`** is Berkeley Earth Land+Ocean, 1x1
+degree, 1991-2020, and its land values are **station observations**.
+**B = `humidity-airTemperatureC.bin`** is NCEP/NCAR Reanalysis 1's `air.2m`,
+T62 Gaussian, 1981-2010, and it is a **model** field.
+
+**主Teacher is A**, because Climate v1's temperature stage is a model and must
+not be scored against another model where an observational product exists. **B
+is the independent verification teacher** — and B is *mandatory*, not optional,
+wherever temperature is combined with the NCEP humidity teacher (RH, q_sat,
+saturation deficit), because those are ratios of two fields and mixing
+products with a 3 C tropical offset makes the ratio meaningless.
+
+**Why they differ by ~3 C in the Amazon, measured rather than assumed.** The
+gap is not constant (within the Amazon box it runs -1.3 to +5.2 cell by cell)
+and it **tracks moisture**: over tropical land only, A-B goes -0.64 at 5-8
+g/kg to **+2.85 above 16 g/kg**. The decade of period difference is worth a
+few tenths, i.e. about a third of the +1.0 C global land gap and none of the
+tropical one.
+
+**This changes the Stage 2 bias materially.** Measured against A instead of B:
+アマゾン +6.2 -> **+2.9**, コンゴ +5.3 -> +2.3, インドネシア +5.0 -> +1.7,
+global land +1.2 -> **+0.2**, while ヨーロッパ -3.5 -> **-5.6**, チベット
+-2.0 -> **-5.9** and グリーンランド -5.1 -> **-6.4**. The wet-tropics warm
+bias survives at half the size, three large cold biases appear beside it, and
+**the moisture association behind the evaporative-cooling hypothesis must be
+re-derived on A** — it was measured against the field that is itself coldest
+exactly where the land is wettest.
+
 ## The UI tidy-up after the Pixel 7a preview confirmation
 
 The user confirmed the Climate v1 preview on their phone and then asked for
@@ -2921,9 +2955,11 @@ lookup, and both routes now share one `rampBytes` so a body's two drawing
 paths cannot mean different colours for the same height. Earth's stops are new
 in `display.hypsometric`.
 
-**天体 is one cycling button** in the bottom-left, showing the body currently
-drawn; 2D/3D is in the bottom-right. Both are `position: fixed` corner buttons
-rather than panel rows. **The cycle order is `worlds/index.json`'s own order**,
+**天体 and 2D/3D share the bottom panel's top row.** They were briefly fixed
+corner buttons; folded back in they cost one row instead of two corner
+buttons' worth of margin, and the nav row is the one row that stays in 2D so
+the toggle is always reachable. **The cycle order is `worlds/index.json`'s own
+order**,
 which was reordered to 地球 → 月 → 火星 so the button reads as asked; adding a
 body means putting it where it belongs in that list, not editing `main.js`.
 
@@ -2940,7 +2976,12 @@ Stage 2 bias diagnosis used puts it at **24.7 °C**. So the model's アマゾン
 warm bias reads +2.9 against one and +6.2 against the other. Worth settling
 before any Stage 2 work leans on the number.
 
-**Climate v1 gained a second axis**: 変数 (気温 / 湿度) × 表示元 (モデル / 教師).
+**Climate v1's two axes are one row of five exclusive buttons** — 温湿度OFF /
+気温モデル / 気温教師 / 湿度モデル / 湿度教師 — rather than variable and source
+on separate rows, so there is no way to sit in a combination that means
+nothing. Internally it is still variable x source, derived from the one state.
+The 軸/線 row is hidden for now (the tilt and graticule still work and their
+code still runs; only the row is off screen).
 The teacher is the repo's own committed `temperature-annual-mean-c.bin`
 (360x180, 1 degree, cell-centred) and
 `humidity-specificHumidityKgPerKg.bin` (192x94 T62 Gaussian, axes from its own

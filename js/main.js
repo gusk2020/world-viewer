@@ -46,8 +46,6 @@ async function main() {
   const scaleBarLine = document.getElementById("scale-bar-line");
   const scaleBarLabel = document.getElementById("scale-bar-label");
   const climateV1Row = document.getElementById("climatev1-row");
-  const bottomPanel = document.getElementById("bottom-panel");
-  const climateV1SourceRow = document.getElementById("climatev1-source-row");
   const climateV1Options = document.getElementById("climatev1-options");
   const climateV1Readout = document.getElementById("climatev1-readout");
   const worldCycleButton = document.getElementById("world-cycle");
@@ -101,14 +99,15 @@ async function main() {
     // The 天体 row stays reachable in 2D -- picking Mars from there is
     // meaningful, and switching away from Earth forces the view back to 3D.
     // The axis and graticule are 3D-only, so that row goes with the panel.
-    axisRow.hidden = mode !== "3d";
-    // Every row inside it is a 3D control, so the box itself goes too --
-    // otherwise its padding leaves an empty 11 px pill over the 2D map.
-    bottomPanel.hidden = mode !== "3d";
+    // Hidden for now at the user's request. The tilt and graticule still work
+    // and applyAxis/applyGraticule still run; only the row is off screen.
+    axisRow.hidden = true;
+    // The nav row stays in 2D -- that is where the 2D/3D button lives now --
+    // so the panel itself does not hide; only its 3D-only rows do.
     // The preview paints the 3D globe, so it goes away with the 3D view --
     // same rule as the axis/graticule row beside it.
     climateV1Row.hidden = mode !== "3d" || !(globe3d && globe3d.supportsClimate);
-    if (mode !== "3d") { climateV1SourceRow.hidden = true; climateV1Options.hidden = true; climateV1Readout.hidden = true; }
+    if (mode !== "3d") { climateV1Options.hidden = true; climateV1Readout.hidden = true; }
     // The scale bar is derived from the 3D camera, so it would be quietly
     // wrong sitting on top of the 2D map -- which draws its own.
     scaleBar.hidden = mode !== "3d" || GRATICULE_STATES[graticuleIndex].mode === "off";
@@ -153,7 +152,7 @@ async function main() {
   surfaceButtons.forEach((button) => {
     button.addEventListener("click", () => {
       surfaceMode = button.dataset.surface;
-      if (v1Mode !== "off") { v1Mode = "off"; applyV1Buttons(); climateV1SourceRow.hidden = true; climateV1Options.hidden = true; climateV1Readout.hidden = true; }
+      if (v1Mode !== "off") { v1Mode = "off"; applyV1Buttons(); climateV1Options.hidden = true; climateV1Readout.hidden = true; }
       applySurfaceButtons();
       requestAnimationFrame(() => {
         globe3d.setSurfaceMode(surfaceMode);
@@ -188,10 +187,12 @@ async function main() {
   // Everything here is lazy: no mask is fetched and no field is computed
   // until 気温 or 湿度 is pressed for the first time.
   // ---------------------------------------------------------------------
-  let v1Mode = "off";           // off | temperature | humidity
+  // One exclusive state for the whole preview: off, or one of the four
+  // variable x source combinations. The two internal axes are derived from
+  // it, so nothing downstream had to change.
+  let v1Mode = "off";           // off | {temperature,humidity}-{model,teacher}
   let v1Cooling = "off";        // off | on
   let v1Wind = "model";         // model | observed
-  let v1Source = "model";       // model | teacher
   let v1Teacher = null;         // { temperature, humidity } on the preview grid
   let v1TerrainField = null;    // built once per world
   let v1OracleWind = null;      // fetched once, only if 観測風 is asked for
@@ -201,7 +202,8 @@ async function main() {
   const v1Buttons = document.querySelectorAll("#climatev1-mode button");
   const v1CoolingButtons = document.querySelectorAll("#climatev1-cooling button");
   const v1WindButtons = document.querySelectorAll("#climatev1-wind button");
-  const v1SourceButtons = document.querySelectorAll("#climatev1-source button");
+  const v1Variable = () => (v1Mode.startsWith("temperature") ? "temperature" : "humidity");
+  const v1Source = () => (v1Mode.endsWith("teacher") ? "teacher" : "model");
 
   // Two small masks the Climate v1 land/sea rule already uses offline. Both
   // are paletted PNGs, and a canvas hands back colours rather than palette
@@ -435,10 +437,9 @@ async function main() {
 
   async function applyClimateV1() {
     const showsV1 = v1Mode !== "off" && Boolean(globe3d && globe3d.supportsClimate);
-    climateV1SourceRow.hidden = !showsV1;
     // The cooling and wind buttons describe how the MODEL was run, so they
     // mean nothing while the teacher is on screen.
-    climateV1Options.hidden = !showsV1 || v1Source !== "model";
+    climateV1Options.hidden = !showsV1 || v1Source() !== "model";
     climateV1Readout.hidden = !showsV1;
     if (!showsV1) {
       if (surfaceMode) globe3d.setSurfaceMode(surfaceMode);
@@ -448,10 +449,10 @@ async function main() {
     v1Busy = true;
     climateV1Readout.textContent = "計算中…";
     try {
-      const colourAt = v1Mode === "temperature" ? temperatureColour : humidityColour;
-      if (v1Source === "teacher") {
+      const colourAt = v1Variable() === "temperature" ? temperatureColour : humidityColour;
+      if (v1Source() === "teacher") {
         const teacher = await ensureV1Teacher();
-        const values = v1Mode === "temperature" ? teacher.temperature : teacher.humidity;
+        const values = v1Variable() === "temperature" ? teacher.temperature : teacher.humidity;
         globe3d.showScalarField({
           width: PREVIEW_GRID.width, height: PREVIEW_GRID.height, values, colourAt,
         });
@@ -477,7 +478,7 @@ async function main() {
         });
         v1Cache.set(key, preview);
       }
-      if (v1Mode === "temperature") {
+      if (v1Variable() === "temperature") {
         const t = preview.temperatureField;
         globe3d.showScalarField({
           width: t.width, height: t.height, values: t.annualMeanTemperatureC, colourAt,
@@ -501,7 +502,6 @@ async function main() {
     v1Buttons.forEach((b) => b.classList.toggle("selected", b.dataset.v1 === v1Mode));
     v1CoolingButtons.forEach((b) => b.classList.toggle("selected", b.dataset.cooling === v1Cooling));
     v1WindButtons.forEach((b) => b.classList.toggle("selected", b.dataset.wind === v1Wind));
-    v1SourceButtons.forEach((b) => b.classList.toggle("selected", b.dataset.source === v1Source));
   }
 
   v1Buttons.forEach((button) => {
@@ -514,13 +514,6 @@ async function main() {
   v1CoolingButtons.forEach((button) => {
     button.addEventListener("click", () => {
       v1Cooling = button.dataset.cooling;
-      applyV1Buttons();
-      requestAnimationFrame(() => { applyClimateV1(); });
-    });
-  });
-  v1SourceButtons.forEach((button) => {
-    button.addEventListener("click", () => {
-      v1Source = button.dataset.source;
       applyV1Buttons();
       requestAnimationFrame(() => { applyClimateV1(); });
     });
@@ -789,7 +782,6 @@ async function main() {
     v1Cache = new Map();
     climateV1Row.hidden = !globe3d.supportsClimate;
     applyV1Buttons();
-    climateV1SourceRow.hidden = true;
     climateV1Options.hidden = true;
     climateV1Readout.hidden = true;
     buildClimateSetButtons();

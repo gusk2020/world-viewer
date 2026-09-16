@@ -58,34 +58,16 @@ html, body {
   gap: 6px;
   width: min(368px, 92vw);
   z-index: 5;
-  /* Clears the two corner buttons below it. */
-  bottom: calc(env(safe-area-inset-bottom, 0) + 66px);
+  bottom: calc(env(safe-area-inset-bottom, 0) + 12px);
 }
 
 #bottom-panel {
   width: 100%;
 }
 
-/* One button in each bottom corner, clear of the globe: the body cycles on
-   the left, the 2D/3D view toggles on the right. Fixed rather than in a
-   panel, so neither can push the other around or cover the globe's middle. */
-.corner-button {
-  position: fixed;
-  bottom: calc(env(safe-area-inset-bottom, 0) + 12px);
-  min-height: 44px;
-  padding: 0 18px;
-  border: none;
-  border-radius: 22px;
-  background: rgba(15, 23, 35, 0.82);
-  color: #eaf2ff;
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-  font-size: 0.95rem;
-  font-weight: 600;
-  z-index: 6;
-}
-
-#world-cycle { left: 12px; }
-#view-toggle { right: 12px; }
+/* The nav row: body on the left, view on the right, one row inside the
+   bottom panel. */
+#nav-row button { flex: 1 1 0; }
 
 /* One look for both control boxes -- the one at the top and the one under
    the 2D/3D button -- so moving a row between them changes nothing but where
@@ -301,5 +283,14 @@ html, body {
 }
 #climatev1-options .segmented { flex: 1 1 auto; }
 #climatev1-options button { font-size: 0.66rem; }
-/* The source axis sits under the variable axis and lines up with it. */
-#climatev1-source-row { padding-left: 4.6em; }
+/* Five buttons on one row at phone width: they have to shrink to fit, and
+   shrinking them is cheaper than a second row on a panel the user has asked
+   three times to keep short. */
+#climatev1-mode { gap: 2px; }
+#climatev1-mode button {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0 2px;
+  font-size: 0.6rem;
+  white-space: nowrap;
+}

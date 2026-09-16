@@ -68,13 +68,18 @@
       </div>
     </div>
   </div>
-  <!-- One button per corner, clear of the globe: the body cycles, the view
-       toggles. Neither needs a row in a panel. -->
-  <button type="button" id="world-cycle" class="corner-button">天体 地球</button>
-  <button id="view-toggle" class="corner-button">2Dに切替</button>
   <div id="bottom-controls">
     <div id="bottom-panel" class="panel">
-      <div class="control-row" id="axis-row">
+      <!-- The body cycles on the left, the view toggles on the right, one
+           row. They used to float in the screen corners; folded back in here
+           they cost one row instead of two corner buttons' worth of margin. -->
+      <div class="control-row" id="nav-row">
+        <button type="button" id="world-cycle" class="pill">天体 地球</button>
+        <button type="button" id="view-toggle" class="pill">2Dに切替</button>
+      </div>
+      <!-- Hidden for now, deliberately NOT removed: the tilt and graticule
+           still work, they are just not on screen. -->
+      <div class="control-row" id="axis-row" hidden>
         <button type="button" id="axis-toggle" class="pill">軸 垂直</button>
         <span id="axis-readout">0°</span>
         <button type="button" id="graticule-toggle" class="pill">線 なし</button>
@@ -82,18 +87,15 @@
       <!-- Climate v1 preview. EXPERIMENTAL: a separate pipeline from the 地表
            colouring above, off until asked for, and it changes nothing about
            what 標準 / 岩 / 陸地塗り分け / 教師 draw. -->
+      <!-- Variable and source on one row: five exclusive states, so there is
+           no way to be in a combination that means nothing. -->
       <div class="control-row" id="climatev1-row" hidden>
-        <label>v1</label>
         <div id="climatev1-mode" class="segmented">
-          <button type="button" data-v1="off" class="selected">切</button>
-          <button type="button" data-v1="temperature">気温</button>
-          <button type="button" data-v1="humidity">湿度</button>
-        </div>
-      </div>
-      <div class="control-row" id="climatev1-source-row" hidden>
-        <div id="climatev1-source" class="segmented">
-          <button type="button" data-source="model" class="selected">モデル</button>
-          <button type="button" data-source="teacher" title="実測データ（気温 Berkeley/NCEP 年平均、湿度 NCEP 2m）">教師</button>
+          <button type="button" data-v1="off" class="selected">温湿度OFF</button>
+          <button type="button" data-v1="temperature-model">気温モデル</button>
+          <button type="button" data-v1="temperature-teacher" title="実測の年平均地表気温">気温教師</button>
+          <button type="button" data-v1="humidity-model">湿度モデル</button>
+          <button type="button" data-v1="humidity-teacher" title="実測の2m比湿（NCEP）">湿度教師</button>
         </div>
       </div>
       <div class="control-row" id="climatev1-options" hidden>
