@@ -132,3 +132,4 @@ jobs:
           git add orchestrator-app-pilot/state.json orchestrator-app-pilot/claude-report.md
           git commit -m "[AI-APP-PILOT][CLAUDE_DONE][cycle=${{ steps.gate.outputs.cycle }}]"
           git push origin HEAD:"$HEAD_BRANCH"
+# Trigger after base workflow update
