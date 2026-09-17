@@ -80,7 +80,7 @@ jobs:
             Do not edit orchestration files, workflow files, package metadata, or unrelated files.
             Do not use web tools. Commit and push the implementation to this PR branch.
           claude_args: |
-            --max-turns 12
+            --max-turns 20
             --allowedTools "Read,Edit,Write,Bash"
             --disallowedTools "WebSearch,WebFetch"
 
