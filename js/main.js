@@ -1,5 +1,6 @@
 import { initGlobe3D } from "./globe3d.js";
 import { initMap2D } from "./map2d.js";
+import { setPressed, syncPressedGroup } from "./accessibility.js";
 
 // Which worlds exist, and which one opens first. Everything else about a
 // world -- its radius, its terrain data, its colours, its sea-level range --
@@ -140,6 +141,7 @@ async function main() {
   });
 
   function applySurfaceButtons() {
+    syncPressedGroup(surfaceButtons, (b) => b.dataset.surface === surfaceMode);
     surfaceButtons.forEach((b) => b.classList.toggle("selected", b.dataset.surface === surfaceMode));
     // The climate sets only mean anything while the climate colouring is what
     // is on screen, so the row appears with it and goes away again. The user
@@ -214,6 +216,7 @@ async function main() {
       button.type = "button";
       button.textContent = set.label;
       button.dataset.set = set.id;
+      setPressed(button, false);
       if (set.note) button.title = set.note;
       button.addEventListener("click", () => {
         if (globe3d.getClimateSet() === set.id) return;
@@ -241,7 +244,9 @@ async function main() {
   }
 
   function applyClimateSetButtons(id) {
-    climateSetButtons.querySelectorAll("button").forEach((b) => {
+    const buttons = climateSetButtons.querySelectorAll("button");
+    syncPressedGroup(buttons, (b) => b.dataset.set === id);
+    buttons.forEach((b) => {
       b.classList.toggle("selected", b.dataset.set === id);
     });
   }
@@ -252,6 +257,7 @@ async function main() {
   const seabedButtons = document.querySelectorAll("#seabed-style button");
   seabedButtons.forEach((button) => {
     button.addEventListener("click", () => {
+      syncPressedGroup(seabedButtons, (other) => other === button);
       seabedButtons.forEach((other) => other.classList.toggle("selected", other === button));
       requestAnimationFrame(() => globe3d.setSeabedStyle(button.dataset.style));
     });
@@ -269,6 +275,7 @@ async function main() {
     if (recentre) globe3d.setView({ lng: 0, lat: 0, zoom });
     axisButton.textContent = axisUpright ? "軸 垂直" : `軸 ${tilt}°`;
     axisButton.classList.toggle("active", !axisUpright);
+    setPressed(axisButton, !axisUpright);
   }
   // Not a plain toggle. "One press returns to the zero pose from any
   // orientation, a second press tilts from there" only holds if a press
@@ -290,6 +297,7 @@ async function main() {
     globe3d.setGraticule(state.mode);
     graticuleButton.textContent = `線 ${state.label}`;
     graticuleButton.classList.toggle("active", state.mode !== "off");
+    setPressed(graticuleButton, state.mode !== "off");
     // The scale is only shown alongside a graticule, as asked -- the two
     // answer the same question, "how big is what I am looking at".
     scaleBar.hidden = mode !== "3d" || state.mode === "off";
@@ -411,7 +419,9 @@ async function main() {
     // coast be" -- worth stating rather than implying.
     virtualNote.hidden = hasPhoto;
 
-    worldButtons.querySelectorAll("button").forEach((button) => {
+    const worldButtonEls = worldButtons.querySelectorAll("button");
+    syncPressedGroup(worldButtonEls, (button) => button.dataset.world === entry.id);
+    worldButtonEls.forEach((button) => {
       button.classList.toggle("selected", button.dataset.world === entry.id);
     });
 
@@ -428,6 +438,7 @@ async function main() {
     button.type = "button";
     button.textContent = entry.label;
     button.dataset.world = entry.id;
+    setPressed(button, false);
     button.addEventListener("click", () => {
       if (world && world.entry.id === entry.id) return;
       // Let the pressed state and the loading overlay paint before the mesh
