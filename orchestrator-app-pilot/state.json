@@ -3,7 +3,7 @@
   "protocolVersion": 1,
   "cycle": 1,
   "maxCycles": 2,
-  "status": "SETUP",
+  "status": "CLAUDE_TURN",
   "lastActor": "SETUP",
   "lastInputSha": null,
   "lastImplementationSha": null,
