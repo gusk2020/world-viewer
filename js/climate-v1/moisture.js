@@ -140,6 +140,61 @@ export const MOISTURE_PARAMETERS = {
       "1.57 against a teacher of 4.06). Choosing K by land MAE is now forbidden -- see " +
       "docs/climate-v1-moisture-baseline-stage5b2.md.",
   },
+
+  // --- experimental land evapotranspiration (OFF by default) -----------------
+  // Designed from an inverse diagnosis, not fitted: holding the teacher's own q
+  // field steady under this very operator needs a local land source over 83% of
+  // land, five times larger in the wet tropics than in deserts, and 82% of what
+  // the tau sink removes over land cannot have been advected in. See
+  // docs/climate-v1-land-evapotranspiration.md.
+  landEvapotranspirationWeight: {
+    default: 0,
+    kind: "empirical",
+    search: false,
+    min: 0,
+    max: 1,
+    note:
+      "EXPERIMENTAL, and 0 by default so the shipped model is exactly Stage 5B. Scales the " +
+      "whole evapotranspiration source. This is a switch, not a tuning knob: 0 is off and " +
+      "1 is the term at its designed strength.",
+  },
+  evapotranspirationTimescaleDays: {
+    default: 4.6,
+    kind: "physical",
+    search: false,
+    min: 0.5,
+    max: 60,
+    note:
+      "How fast a freely-evaporating surface moistens the column it sits under, as a time " +
+      "constant. DERIVED, not fitted: the bulk aerodynamic rate rho*C_E*|U| / M_column with " +
+      "rho = 1.2 kg/m^3, C_E = 1.3e-3, |U| = 4 m/s and a 2500 kg/m^2 vapour-bearing column " +
+      "gives 2.5e-6 /s, i.e. 4.6 days. No teacher was consulted for this number.",
+  },
+  evapotranspirationAvailabilityCentre: {
+    default: 0.5,
+    kind: "empirical",
+    search: false,
+    min: 0.1,
+    max: 0.9,
+    note:
+      "Relative humidity at which land is half able to supply water. **EMPIRICAL AND " +
+      "PROVISIONAL -- not a physical constant, and not to be quoted as one.** It stands in " +
+      "for soil moisture, which this model does not carry because it has no precipitation " +
+      "to recharge it. The pair (centre, half-width) was chosen for one measured reason: a " +
+      "gentle ramp lets deserts run away (Sahara reaches 8.6-10.1 g/kg against a teacher's " +
+      "4.67) while a steep one holds them, and only the steep one reproduces the 5x " +
+      "wet/dry source contrast the inverse diagnosis requires.",
+  },
+  evapotranspirationAvailabilityHalfWidth: {
+    default: 0.25,
+    kind: "empirical",
+    search: false,
+    min: 0.02,
+    max: 0.5,
+    note:
+      "Half-width of the availability ramp around the centre above. **EMPIRICAL AND " +
+      "PROVISIONAL**, same status as the centre. Steep on purpose; see that note.",
+  },
 };
 
 export function resolveMoistureParams(overrides = {}) {
@@ -255,6 +310,34 @@ export function buildMoistureField({
     dxOfRow[y] = (2 * Math.PI * R * Math.max(MIN_COS, Math.cos((lat * Math.PI) / 180))) / W;
   }
 
+  // Experimental land evapotranspiration. Semi-implicit: the source splits into
+  // a numerator term (k*phi*q_sat) and a denominator term (k*phi), so a cell can
+  // never be pushed past saturation and q can never go negative. `phi` is read
+  // from the q the sweep is holding at that moment -- inside the sweep, not in
+  // an outer loop -- so it costs the same sweeps the base solver already takes.
+  //
+  // **At weight 0 the whole term is skipped**, so an off run is bit-identical to
+  // Stage 5B rather than merely equal to it.
+  const etWeight = params.landEvapotranspirationWeight;
+  const etOn = etWeight > 0;
+  const kEt = etOn ? etWeight / (params.evapotranspirationTimescaleDays * 86400) : 0;
+  const availLo = params.evapotranspirationAvailabilityCentre - params.evapotranspirationAvailabilityHalfWidth;
+  const availHi = params.evapotranspirationAvailabilityCentre + params.evapotranspirationAvailabilityHalfWidth;
+  if (etOn && !(availHi > availLo)) {
+    throw new Error("evapotranspirationAvailabilityHalfWidth must be positive");
+  }
+  // smoothstep, the same shape used elsewhere in this project.
+  const availabilityOf = (rh) => {
+    const t = Math.min(1, Math.max(0, (rh - availLo) / (availHi - availLo)));
+    return t * t * (3 - 2 * t);
+  };
+  // The per-cell semi-implicit coefficient, or 0 where the term is off or the
+  // ground is too dry to supply anything.
+  const etCoefficient = (i) => {
+    if (!etOn || !(cap[i] > 0)) return 0;
+    return kEt * availabilityOf(q[i] / cap[i]);
+  };
+
   // Wind, in the form the sweep wants.
   const uu = new Float64Array(n), vv = new Float64Array(n);
   for (let i = 0; i < n; i++) {
@@ -298,11 +381,13 @@ export function buildMoistureField({
         const upY = vv[i] >= 0 ? south : north;         // v > 0 blows northward
         const dxx = K / (dx * dx), dyy = K / (dy * dy);
 
+        const g = etCoefficient(i);
         const numerator =
           a * q[upX] + b * q[upY] +
           dxx * (q[east] + q[west]) + dyy * (q[north] + q[south]) +
-          (src === null ? 0 : src[i]);
-        const denominator = a + b + 1 / tauSeconds + 2 * dxx + 2 * dyy;
+          (src === null ? 0 : src[i]) +
+          g * cap[i];
+        const denominator = a + b + 1 / tauSeconds + 2 * dxx + 2 * dyy + g;
         let next = numerator / denominator;
         if (next > cap[i]) next = cap[i];
         if (!(next >= 0)) next = 0;
@@ -335,25 +420,39 @@ export function buildMoistureField({
       const upX = uu[i] >= 0 ? west : east;
       const upY = vv[i] >= 0 ? south : north;
       const dxx = K / (dx * dx), dyy = K / (dy * dy);
+      const g = etCoefficient(i);
       const unconstrained =
         (a * q[upX] + b * q[upY] + dxx * (q[east] + q[west]) + dyy * (q[north] + q[south]) +
-          (src === null ? 0 : src[i])) /
-        (a + b + 1 / tauSeconds + 2 * dxx + 2 * dyy);
+          (src === null ? 0 : src[i]) + g * cap[i]) /
+        (a + b + 1 / tauSeconds + 2 * dxx + 2 * dyy + g);
       condensation[i] = Math.max(0, unconstrained - cap[i]);
     }
   }
 
   const specificHumidityKgPerKg = new Float32Array(n);
   const relativeHumidity = new Float32Array(n);
+  // What the evapotranspiration term actually supplied, in kg/kg per second, so
+  // it can be audited against a real water flux rather than taken on trust. Null
+  // when the term is off, so nothing downstream can read a zero field and think
+  // the mechanism ran.
+  const evapotranspirationKgPerKgPerS = etOn ? new Float32Array(n) : null;
+  const evapotranspirationAvailability = etOn ? new Float32Array(n) : null;
   for (let i = 0; i < n; i++) {
     specificHumidityKgPerKg[i] = q[i];
     relativeHumidity[i] = qSat[i] > 0 ? q[i] / qSat[i] : 0;
+    if (etOn && !isSource[i] && cap[i] > 0) {
+      const phi = availabilityOf(q[i] / cap[i]);
+      evapotranspirationAvailability[i] = phi;
+      evapotranspirationKgPerKgPerS[i] = kEt * phi * Math.max(0, cap[i] - q[i]);
+    }
   }
 
   return {
     width: W, height: H,
     specificHumidityKgPerKg,
     relativeHumidity,
+    evapotranspirationKgPerKgPerS,
+    evapotranspirationAvailability,
     condensationKgPerKg: Float32Array.from(condensation),
     saturationSpecificHumidityKgPerKg: Float32Array.from(qSat),
     isSource,
@@ -363,6 +462,7 @@ export function buildMoistureField({
       referenceTransportSpeedMs: windMode === WIND_MODES.DIRECTION ? REFERENCE_TRANSPORT_SPEED_MS : null,
       sweeps, residual,
       landSourceApplied: src !== null,
+      landEvapotranspirationApplied: etOn,
       converged: residual < convergenceKgPerKg,
       params,
       unknownParameters: unknown,

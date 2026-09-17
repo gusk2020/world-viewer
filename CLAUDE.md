@@ -3073,6 +3073,81 @@ Jensen's inequality puts **35.6% of land above 1.0**, reproducing the earlier
 figure exactly. Term A uses q_sat only and is immune; the B/C split passes
 through that ratio and is an attribution, not a measurement.
 
+## Climate v1: experimental land evapotranspiration (OFF by default)
+
+Full write-up: `docs/climate-v1-land-evapotranspiration.md`. Tool:
+`tools/validate_land_et.mjs`. **`landEvapotranspirationWeight` defaults to 0, so
+the shipped model is exactly Stage 5B** -- proved, not assumed: weight 0 is
+bit-identical to the term not existing, the diagnostic arrays come back `null`,
+and `meta.landEvapotranspirationApplied` is false.
+
+    ET = availability(RH) * k_ET * max(q_sat - q, 0),  k_ET = 1 / 4.6 days
+    availability = smoothstep(0.25, 0.75, q / q_sat)
+
+**`tau_ET` is derived, not fitted** (bulk `rho*C_E*|U|/M_column` = 2.5e-6 /s).
+**The ramp's 0.25/0.75 are EMPIRICAL AND PROVISIONAL and are not to be quoted as
+physical constants** -- they stand in for soil moisture the model cannot carry
+without precipitation.
+
+**Why it exists**: an inverse diagnosis (holding the *teacher's* q steady under
+this very operator, with the observed wind) needs a local land source over **83%
+of land**, five times larger in the wet tropics than in deserts, and shows that
+**82% of what the tau sink removes over land cannot have been advected in**. The
+water boundary was audited first and is fine (sea bias +0.41 g/kg, mid-latitudes
+exactly 0.00); a uniform tau was audited too and fails (at 24 days サハラ and
+オーストラリア overshoot while コンゴ is at 63% of the teacher).
+
+**It is not a tau relabel.** Substituting gives
+`(a + b + 1/tau + k*phi) q = A_in + k*phi*q_sat` -- the numerator gains a term
+not proportional to q, so no constant tau_eff reproduces it. Measured rather than
+argued: sweeping `moistureResidenceDays` 8-40 days cannot reach the ET-on field
+(closest tau = 25.5 d, still 0.722 g/kg RMS away). Stage 5C-alpha's `f*q/tau` was
+*exactly* `(1-f)/tau`, which is why it was rejected.
+
+**The steep ramp is the whole design decision.** Plain bulk evaporation
+(availability = 1) gives a lovely q field but feeds the Sahara **3.17 g/kg/day**
+of evaporation it has no water for -- the saturation deficit is largest over
+deserts, the same trap the evaporative-cooling wet-bulb form hit -- and its
+wet/dry source ratio is **1.05x**. Gentle ramps (RH, smoothstep(0.05,0.60),
+supply-limited) are a positive feedback and let deserts run away: サハラ reaches
+8.6-10.1 against a teacher of 4.67, ratio only 1.8-1.9x. Only the steep ramp
+holds both. A bucket was tested too and is dead under a no-precipitation rule:
+recharging it from the solver's own condensation diagnostic gives an identically
+zero source, because the q <= q_sat cap never binds over land.
+
+**What it does (oracle wind)**: land mean **5.081 -> 7.164** (teacher 7.806),
+bias -2.73 -> **-0.64**, RMSE 4.60 -> 3.47. アマゾン 15.04 -> **19.28** (18.97),
+インドネシア 12.12 -> 17.67 (19.04), オーストラリア 4.38 -> **7.31** (7.00),
+サハラ 2.89 -> **3.93** (4.67, still dry). **wet/dry source ratio 5.17x** against
+the 5.07x required. The water flux is plausible where the inverse residual was
+not: **1.59 mm/day over non-ice land** (Earth ~1.3), 3.55 in the wet tropics
+(rainforest 3-4), **0.00 in deserts**, max 5.02 and **0.0% of land above
+5 mm/day** -- the inverse residual peaked at 52.
+
+**Solver**: semi-implicit inside the existing sweep (`k*phi*q_sat` to the
+numerator, `k*phi` to the denominator, phi from the q the sweep holds), never an
+outer loop. 117 sweeps, residual 9.8e-8; at 1e-9 the answer moves by 9.7e-7
+kg/kg. Zero NaN, zero negatives, nothing above saturation, and the same fixed
+point from a dry start, a saturated start and the current field. 165 -> 181 ms.
+
+**Sensitivity**: ramp 0.20-0.70 / 0.25-0.75 / 0.30-0.80 give wet/dry 4.06 / 5.17
+/ 5.67x and tau_ET 3 / 4.6 / 7 d give 3.66 / 5.17 / 5.50x -- the structure holds
+throughout and the Sahara never exceeds the teacher. **コンゴ is the sensitive
+one** (8.76 to 19.09 across those six), which is the cost of a steep ramp. Note
+ramp 0.20-0.70 has a *better* RMSE (3.11) and a worse ratio; RMSE was
+deliberately not the criterion.
+
+**Why it ships OFF, and the largest remaining problem**: with the model's own
+Stage 4 wind the Amazon and Congo sit at exactly 0.00 g/kg, so RH is 0,
+availability is 0 and ET does nothing there -- while the same wind leaves the
+Sahara at 4.77, enough to open the ramp, so ET pushes it to **12.54 against a
+teacher of 4.67**. The term needs a wind that already delivers moisture. Also
+**tau = 8 days was not re-derived**; it was fitted in a world with no land
+source, and now one exists. Both are separate stages.
+
+Tests: 50 assertions in `tools/test_moisture_stage5b.mjs` (18 new), all four
+Climate v1 suites pass, and Climate v0.8 is untouched (63.4% / 10.2%).
+
 ## The UI tidy-up after the Pixel 7a preview confirmation
 
 The user confirmed the Climate v1 preview on their phone and then asked for

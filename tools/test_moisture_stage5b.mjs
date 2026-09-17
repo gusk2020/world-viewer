@@ -194,5 +194,60 @@ console.log("\n12. Required inputs throw; a different planet works");
     mars.specificHumidityKgPerKg[8 * w.W + 10] !== run(w, 5, 0).specificHumidityKgPerKg[8 * w.W + 10]);
 }
 
+
+// --- experimental land evapotranspiration ------------------------------------
+{
+  const MP = MOISTURE_PARAMETERS, rmp = resolveMoistureParams;
+  const w = world();
+  const bmf = (extra) => run(w, 6, 0, { windMode: WIND_MODES.PHYSICAL, ...extra });
+  check("ET weight defaults to 0 (off)", MP.landEvapotranspirationWeight.default === 0);
+  check("ET timescale is marked physical", MP.evapotranspirationTimescaleDays.kind === "physical");
+  check("ET ramp centre is marked empirical", MP.evapotranspirationAvailabilityCentre.kind === "empirical");
+  check("ET ramp half-width is marked empirical", MP.evapotranspirationAvailabilityHalfWidth.kind === "empirical");
+  check("no ET parameter is searchable", [
+    "landEvapotranspirationWeight", "evapotranspirationTimescaleDays",
+    "evapotranspirationAvailabilityCentre", "evapotranspirationAvailabilityHalfWidth",
+  ].every((k) => MP[k].search === false));
+  const { values } = rmp({});
+  check("ET defaults resolve", values.landEvapotranspirationWeight === 0 && values.evapotranspirationTimescaleDays === 4.6);
+
+  const off = bmf({});
+  const offAgain = bmf({ params: { landEvapotranspirationWeight: 0 } });
+  let identical = off.specificHumidityKgPerKg.length === offAgain.specificHumidityKgPerKg.length;
+  for (let i = 0; identical && i < off.specificHumidityKgPerKg.length; i++) {
+    if (off.specificHumidityKgPerKg[i] !== offAgain.specificHumidityKgPerKg[i]) identical = false;
+  }
+  check("weight 0 is bit-identical to no ET at all", identical);
+  check("ET diagnostics are null while off", off.evapotranspirationKgPerKgPerS === null);
+  check("meta reports the term off", off.meta.landEvapotranspirationApplied === false);
+
+  const on = bmf({ params: { landEvapotranspirationWeight: 1 } });
+  check("ET on reports itself", on.meta.landEvapotranspirationApplied === true);
+  check("ET on exposes its own source", on.evapotranspirationKgPerKgPerS instanceof Float32Array);
+  check("ET on exposes its availability", on.evapotranspirationAvailability instanceof Float32Array);
+  let finite = true, nonNegative = true, withinCap = true;
+  for (let i = 0; i < on.specificHumidityKgPerKg.length; i++) {
+    const v = on.specificHumidityKgPerKg[i];
+    if (!Number.isFinite(v)) finite = false;
+    if (v < 0) nonNegative = false;
+    if (v > on.saturationSpecificHumidityKgPerKg[i] + 1e-12) withinCap = false;
+    const a = on.evapotranspirationAvailability[i];
+    if (!(a >= 0 && a <= 1)) finite = false;
+  }
+  check("ET on produces no NaN or Inf", finite);
+  check("ET on keeps q non-negative", nonNegative);
+  check("ET on never exceeds saturation", withinCap);
+  check("ET on converged", on.meta.converged === true);
+  let wetter = 0;
+  for (let i = 0; i < on.specificHumidityKgPerKg.length; i++) {
+    if (on.specificHumidityKgPerKg[i] > off.specificHumidityKgPerKg[i] + 1e-12) wetter++;
+  }
+  check("ET on adds moisture somewhere", wetter > 0);
+  let ok = true;
+  try { bmf({ params: { landEvapotranspirationWeight: 1, evapotranspirationAvailabilityHalfWidth: 0 } }); ok = false; }
+  catch { /* expected */ }
+  check("a zero-width ramp is rejected rather than dividing by zero", ok);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) { console.log("\nFAILURES:"); failures.forEach((f) => console.log("  " + f)); process.exit(1); }
