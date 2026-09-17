@@ -546,7 +546,15 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
   // instead of once per texture pixel (two million). Identical output, and
   // the difference is what makes the season's phase slider usable: measured
   // in the browser, 650 ms -> 26 ms per repaint.
-  function showScalarField({ width: fw, height: fh, values, colourAt }) {
+  // An optional second field can be laid over the first:
+  //   overlay = { width, height, values, apply(rgb, value) }
+  // on its own grid, which need not match the scalar field's. It exists so an
+  // experimental diagnosis (sea ice today) can be drawn on top of a variable
+  // without being mixed into that variable's own colour scale -- the two stay
+  // separate quantities on screen because they are separate quantities.
+  // Passing no overlay takes the original code path untouched, so an overlay
+  // that is off is bit-for-bit an overlay that does not exist.
+  function showScalarField({ width: fw, height: fh, values, colourAt, overlay = null }) {
     if (!supportsClimate) return surfaceMode;
     ensureClimateTexture();
     const w = elevation.width, h = elevation.height;
@@ -554,9 +562,37 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
     const rgb = [0, 0, 0];
     const rowBytes = new Uint8ClampedArray(w * 4);
     let builtRow = -1;
+    let builtOverlayRow = -1;
+    const ow = overlay ? overlay.width : 0;
+    const oh = overlay ? overlay.height : 0;
     for (let y = 0; y < h; y++) {
       const fy = Math.min(fh - 1, Math.floor((y * fh) / h));
-      if (fy !== builtRow) {
+      // -1 with no overlay, so the condition below reduces to the original one.
+      const oy = overlay ? Math.min(oh - 1, Math.floor((y * oh) / h)) : -1;
+      if (fy !== builtRow || oy !== builtOverlayRow) {
+        if (overlay) {
+          // Both grids cut the row into runs of constant value, at different
+          // places; walking the two run boundaries together keeps the cost at
+          // (fw + ow) colour computations per row rather than one per pixel.
+          let x = 0, fx = 0, ox = 0;
+          while (x < w) {
+            const fEnd = Math.min(w, Math.ceil(((fx + 1) * w) / fw));
+            const oEnd = Math.min(w, Math.ceil(((ox + 1) * w) / ow));
+            const end = Math.max(x + 1, Math.min(fEnd, oEnd));
+            colourAt(values[fy * fw + fx], rgb);
+            overlay.apply(rgb, overlay.values[oy * ow + ox]);
+            for (; x < end; x++) {
+              const p = x * 4;
+              rowBytes[p] = rgb[0]; rowBytes[p + 1] = rgb[1]; rowBytes[p + 2] = rgb[2]; rowBytes[p + 3] = 255;
+            }
+            while (fx < fw - 1 && Math.ceil(((fx + 1) * w) / fw) <= x) fx++;
+            while (ox < ow - 1 && Math.ceil(((ox + 1) * w) / ow) <= x) ox++;
+          }
+          builtRow = fy;
+          builtOverlayRow = oy;
+          data.set(rowBytes, y * w * 4);
+          continue;
+        }
         // floor(x * fw / w) === fx exactly over x in [ceil(fx*w/fw), ceil((fx+1)*w/fw)),
         // so each field cell fills one run of texture columns.
         let x = 0;

@@ -313,3 +313,16 @@ html, body {
   flex: 1;
   min-width: 72px;
 }
+
+/* The sea-ice row: a two-button segment and a short warning that has to stay
+   on one line at 412 px. The note is the label, not decoration -- the area
+   this overlay draws is overstated and the screen has to say so. */
+#seaice-mode {
+  flex: 0 0 128px;
+}
+
+#seaice-note {
+  font-size: 11px;
+  color: #ffd9a0;
+  white-space: nowrap;
+}

@@ -122,6 +122,18 @@
         <button type="button" id="season-next" class="pill" hidden>▶</button>
         <button type="button" id="season-play" class="pill" hidden>再生</button>
       </div>
+      <!-- Sea ice: EXPERIMENTAL, off by default, and only while the seasonal
+           temperature is on screen. The label says the area is overstated
+           because it is: the sea temperature upstream has no longitudinal
+           structure, so the 60-70 degree band freezes right the way round. -->
+      <div class="control-row" id="seaice-row" hidden>
+        <div id="seaice-mode" class="segmented">
+          <button type="button" data-seaice="off" class="selected">海氷 切</button>
+          <button type="button" data-seaice="on"
+            title="実験表示。海氷面積は過大です（上流の海面温度に経度構造・海流が無く、60-70度帯が経度方向に一周凍るため）">入</button>
+        </div>
+        <span id="seaice-note" hidden>実験・面積過大</span>
+      </div>
       <p id="climatev1-readout" hidden></p>
     </div>
   </div>

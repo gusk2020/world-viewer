@@ -12,6 +12,9 @@ import { CLIMATE_V1_EARTH_TEMPERATURE_CALIBRATION } from "./climate-v1/earth-tem
 import {
   SEASONAL_TIME_AXIS, buildSeasonalTemperatureTable, buildTemperatureFieldAtPhase,
 } from "./climate-v1/season.js";
+import {
+  buildSeaIceCycle, seaIceFractionSlice, sampleSeaIceThicknessM,
+} from "./climate-v1/sea-ice-state.js";
 import { resolveClimateSets } from "./climate.js";
 
 // Which worlds exist, and which one opens first. Everything else about a
@@ -56,6 +59,8 @@ async function main() {
   const seasonNext = document.getElementById("season-next");
   const seasonPlay = document.getElementById("season-play");
   const seasonSlider = document.getElementById("season-phase");
+  const seaiceRow = document.getElementById("seaice-row");
+  const seaiceNote = document.getElementById("seaice-note");
   const worldCycleButton = document.getElementById("world-cycle");
   const virtualNote = document.getElementById("virtual-sea-note");
   const loading = document.getElementById("loading");
@@ -115,7 +120,7 @@ async function main() {
     // The preview paints the 3D globe, so it goes away with the 3D view --
     // same rule as the axis/graticule row beside it.
     climateV1Row.hidden = mode !== "3d" || !(globe3d && globe3d.supportsClimate);
-    if (mode !== "3d") { climateV1Options.hidden = true; climateV1Readout.hidden = true; stopSeasonPlay(); seasonRow.hidden = true; }
+    if (mode !== "3d") { climateV1Options.hidden = true; climateV1Readout.hidden = true; hideSeasonRows(); }
     // The scale bar is derived from the 3D camera, so it would be quietly
     // wrong sitting on top of the 2D map -- which draws its own.
     scaleBar.hidden = mode !== "3d" || GRATICULE_STATES[graticuleIndex].mode === "off";
@@ -160,7 +165,7 @@ async function main() {
   surfaceButtons.forEach((button) => {
     button.addEventListener("click", () => {
       surfaceMode = button.dataset.surface;
-      if (v1Mode !== "off") { v1Mode = "off"; applyV1Buttons(); climateV1Options.hidden = true; climateV1Readout.hidden = true; stopSeasonPlay(); seasonRow.hidden = true; }
+      if (v1Mode !== "off") { v1Mode = "off"; applyV1Buttons(); climateV1Options.hidden = true; climateV1Readout.hidden = true; hideSeasonRows(); }
       applySurfaceButtons();
       requestAnimationFrame(() => {
         globe3d.setSurfaceMode(surfaceMode);
@@ -228,6 +233,120 @@ async function main() {
   let seasonPlayLast = 0;
   const seasonButtons = document.querySelectorAll("#season-mode button");
 
+  // --- sea ice (EXPERIMENTAL, off by default) -------------------------------
+  //
+  // A diagnosis drawn over the seasonal temperature, on the SAME orbitalPhase
+  // -- one clock, not two. It is off by default and says on screen that its
+  // area is overstated, because it is: the sea temperature it integrates has
+  // no longitudinal structure and no currents, so the 60-70 degree band
+  // freezes right the way round and the annual maximum comes out near 9% of
+  // the globe against the teacher snapshot's 1%. Those are upstream errors
+  // and they are NOT to be corrected with a sea-ice parameter.
+  const SEA_ICE_CAUSES = "実験表示。海氷面積は過大です（上流の海面温度に経度構造・海流が無く、"
+    + "60-70度帯が経度方向に一周凍るため。季節位相も2-3か月遅れる可能性があります）";
+  // 0 leaves the surface colour exactly as it was, 1 is full cover -- and full
+  // cover is deliberately not opaque, so the temperature underneath stays
+  // readable rather than being replaced by a white cap.
+  const SEA_ICE_MAX_ALPHA = 0.82;
+  const SEA_ICE_RGB = [238, 244, 252];
+  // Three cells, named for what each is meant to show rather than where it is:
+  // ice that survives the summer, ice that does not, and the other hemisphere.
+  const SEA_ICE_PROBES = [
+    { label: "北極", lng: 0, lat: 88 },
+    { label: "季節氷(ベーリング)", lng: -170, lat: 62 },
+    { label: "南極海", lng: 0, lat: -65 },
+  ];
+  let v1SeaIce = "off";                // off | on
+  let v1SeaIceCycle = null;            // built once per world, then cached
+  let v1SeaIceDisplay = null;          // fraction x sea share, reused per phase
+  const seaiceButtons = document.querySelectorAll("#seaice-mode button");
+
+  // The overlay descriptor showScalarField takes, or null when the ice is off
+  // -- and null is what makes an off overlay bit-identical to no overlay.
+  //
+  // What gets drawn is the ice's share of the whole cell, i.e. the ice
+  // fraction times the cell's own sea share, so a coastal cell that is mostly
+  // land does not paint ice across the land beside it. The ice grid is coarse
+  // (256x128) and this is the honest way to show a coarse field over a fine
+  // one; the number the model actually carries is untouched.
+  function seaIceOverlay() {
+    if (v1SeaIce !== "on" || !v1SeaIceCycle) return null;
+    const cells = v1SeaIceCycle.width * v1SeaIceCycle.height;
+    if (!v1SeaIceDisplay || v1SeaIceDisplay.length !== cells) {
+      v1SeaIceDisplay = new Float32Array(cells);
+    }
+    const slice = seaIceFractionSlice(v1SeaIceCycle, v1Phase);
+    const sea = v1SeaIceCycle.seaFraction;
+    for (let i = 0; i < cells; i++) v1SeaIceDisplay[i] = slice[i] * sea[i];
+    return {
+      width: v1SeaIceCycle.width,
+      height: v1SeaIceCycle.height,
+      values: v1SeaIceDisplay,
+      apply(rgb, fraction) {
+        if (!(fraction > 0)) return;
+        const a = Math.min(1, fraction) * SEA_ICE_MAX_ALPHA;
+        rgb[0] = rgb[0] + (SEA_ICE_RGB[0] - rgb[0]) * a;
+        rgb[1] = rgb[1] + (SEA_ICE_RGB[1] - rgb[1]) * a;
+        rgb[2] = rgb[2] + (SEA_ICE_RGB[2] - rgb[2]) * a;
+      },
+    };
+  }
+
+  // The spin-up: five years at 48 steps, once per world. It reads the sea
+  // temperature and the same season table the picture is drawn from, and it
+  // writes nothing back -- meta.feedsBackIntoTemperature is false by design.
+  function ensureSeaIceCycle(preview) {
+    if (v1SeaIceCycle) return v1SeaIceCycle;
+    const t = preview.temperatureField;
+    const started = performance.now();
+    v1SeaIceCycle = buildSeaIceCycle({
+      temperatureField: t,
+      terrainField: preview.terrainField,
+      seasonTable: ensureSeasonTable(t.height),
+    });
+    const ms = Math.round(performance.now() - started);
+    const m = v1SeaIceCycle.meta;
+    console.info(`[sea ice] ${m.yearsUsed}年 x ${m.stepsPerYear}step を ${ms} ms で計算。`
+      + `面積収束 ${m.fractionConverged ?? "未"}年 / 厚さ収束 ${m.thicknessConverged ?? "未"}年`
+      + `（年境界差 ${m.maxYearBoundaryDifference.toFixed(3)} m）`);
+    return v1SeaIceCycle;
+  }
+
+  // Thickness at the three probe cells, for the note's title and the console.
+  // Deliberately not a fourth line on the panel -- the user has asked twice
+  // for this screen to stop growing.
+  function seaIceProbeText() {
+    if (!v1SeaIceCycle) return "";
+    const { width: ow, height: oh } = v1SeaIceCycle;
+    return SEA_ICE_PROBES.map(({ label, lng, lat }) => {
+      const x = Math.min(ow - 1, Math.max(0, Math.floor(((lng + 180) / 360) * ow)));
+      const y = Math.min(oh - 1, Math.max(0, Math.floor(((90 - lat) / 180) * oh)));
+      const i = y * ow + x;
+      const h = sampleSeaIceThicknessM(v1SeaIceCycle, i, v1Phase);
+      const f = seaIceFractionSlice(v1SeaIceCycle, v1Phase)[i];
+      return `${label} ${h.toFixed(2)}m/${(f * 100) | 0}%`;
+    }).join(" ／ ");
+  }
+
+  // Putting both experimental rows away, and switching the ice back off with
+  // them: the 2D map, the teacher, humidity and the other two bodies each
+  // mean something this overlay cannot describe, so coming back finds it off.
+  function hideSeasonRows() {
+    stopSeasonPlay();
+    seasonRow.hidden = true;
+    seaiceRow.hidden = true;
+    if (v1SeaIce !== "off") { v1SeaIce = "off"; applySeaIceButtons(); }
+  }
+
+  function applySeaIceButtons() {
+    seaiceButtons.forEach((b) => b.classList.toggle("selected", b.dataset.seaice === v1SeaIce));
+    const on = v1SeaIce === "on";
+    seaiceNote.hidden = !on;
+    // Cleared rather than left behind, so a hidden note cannot carry last
+    // session's thickness numbers into the next time it is shown.
+    seaiceNote.title = on ? `${SEA_ICE_CAUSES}／${seaIceProbeText()}` : "";
+  }
+
   // The phase names are a *label*, not a model input: season.js knows only
   // orbitalPhase in [0,1), so nothing here can leak a calendar into the
   // physics. Phase 0 is season.js's own definition -- the ascending equinox.
@@ -280,6 +399,7 @@ async function main() {
     v1PhaseBuffer = values;
     globe3d.showScalarField({
       width: t.width, height: t.height, values, colourAt: temperatureColour,
+      overlay: seaIceOverlay(),
     });
   }
 
@@ -536,6 +656,13 @@ async function main() {
     seasonRow.hidden = !showsSeason;
     if (!showsSeason) stopSeasonPlay();
     if (showsSeason) applySeasonButtons();
+    // The ice is a state carried around the year, so it only means anything
+    // while a phase is actually being shown -- not on the annual mean, not on
+    // the teacher, not on humidity, and not on a body with no preview.
+    const showsSeaIce = showsSeason && v1Season === "seasonal";
+    seaiceRow.hidden = !showsSeaIce;
+    if (!showsSeaIce && v1SeaIce !== "off") v1SeaIce = "off";
+    applySeaIceButtons();
     if (!showsV1) {
       if (surfaceMode) globe3d.setSurfaceMode(surfaceMode);
       return;
@@ -577,6 +704,7 @@ async function main() {
         const t = preview.temperatureField;
         if (v1Season === "seasonal") {
           v1SeasonPreview = preview;
+          if (v1SeaIce === "on") { ensureSeaIceCycle(preview); applySeaIceButtons(); }
           drawSeasonPhase(preview);
         } else {
           // 年間 shows Stage 2's own array, not a copy of it -- so returning
@@ -642,6 +770,7 @@ async function main() {
     }
     if (v1Season !== "seasonal" || !v1SeasonPreview || !globe3d) return;
     drawSeasonPhase(v1SeasonPreview);
+    if (v1SeaIce === "on") seaiceNote.title = `${SEA_ICE_CAUSES}／${seaIceProbeText()}`;
     climateV1Readout.textContent =
       v1RegionLine(v1SeasonPreview, `季節気温（気温のみ）${seasonPhaseLabel(v1Phase)}`, v1PhaseBuffer);
   }
@@ -679,6 +808,17 @@ async function main() {
       seasonPlayHandle = requestAnimationFrame(tick);
     };
     seasonPlayHandle = requestAnimationFrame(tick);
+  });
+
+  // The ice shares the season's clock and its picture: switching it on or off
+  // is one redraw of the phase already on screen, with the overlay added or
+  // dropped. The first ON also pays for the spin-up.
+  seaiceButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      v1SeaIce = button.dataset.seaice;
+      applySeaIceButtons();
+      requestAnimationFrame(() => { applyClimateV1(); });
+    });
   });
 
   // The temporary comparison feature's own precomputed A/B numbers (see
@@ -944,6 +1084,13 @@ async function main() {
     v1PhaseBuffer = null;
     seasonRow.hidden = true;
     applySeasonButtons();
+    // The ice cycle is this body's sea temperature integrated over this body's
+    // year, so it cannot outlive the world it was built for.
+    v1SeaIce = "off";
+    v1SeaIceCycle = null;
+    v1SeaIceDisplay = null;
+    seaiceRow.hidden = true;
+    applySeaIceButtons();
     climateV1Row.hidden = !globe3d.supportsClimate;
     applyV1Buttons();
     climateV1Options.hidden = true;

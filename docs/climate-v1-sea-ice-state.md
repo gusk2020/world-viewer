@@ -162,3 +162,56 @@ extracted when a second arrives (land snow, which needs precipitation first).
 And there is no albedo feedback: `meta.feedsBackIntoTemperature` is `false`,
 Stage 2 and the seasonal anomaly are untouched, and both V0.8 scorers print
 byte-identical output (63.4% / 10.2%).
+
+## On the phone: an experimental overlay on the seasonal slider
+
+Added after the state model was measured, and added as the honest option: the
+extent above is too large for a reason that lives upstream, so the screen says
+so rather than the overlay being kept off the phone entirely.
+
+**One button, in one row that only exists while the seasonal temperature is
+actually on screen.** `[海氷 切 | 入]` sits below the season row, and both go
+away together on the annual mean, on the temperature teacher, on humidity, in
+2D and on the Moon and Mars -- each of those means something this overlay
+cannot describe. The ice defaults to **off** and returns to off every time the
+row is hidden or a world is loaded, so nothing carries a stale ON state into a
+view where it would be wrong.
+
+**The label is a requirement, not decoration.** With the ice on, `実験・面積過大`
+appears beside the button, and its `title` carries the causes in full -- no
+longitudinal structure in the sea temperature, no currents, the 60-70 degree
+band freezing all the way round, and the possible two-to-three-month phase lag.
+The same three numbers the validator reports (annual maximum 9.19% of the globe
+against the teacher snapshot's 1.00%) are what that label exists for.
+
+**One clock.** The overlay reads `fractionByPhase` at the *same* `orbitalPhase`
+the temperature is drawn from -- there is no second phase, no second slider and
+no interpolation between the two. The ice table stores 24 phases where the
+temperature is continuous, so the ice steps in ~15-day increments under a
+temperature that moves smoothly; that is a storage choice recorded above, not a
+second time axis.
+
+**What is drawn is the ice's share of the cell**, i.e. the fraction times that
+cell's own sea share, so a mostly-land coastal cell does not paint ice across
+the land beside it. The number the model carries is untouched; this is only how
+a 256x128 field is shown over a 1024x512 one.
+
+**The overlay is separate from the temperature scale**, deliberately: a pale
+blue-white is blended over whatever colour the temperature ramp produced, at
+alpha `0.82 x fraction`. Fraction 0 leaves the pixel exactly as it was, so an
+overlay at zero is indistinguishable from no overlay, and full cover is
+**not** opaque -- the temperature underneath stays readable instead of being
+replaced by a white cap.
+
+**`showScalarField` gained an optional `overlay`** in `js/globe3d.js`. With no
+overlay it takes the original code path untouched, which is what makes "ice
+off" bit-identical to "ice does not exist". With one, the row build walks both
+grids' run boundaries together, so a row still costs `(fieldWidth +
+overlayWidth)` colour computations rather than one per pixel.
+
+**The spin-up runs once per world**, on the first press of 入, and is then
+cached; the phase slider only ever does a table lookup plus the texture
+repaint it already did. Thickness at three probe cells (the Arctic, seasonal
+Bering ice and the Southern Ocean) goes to the note's `title` and to the
+console, rather than becoming a fourth line on a panel the user has twice asked
+to stop growing.

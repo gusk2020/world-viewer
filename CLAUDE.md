@@ -3393,6 +3393,55 @@ No common seasonal integrator was built -- one state model is not two. The
 (cell, phase, state, tendency) boundaries are kept clean for when land snow
 arrives, which needs precipitation first.
 
+### The sea ice on the phone: an experimental overlay, off by default
+
+Connected to the season slider the user had just confirmed, as **option B** --
+shown, with the screen saying the extent is overstated, rather than kept off
+the phone. Write-up: `docs/climate-v1-sea-ice-state.md`.
+
+**One button in one row** (`[海氷 切 | 入]`), below the season row, and it
+exists only while the seasonal temperature is on screen. 年間, 気温教師,
+湿度モデル, 湿度教師, 2D, the Moon and Mars all put it away **and switch it
+back off**, so nothing carries a stale ON into a view where it would be wrong;
+a world load does the same. Measured at 412x892: the bottom group is 182 px
+with the ice row absent and **214 px with it**, and the top panel stays at 41.
+
+**The label is the point.** With the ice on, `実験・面積過大` appears beside
+the button and its `title` names every cause -- no longitudinal structure in
+the sea temperature, no currents, the 60-70 degree band freezing all the way
+round, the possible 2-3 month phase lag. The annual maximum really is 9.19% of
+the globe against the teacher snapshot's 1.00%, and **that is an upstream error
+reported, not a sea-ice parameter to be moved.**
+
+**One clock.** The overlay reads `fractionByPhase` at the *same* `orbitalPhase`
+the temperature is drawn from. The ice table stores 24 phases where the
+temperature is continuous, so the ice steps in ~15-day increments -- a storage
+choice, not a second time axis.
+
+**Off is bit-identical to not existing.** `showScalarField` gained an optional
+`overlay`; with none it takes the original code path untouched. Measured in the
+browser: 年間 hashes `1799c75758ce`, the same as before the season existed;
+turning the ice off returns the seasonal frame to the exact hash it had before
+the ice was ever on; and 年間 after the ice had been on is identical again.
+
+**Cost.** The spin-up is **91 ms** in the browser (5 years x 48 steps), once
+per world on the first press of 入 -- 2.2 s of wall clock for that first press
+including the preview redraw it shares with every other button. A phase change
+with the ice on is **19.3 ms**, and playback measures **1.6 fps with the ice on
+and 1.6 fps with it off** -- the overlay costs no frame rate; 1.6 is swiftshader
+drawing a 393k-vertex globe.
+
+**What it draws** is the fraction times the cell's own sea share, so a
+mostly-land coastal cell does not paint ice over the land beside it, blended as
+a pale blue-white at alpha `0.82 x fraction` -- separate from the temperature
+ramp, zero leaves the pixel untouched, and full cover is deliberately not
+opaque. Behaviour at the four seasons, from the note's own readout: the Arctic
+holds 3.00-3.14 m all year, Bering seasonal ice runs 0.57 m -> **0.00 m** ->
+0.06 m, and the Southern Ocean runs **0.00 m** -> 0.20 -> 0.75 -> 0.93 -- both
+hemispheres empty and refill, half a year apart. Their minima do not fall on
+the calendar's summer because the sea's own cycle lags ~72 days upstream, which
+is the limit above rather than a fault here.
+
 ## The UI tidy-up after the Pixel 7a preview confirmation
 
 The user confirmed the Climate v1 preview on their phone and then asked for

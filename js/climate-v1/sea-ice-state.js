@@ -249,6 +249,18 @@ export function sampleSeaIceFraction(cycle, index, orbitalPhase) {
   return cycle.fractionByPhase[phaseSlot(cycle, orbitalPhase) * cycle.width * cycle.height + index];
 }
 
+/**
+ * The whole ice-fraction grid at one orbital phase, as a view into the stored
+ * table rather than a copy. A drawing caller wants every cell at one instant,
+ * which is the transpose of what sampleSeaIceFraction answers, and the phase
+ * slot arithmetic lives in exactly one place either way.
+ */
+export function seaIceFractionSlice(cycle, orbitalPhase) {
+  const cells = cycle.width * cycle.height;
+  const slot = phaseSlot(cycle, orbitalPhase);
+  return cycle.fractionByPhase.subarray(slot * cells, (slot + 1) * cells);
+}
+
 function phaseSlot(cycle, orbitalPhase) {
   const phase = SEASONAL_TIME_AXIS.normalise(orbitalPhase);
   return Math.min(cycle.phaseCount - 1, Math.floor(phase * cycle.phaseCount));
