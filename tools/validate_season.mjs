@@ -286,6 +286,37 @@ console.log("\n=== 6. Stage 2's annual field, and the whole grid at a phase ==="
     }
   }
   console.log(`  35-55N, equinox vs northern solstice: land ${f1(landSwing / landN)} C, sea ${f1(seaSwing / seaN)} C`);
+
+  // Three representative points on the real grid: the phase UI shows the
+  // whole globe, but these are the three cells whose behaviour the design
+  // predicted, so they are worth reading off the drawn field directly.
+  const cellAt = (lng, lat) => {
+    const x = Math.min(temperatureField.width - 1, Math.floor(((lng + 180) / 360) * temperatureField.width));
+    const y = Math.min(temperatureField.height - 1, Math.floor(((90 - lat) / 180) * temperatureField.height));
+    return y * temperatureField.width + x;
+  };
+  const POINTS = [
+    ["45N 陸 (仏)", 5, 45, false], ["45N 海 (北太平洋)", -150, 45, true], ["45S 陸 (チリ)", -71, -45, false],
+  ];
+  const STEPS = 96;
+  console.log("  代表点:");
+  for (const [label, lng, lat, wantSea] of POINTS) {
+    const i = cellAt(lng, lat);
+    const isSea = Boolean(terrainField.isSea[i]);
+    let hi = -Infinity, lo = Infinity, hiPhase = 0;
+    for (let s = 0; s < STEPS; s++) {
+      const v = sampleTemperatureAtPhase({
+        temperatureField, seasonTable: table, index: i, orbitalPhase: s / STEPS, isSea,
+      });
+      if (v > hi) { hi = v; hiPhase = s / STEPS; }
+      if (v < lo) lo = v;
+    }
+    const sol = lat >= 0 ? 0.25 : 0.75;
+    const lagDays = wrapDays(hiPhase * YEAR_D - sol * YEAR_D);
+    console.log(`    ${label.padEnd(18)} ${isSea ? "海" : "陸"}  年平均 ${f1(temperatureField.annualMeanTemperatureC[i])} C`
+      + `  最暖 ${f1(hi)} / 最寒 ${f1(lo)}  半振幅 ${f1((hi - lo) / 2)}  夏至から +${f1(lagDays)} d`);
+    ok(isSea === wantSea, `${label} is ${wantSea ? "sea" : "land"} on this grid`, "");
+  }
 }
 
 // --- 7. cost and size --------------------------------------------------------

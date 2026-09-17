@@ -282,14 +282,16 @@ export function sampleTemperatureAtPhase({ temperatureField, seasonTable, index,
 }
 
 /**
- * The whole grid at one phase, as a new array. Convenience for a future UI
- * phase slider and for the validator; nothing in the shipped pipeline calls
- * it, and it allocates rather than mutating the annual field, so the annual
- * field cannot be damaged by a caller that forgets to copy.
+ * The whole grid at one phase. Used by the UI's phase slider and by the
+ * validator. It never writes to the annual field, so no caller can damage
+ * Stage 2 by forgetting to copy; pass `out` to reuse one buffer across phases,
+ * since a player calls this many times a second.
  */
-export function buildTemperatureFieldAtPhase({ temperatureField, terrainField, seasonTable, orbitalPhase }) {
+export function buildTemperatureFieldAtPhase({
+  temperatureField, terrainField, seasonTable, orbitalPhase, out: reuse = null,
+}) {
   const { width, height, annualMeanTemperatureC } = temperatureField;
-  const out = new Float32Array(width * height);
+  const out = reuse && reuse.length === width * height ? reuse : new Float32Array(width * height);
   const rowScale = seasonTable.rows / height;
   for (let y = 0; y < height; y++) {
     const tableRow = Math.min(seasonTable.rows - 1, Math.floor(y * rowScale));

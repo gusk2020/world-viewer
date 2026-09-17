@@ -108,6 +108,20 @@
           <button type="button" data-wind="observed" title="NCEP 850hPa 観測風・診断用">観測風</button>
         </div>
       </div>
+      <!-- The seasonal cycle (EXPERIMENTAL, temperature only). One row, and
+           it only exists while 気温モデル is on screen: the teacher data is an
+           annual mean, and humidity is not seasonal in this model, so showing
+           this beside either would claim something untrue. -->
+      <div class="control-row" id="season-row" hidden>
+        <div id="season-mode" class="segmented">
+          <button type="button" data-season="annual" class="selected">年間</button>
+          <button type="button" data-season="seasonal" title="気温だけが季節変化します">季節</button>
+        </div>
+        <button type="button" id="season-prev" class="pill" hidden>◀</button>
+        <input type="range" id="season-phase" min="0" max="1439" step="1" value="360" hidden />
+        <button type="button" id="season-next" class="pill" hidden>▶</button>
+        <button type="button" id="season-play" class="pill" hidden>再生</button>
+      </div>
       <p id="climatev1-readout" hidden></p>
     </div>
   </div>

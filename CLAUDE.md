@@ -3265,6 +3265,54 @@ instead of each inlining the same formula. Checked rather than assumed --
 / 10.2%) and all ten existing Climate v1 test/validator outputs are
 byte-identical (178 assertions).
 
+## The seasonal cycle on the phone (temperature only)
+
+One 30 px row in the bottom panel, shown **only while 気温モデル is on**:
+`[年間][季節] ◀ [slider] ▶ [再生]`. Write-up:
+`docs/climate-v1-seasonal-cycle.md`. Humidity, wind, ET, precipitation, soil
+water, snow, sea ice and vegetation are all still annual means, and both the
+button's title text and the readout's heading say "気温のみ" so the globe
+cannot be read as a fully seasonal model.
+
+**年間 shows Stage 2's own array, not a copy.** The rendered frame after one
+and after three 年間↔季節 round trips is byte-identical to the frame from
+before the season existed (`1799c75758ce`), and so is the frame after a full
+tour of 2D, the Moon, Mars and back.
+
+**The slider is 1440 steps per orbit** (`orbitalPhase = value / 1440`), the
+arrows step 1/24 of a year, and 再生 advances the phase from *real elapsed
+time* -- one orbit per 12 s, so a slow device plays the year at the right
+speed with fewer frames instead of in slow motion (measured: 0.265 of a year
+in 3 s). The row hides and playback stops wherever a season would imply
+something untrue: the temperature teacher is an annual mean, humidity is not
+seasonal here, and the 2D map and the other two bodies have no preview.
+
+**The readout reads the phase it drew.** サハラ 30.5 C at phase 0.25 against
+15.4 C at 0.75, while アマゾン goes the other way (29.2 -> 31.2) -- if the four
+region numbers had kept reading the annual field they would have contradicted
+the picture beside them.
+
+**Moving the phase runs no climate stage: 10-20 ms.** That needed
+`showScalarField` fixed first, and the fix is exact rather than an
+approximation. It had coloured all two million texture pixels through a
+callback; since its sampling is *nearest*, every texture row mapping to the
+same field row is byte-for-byte identical, so the colour is now computed once
+per **field** cell and each row is filled by typed-array copy. The run bounds
+`[ceil(fx*w/fw), ceil((fx+1)*w/fw))` are the exact inverse of the old
+`floor(x*fw/w)` (checked over seven size pairs, including a field wider than
+the texture) and the rendered frame hashes the same before and after.
+**650 ms -> 26 ms**, which the teacher and humidity views get for free.
+
+Frame rate at 412x892 in the software renderer is **2 fps with the photo
+surface, in 年間, in 季節 and while playing** -- the same number four times,
+i.e. the season costs no frame rate; that 2 is swiftshader drawing a
+393k-vertex globe. Panel heights are unchanged (41 px top, 182 px bottom).
+
+Representative points off the real grid: 45N land (France) half-amplitude
+**15.1 C** peaking 27 days after the solstice, 45N sea (North Pacific)
+**4.9 C** peaking +72 d, 45S land (Chile) 15.2 C -- the design's own
+predictions, on real geography.
+
 ## The UI tidy-up after the Pixel 7a preview confirmation
 
 The user confirmed the Climate v1 preview on their phone and then asked for

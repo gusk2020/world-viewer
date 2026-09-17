@@ -131,3 +131,81 @@ and validator outputs are byte-identical too (178 assertions).
 
 Nothing imports `season.js` except its validator, so every existing output is
 unchanged by construction as well as by measurement.
+
+## On the phone: one row, temperature only
+
+The UI is deliberately one 30 px row inside the existing bottom panel, shown
+**only while 気温モデル is selected**:
+
+    [年間][季節]  ◀  [───────]  ▶  [再生]
+
+- **年間** shows Stage 2's own array, not a copy, so returning from 季節
+  cannot leave a seasonal value behind. Verified: the rendered frame after one
+  and after three 年間↔季節 round trips is **byte-identical** to the frame
+  before the season existed.
+- **The slider carries 1440 steps per orbit** (about a quarter of a day on
+  Earth) and reads `orbitalPhase = value / 1440`. The arrows step 1/24 of a
+  year. **Play** advances the phase from real elapsed time, one orbit per 12
+  seconds, so a slow device plays the year at the right speed with fewer
+  frames rather than in slow motion.
+- **The label is a label.** The readout's heading line reads e.g.
+  `季節気温（気温のみ）位相0.750（274日目 冬至（北半球））` -- the day number is
+  derived from the phase and the body's own year length, and the four region
+  temperatures beside it are read from **the phase actually drawn**, so the
+  numbers cannot contradict the picture (サハラ 30.5 C at phase 0.25 against
+  15.4 C at 0.75, while アマゾン goes the other way, 29.2 -> 31.2).
+- **Hidden wherever it would imply something untrue**: the temperature teacher
+  is an annual mean, humidity is not seasonal in this model, and the 2D map
+  and the other bodies have no preview -- in every one of those the row is
+  hidden and playback stops.
+
+**Moving the phase runs no climate stage.** It is one pass adding a
+row-constant anomaly to Stage 2's field (into a reused buffer) plus the same
+texture repaint every preview view already does. Measured in the browser:
+**10-20 ms per phase**, against 640-710 ms before the repaint was fixed --
+see below.
+
+### The repaint had to get 30x cheaper first, and the fix is exact
+
+`showScalarField` coloured every one of the texture's two million pixels
+through a callback. Because its sampling is *nearest*, every texture row that
+maps to the same field row is byte-for-byte the same row, so the colour is now
+worked out once per **field** cell and each row is filled by typed-array copy.
+Proved identical rather than assumed, two ways: the run boundaries
+`[ceil(fx*w/fw), ceil((fx+1)*w/fw))` are the exact inverse of the old
+`floor(x*fw/w)` (checked over seven size pairs including a field wider than
+the texture), and the rendered annual frame hashes the same **1799c75758ce**
+before and after. 650 ms -> 26 ms, which the teacher and humidity views get
+for free.
+
+### Measured on a 412x892 viewport (software renderer)
+
+| | |
+| --- | --- |
+| phase change | **10-20 ms** |
+| first 気温モデル paint | 3.0 s (unchanged -- the Climate v1 pipeline, not the season) |
+| season table build | 43 ms, 32 KB, once per world |
+| frame rate, photo surface / 年間 / 季節 / playing | **2 / 2 / 2 / 2 fps** |
+| playback speed | 0.265 of a year in 3 s = 11.3 s per orbit |
+| panel height | **unchanged**: 41 px top, 182 px bottom, both annual and seasonal |
+
+The 2 fps is swiftshader drawing a 393k-vertex globe and is **the same with
+the season off, on, and playing** -- i.e. the season costs no frame rate here.
+Real on-device feel still needs the phone.
+
+### Representative points, off the real grid
+
+| | annual | warmest | coldest | half-amp | peak after solstice |
+| --- | --- | --- | --- | --- | --- |
+| 45N land (France) | 10.4 C | 25.6 | -4.7 | **15.1** | +27 d |
+| 45N sea (N Pacific) | 12.1 C | 17.0 | 7.1 | **4.9** | +72 d |
+| 45S land (Chile) | 7.5 C | 22.8 | -7.7 | 15.2 | +27 d |
+
+### Regression
+
+Earth's 標準 surface and the whole V0.8 pipeline are untouched (the two
+scorers print byte-identical output, 63.4% / 10.2%), all four Climate v1 test
+suites pass (178 assertions), land ET and evaporative cooling are still OFF by
+default, exactly one canvas exists in `#app` before and after a full tour of
+2D, both other bodies and back, and the page logs no errors beyond the
+sandbox's own blocked OpenStreetMap tiles.

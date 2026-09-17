@@ -294,3 +294,22 @@ html, body {
   font-size: 0.6rem;
   white-space: nowrap;
 }
+
+/* The season row packs a two-button segment, three small controls and a
+   slider onto one line at 412 px. `.pill` and `.segmented` both default to
+   flex: 1, which would give the arrows as much width as the slider, so the
+   small controls size to their own glyph and the slider takes the rest. */
+#season-mode {
+  flex: 0 0 92px;
+}
+
+#season-row .pill {
+  flex: 0 0 auto;
+  min-width: 32px;
+  padding: 0 6px;
+}
+
+#season-row input[type="range"] {
+  flex: 1;
+  min-width: 72px;
+}

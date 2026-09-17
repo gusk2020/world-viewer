@@ -9,6 +9,9 @@ import { buildClimateV1Preview, PREVIEW_GRID } from "./climate-v1/preview.js";
 import { EVAPORATIVE_COOLING_PREVIEW_C } from "./climate-v1/evaporative-cooling.js";
 import { buildOracleWind } from "./climate-v1/oracle-wind.js";
 import { CLIMATE_V1_EARTH_TEMPERATURE_CALIBRATION } from "./climate-v1/earth-temperature-calibration.js";
+import {
+  SEASONAL_TIME_AXIS, buildSeasonalTemperatureTable, buildTemperatureFieldAtPhase,
+} from "./climate-v1/season.js";
 import { resolveClimateSets } from "./climate.js";
 
 // Which worlds exist, and which one opens first. Everything else about a
@@ -48,6 +51,11 @@ async function main() {
   const climateV1Row = document.getElementById("climatev1-row");
   const climateV1Options = document.getElementById("climatev1-options");
   const climateV1Readout = document.getElementById("climatev1-readout");
+  const seasonRow = document.getElementById("season-row");
+  const seasonPrev = document.getElementById("season-prev");
+  const seasonNext = document.getElementById("season-next");
+  const seasonPlay = document.getElementById("season-play");
+  const seasonSlider = document.getElementById("season-phase");
   const worldCycleButton = document.getElementById("world-cycle");
   const virtualNote = document.getElementById("virtual-sea-note");
   const loading = document.getElementById("loading");
@@ -107,7 +115,7 @@ async function main() {
     // The preview paints the 3D globe, so it goes away with the 3D view --
     // same rule as the axis/graticule row beside it.
     climateV1Row.hidden = mode !== "3d" || !(globe3d && globe3d.supportsClimate);
-    if (mode !== "3d") { climateV1Options.hidden = true; climateV1Readout.hidden = true; }
+    if (mode !== "3d") { climateV1Options.hidden = true; climateV1Readout.hidden = true; stopSeasonPlay(); seasonRow.hidden = true; }
     // The scale bar is derived from the 3D camera, so it would be quietly
     // wrong sitting on top of the 2D map -- which draws its own.
     scaleBar.hidden = mode !== "3d" || GRATICULE_STATES[graticuleIndex].mode === "off";
@@ -152,7 +160,7 @@ async function main() {
   surfaceButtons.forEach((button) => {
     button.addEventListener("click", () => {
       surfaceMode = button.dataset.surface;
-      if (v1Mode !== "off") { v1Mode = "off"; applyV1Buttons(); climateV1Options.hidden = true; climateV1Readout.hidden = true; }
+      if (v1Mode !== "off") { v1Mode = "off"; applyV1Buttons(); climateV1Options.hidden = true; climateV1Readout.hidden = true; stopSeasonPlay(); seasonRow.hidden = true; }
       applySurfaceButtons();
       requestAnimationFrame(() => {
         globe3d.setSurfaceMode(surfaceMode);
@@ -198,6 +206,82 @@ async function main() {
   let v1OracleWind = null;      // fetched once, only if 観測風 is asked for
   let v1Cache = new Map();      // "cooling|wind" -> preview
   let v1Busy = false;
+
+  // --- the seasonal cycle (EXPERIMENTAL, temperature only) -----------------
+  //
+  // Everything here is a *display* of js/climate-v1/season.js: Stage 2's
+  // annual field is never written to, no climate stage is re-run when the
+  // phase moves, and the season table is built once per world. Humidity,
+  // wind, ET, precipitation, soil water, snow, sea ice and vegetation are all
+  // still annual means -- the row's own label says so, and the readout
+  // repeats it, because a globe whose temperature moves with the year would
+  // otherwise look like the whole model had become seasonal.
+  const SEASON_PHASE_STEPS = 1440;     // slider steps per orbit; ~0.25 day on Earth
+  const SEASON_NUDGE = SEASON_PHASE_STEPS / 24;   // what a press of the arrows moves
+  const SEASON_PLAY_SECONDS = 12;      // one orbit per this many real seconds
+  let v1Season = "annual";             // annual | seasonal
+  let v1Phase = 0.25;                  // orbitalPhase in [0,1)
+  let v1SeasonTable = null;            // rebuilt per world
+  let v1PhaseBuffer = null;            // reused across phases, never the annual field
+  let v1SeasonPreview = null;          // the preview the phase is drawn from
+  let seasonPlayHandle = null;
+  let seasonPlayLast = 0;
+  const seasonButtons = document.querySelectorAll("#season-mode button");
+
+  // The phase names are a *label*, not a model input: season.js knows only
+  // orbitalPhase in [0,1), so nothing here can leak a calendar into the
+  // physics. Phase 0 is season.js's own definition -- the ascending equinox.
+  function seasonPhaseLabel(phase) {
+    const marks = [
+      [0, "春分（北半球）"], [0.25, "夏至（北半球）"], [0.5, "秋分（北半球）"], [0.75, "冬至（北半球）"],
+    ];
+    const near = marks.find(([p]) => Math.abs(((phase - p + 1.5) % 1) - 0.5) < 0.01);
+    // A day number is honest here because it is derived from the phase and
+    // the body's own year length, not from any month table.
+    const yearDays = Number.isFinite(world.config.body.yearLengthDays)
+      ? world.config.body.yearLengthDays : 365.2422;
+    const day = Math.round(phase * yearDays);
+    return `位相${phase.toFixed(3)}（${day}日目${near ? " " + near[1] : ""}）`;
+  }
+
+  // Built once per world, at the temperature field's own row count so the two
+  // line up without resampling. 32 KB and about a tenth of a second.
+  function ensureSeasonTable(rows) {
+    if (v1SeasonTable && v1SeasonTable.rows === rows) return v1SeasonTable;
+    v1SeasonTable = buildSeasonalTemperatureTable({ rows, body: world.config.body });
+    return v1SeasonTable;
+  }
+
+  function stopSeasonPlay() {
+    if (seasonPlayHandle !== null) cancelAnimationFrame(seasonPlayHandle);
+    seasonPlayHandle = null;
+    seasonPlay.textContent = "再生";
+  }
+
+  function applySeasonButtons() {
+    seasonButtons.forEach((b) => b.classList.toggle("selected", b.dataset.season === v1Season));
+    const seasonal = v1Season === "seasonal";
+    seasonPrev.hidden = !seasonal;
+    seasonNext.hidden = !seasonal;
+    seasonPlay.hidden = !seasonal;
+    seasonSlider.hidden = !seasonal;
+    seasonSlider.value = String(Math.round(v1Phase * SEASON_PHASE_STEPS) % SEASON_PHASE_STEPS);
+  }
+
+  // Draw one phase. This is the whole per-frame cost: one pass adding a
+  // row-constant anomaly to Stage 2's field, then the same texture repaint
+  // every other preview view already does. No climate stage runs.
+  function drawSeasonPhase(preview) {
+    const t = preview.temperatureField;
+    const values = buildTemperatureFieldAtPhase({
+      temperatureField: t, terrainField: preview.terrainField,
+      seasonTable: ensureSeasonTable(t.height), orbitalPhase: v1Phase, out: v1PhaseBuffer,
+    });
+    v1PhaseBuffer = values;
+    globe3d.showScalarField({
+      width: t.width, height: t.height, values, colourAt: temperatureColour,
+    });
+  }
 
   const v1Buttons = document.querySelectorAll("#climatev1-mode button");
   const v1CoolingButtons = document.querySelectorAll("#climatev1-cooling button");
@@ -382,8 +466,12 @@ async function main() {
     return `${heading}\n${parts.join(" ／ ")}`;
   }
 
-  function v1RegionLine(preview) {
+  // `temperatures` lets the caller pass the field it actually drew -- under
+  // 季節 the four regions have to read that phase, or the numbers would
+  // contradict the picture beside them.
+  function v1RegionLine(preview, heading = "実験表示（本番の地表色には影響しません）", temperatures = null) {
     const t = preview.temperatureField, m = preview.moistureField;
+    const tValues = temperatures || t.annualMeanTemperatureC;
     const parts = V1_REGIONS.map(([name, l0, l1, a0, a1]) => {
       let sT = 0, wT = 0, sQ = 0, wQ = 0;
       for (let y = 0; y < t.height; y++) {
@@ -395,7 +483,7 @@ async function main() {
           if (lng < l0 || lng > l1) continue;
           const i = y * t.width + x;
           if (preview.terrainField.isSea[i]) continue;
-          sT += w * t.annualMeanTemperatureC[i]; wT += w;
+          sT += w * tValues[i]; wT += w;
         }
       }
       for (let y = 0; y < m.height; y++) {
@@ -410,7 +498,7 @@ async function main() {
       }
       return `${name} ${wT > 0 ? (sT / wT).toFixed(1) : "-"}℃ ${wQ > 0 ? (sQ / wQ).toFixed(1) : "-"}g/kg`;
     });
-    return `実験表示（本番の地表色には影響しません）\n${parts.join(" ／ ")}`;
+    return `${heading}\n${parts.join(" ／ ")}`;
   }
 
   // Colour ramps. Both are deliberately coarse and readable rather than
@@ -441,6 +529,13 @@ async function main() {
     // mean nothing while the teacher is on screen.
     climateV1Options.hidden = !showsV1 || v1Source() !== "model";
     climateV1Readout.hidden = !showsV1;
+    // The season is temperature-model only: the teacher is an annual mean and
+    // humidity is not seasonal here, so offering the control beside either
+    // would imply a seasonality that does not exist.
+    const showsSeason = showsV1 && v1Mode === "temperature-model";
+    seasonRow.hidden = !showsSeason;
+    if (!showsSeason) stopSeasonPlay();
+    if (showsSeason) applySeasonButtons();
     if (!showsV1) {
       if (surfaceMode) globe3d.setSurfaceMode(surfaceMode);
       return;
@@ -480,16 +575,25 @@ async function main() {
       }
       if (v1Variable() === "temperature") {
         const t = preview.temperatureField;
-        globe3d.showScalarField({
-          width: t.width, height: t.height, values: t.annualMeanTemperatureC, colourAt,
-        });
+        if (v1Season === "seasonal") {
+          v1SeasonPreview = preview;
+          drawSeasonPhase(preview);
+        } else {
+          // 年間 shows Stage 2's own array, not a copy of it -- so returning
+          // from 季節 cannot leave a seasonal value behind.
+          globe3d.showScalarField({
+            width: t.width, height: t.height, values: t.annualMeanTemperatureC, colourAt,
+          });
+        }
       } else {
         const m = preview.moistureField;
         const g = new Float32Array(m.specificHumidityKgPerKg.length);
         for (let i = 0; i < g.length; i++) g[i] = m.specificHumidityKgPerKg[i] * 1000;
         globe3d.showScalarField({ width: m.width, height: m.height, values: g, colourAt });
       }
-      climateV1Readout.textContent = v1RegionLine(preview);
+      climateV1Readout.textContent = v1Season === "seasonal" && v1Mode === "temperature-model"
+        ? v1RegionLine(preview, `季節気温（気温のみ）${seasonPhaseLabel(v1Phase)}`, v1PhaseBuffer)
+        : v1RegionLine(preview);
     } catch (error) {
       console.error("Climate v1 preview failed", error);
       climateV1Readout.textContent = "実験表示の計算に失敗しました";
@@ -524,6 +628,57 @@ async function main() {
       applyV1Buttons();
       requestAnimationFrame(() => { applyClimateV1(); });
     });
+  });
+
+  // --- the season row's own handlers --------------------------------------
+  //
+  // None of these re-runs a climate stage. Moving the phase costs one pass
+  // adding a row-constant anomaly plus the texture repaint the preview
+  // already does for every view.
+  function setSeasonPhase(phase, { fromSlider = false } = {}) {
+    v1Phase = SEASONAL_TIME_AXIS.normalise(phase);
+    if (!fromSlider) {
+      seasonSlider.value = String(Math.round(v1Phase * SEASON_PHASE_STEPS) % SEASON_PHASE_STEPS);
+    }
+    if (v1Season !== "seasonal" || !v1SeasonPreview || !globe3d) return;
+    drawSeasonPhase(v1SeasonPreview);
+    climateV1Readout.textContent =
+      v1RegionLine(v1SeasonPreview, `季節気温（気温のみ）${seasonPhaseLabel(v1Phase)}`, v1PhaseBuffer);
+  }
+
+  seasonButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      v1Season = button.dataset.season;
+      if (v1Season !== "seasonal") stopSeasonPlay();
+      applySeasonButtons();
+      requestAnimationFrame(() => { applyClimateV1(); });
+    });
+  });
+  seasonSlider.addEventListener("input", () => {
+    stopSeasonPlay();
+    setSeasonPhase(Number(seasonSlider.value) / SEASON_PHASE_STEPS, { fromSlider: true });
+  });
+  seasonPrev.addEventListener("click", () => {
+    stopSeasonPlay();
+    setSeasonPhase(v1Phase - SEASON_NUDGE / SEASON_PHASE_STEPS);
+  });
+  seasonNext.addEventListener("click", () => {
+    stopSeasonPlay();
+    setSeasonPhase(v1Phase + SEASON_NUDGE / SEASON_PHASE_STEPS);
+  });
+  seasonPlay.addEventListener("click", () => {
+    if (seasonPlayHandle !== null) { stopSeasonPlay(); return; }
+    seasonPlay.textContent = "停止";
+    seasonPlayLast = performance.now();
+    // Real time, not a fixed step per frame, so a slower device plays the
+    // year at the same speed with fewer frames rather than in slow motion.
+    const tick = (now) => {
+      const elapsed = (now - seasonPlayLast) / 1000;
+      seasonPlayLast = now;
+      setSeasonPhase(v1Phase + elapsed / SEASON_PLAY_SECONDS);
+      seasonPlayHandle = requestAnimationFrame(tick);
+    };
+    seasonPlayHandle = requestAnimationFrame(tick);
   });
 
   // The temporary comparison feature's own precomputed A/B numbers (see
@@ -780,6 +935,15 @@ async function main() {
     v1Mode = "off";
     v1TerrainField = null;
     v1Cache = new Map();
+    // The season table is this body's obliquity and year, and the phase
+    // buffer is this body's grid -- both belong to the world being replaced.
+    stopSeasonPlay();
+    v1Season = "annual";
+    v1SeasonTable = null;
+    v1SeasonPreview = null;
+    v1PhaseBuffer = null;
+    seasonRow.hidden = true;
+    applySeasonButtons();
     climateV1Row.hidden = !globe3d.supportsClimate;
     applyV1Buttons();
     climateV1Options.hidden = true;
