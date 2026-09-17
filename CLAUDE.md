@@ -2997,6 +2997,82 @@ diagnosis covers 11.2% of the globe against the teacher's 3.3%).
 The experimental evaporative cooling stays out of the formal adoption
 candidates, code intact and default OFF, and was not touched by this change.
 
+## Stage 2 is closed, and the humidity baselines were re-measured on it
+
+Full write-up: `docs/climate-v1-stage2-closed-and-humidity-rebaseline.md`.
+Tool: `tools/rebaseline_humidity.mjs`. Diagnosis only -- no physics file
+changed, nothing fitted, evaporative cooling still OFF by default.
+
+**Stage 2 is closed "as far as the current simple model and its existing
+inputs can go". That is not a claim that Earth's temperature is reproduced.**
+`surfaceLapseRateCPerKm` stays at 5.2.
+
+Why it was closed, measured against Berkeley Earth: global land MAE 3.19, but
+**ice cells are 11.3% of the land and 30.9% of that error** (Antarctica alone
+9.3% / 28.7%). Excluding ice gives 2.49; excluding the three held-over regions
+too gives **2.42 over 86.4% of land**, and excluding the three high-latitude
+blocks as well gives **2.03 over 73%**.
+
+**The 1500 m+ warm bias was Antarctica, not high ground** -- it contributes
++4.04 of the 1500-3000 m band's +3.88 and +7.80 of the 3000 m+ band's +7.87.
+Drop ice cells and those bands read +0.27 (MAE 2.22) and **+0.29 (MAE 1.69)**,
+making 3000 m+ the *best* elevation band. Read that as the verdict on 5.2.
+
+**Nothing general is left to add.** Over the workable domain the residual's
+R² is 0.002 on coast distance and **0.000 on elevation** -- 5.2 finished that
+job -- with |latitude| 0.131, model temperature 0.123 and seasonal amplitude
+0.123, which are one variable in three costumes and already carried by
+`polarExtraC`/`insolationSensitivityC`. Continentality's sign also *reverses*
+(inland minus coastal +1.44 at 35-66N, -1.57 in the subtropics), so one
+coefficient cannot serve both. All six jointly: R² 0.143, an upper bound of
+MAE 2.42 -> 2.08. The largest coherent errors left are the parked ones and
+larger than the old boxes said: 北大西洋側 45-75N/10W-60E **-6.25** (12.7% of
+the workable error on 4.9% of the area; its 60-75N part **-9.84**), against
+北東アジア **+4.52** at the same latitudes with the opposite sign.
+
+**Held over, to resume when the model hierarchy goes up** -- each measured and
+parked, none "unsolvable": 氷床放射 (南極/グリーンランド), 北大西洋側の海洋熱輸送,
+SST の経度構造, 海流/AMOC, 雪氷アルベドの本格的エネルギー収支.
+
+### The humidity baselines survive 5.2 almost exactly
+
+All teachers NCEP (q, 2 m T, surface pressure); Berkeley Earth is Stage 2's
+temperature teacher and is never mixed into a ratio.
+
+| land (g/kg) | 6.5 | 5.2 | recorded |
+| --- | --- | --- | --- |
+| oracle wind: mean q / bias / RMSE | 5.047 / -2.76 / 4.61 | **5.081 / -2.73 / 4.60** | 5.047 / -2.76 / 4.61 |
+| model wind: mean q / bias / RMSE | 4.055 / -3.75 / 6.97 | 4.179 / -3.63 / 6.93 | -- |
+| アマゾン (oracle) | 15.03 | **15.04** | 15.03 |
+| サハラ (oracle) | 2.88 | **2.89** | 2.88 |
+| アマゾン/サハラ ratio | 5.22 | **5.21** | 5.22 |
+
+**The Amazon is still exactly 0.00 g/kg under the model's own Stage 4 wind**,
+and the dry tail is unchanged (6.2% of land below 0.001 g/kg under the oracle
+wind with **exactly 0% at exact zero**; 5.2% exact zero under the model wind).
+One recorded value does not reproduce: オーストラリア measures 4.37 against the
+recorded 4.46 -- and it measures 4.37 at the *old* 6.5 state too, so that is a
+box definition in the old measurement, not an effect of 5.2.
+
+**Stage 5A did move**: surface pressure above 1500 m went 725.97 -> 727.65 hPa
+against the teacher's 732.55, i.e. *toward* it, while q_sat went the other way
+(land bias +0.98 -> +1.53 g/kg) because the land is warmer. The driver there is
+Stage 2's +2.25 C warm bias against *NCEP* land, not 5.2.
+
+**The error decomposition, re-derived rather than copied.** Using the exact
+identity `q_m - q_t = (q_sat,m - q_sat,t)*RH_m + q_sat,t*(RH_m - RH_t)`, and
+splitting the second term by swapping only the wind at a fixed temperature
+field: **A temperature 0.03-0.13 g/kg, B wind 3.59, C source/sink 3.33**
+(mean absolute, oracle-wind RMSE 1.58 / 5.87 / 5.14). So **source/sink >= wind
+>> temperature**, and 5.2's own effect on humidity is two orders of magnitude
+below either of the others -- half the land moves by under 0.01 g/kg.
+
+**A caveat that keeps resurfacing**: the teacher's land-mean "RH" reads 0.955,
+which is not a relative humidity -- it is a mean q over q_sat of a mean T, and
+Jensen's inequality puts **35.6% of land above 1.0**, reproducing the earlier
+figure exactly. Term A uses q_sat only and is immune; the B/C split passes
+through that ratio and is an attribution, not a measurement.
+
 ## The UI tidy-up after the Pixel 7a preview confirmation
 
 The user confirmed the Climate v1 preview on their phone and then asked for
