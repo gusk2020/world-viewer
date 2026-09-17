@@ -59,7 +59,7 @@ export function buildClimateV1Preview({
     terrainField, axialTiltDegrees: body.axialTiltDegrees, params,
   });
   const wind = oracleWind || buildClimateV1Wind({
-    terrainField, temperatureField: baseTemperature, lapseRateCPerKm: params.lapseRateCPerKm,
+    terrainField, temperatureField: baseTemperature, lapseRateCPerKm: params.surfaceLapseRateCPerKm ?? params.lapseRateCPerKm,
     body, atmosphere: PREVIEW_WIND_ATMOSPHERE, params: PREVIEW_WIND_PARAMS,
     width: grid.width, height: grid.height,
   });
@@ -69,7 +69,7 @@ export function buildClimateV1Preview({
   let passes = 0, residualC = 0;
   for (let pass = 0; pass < (on ? maxPasses : 1); pass++) {
     humidityField = buildHumidityField({
-      terrainField, temperatureField, lapseRateCPerKm: params.lapseRateCPerKm,
+      terrainField, temperatureField, lapseRateCPerKm: params.surfaceLapseRateCPerKm ?? params.lapseRateCPerKm,
       body: { gravityMs2 }, atmosphere: PREVIEW_ATMOSPHERE,
     });
     moistureField = buildMoistureField({

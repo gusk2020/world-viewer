@@ -382,6 +382,10 @@ export function buildWindFromTemperature({
  */
 export function buildClimateV1Wind({
   terrainField, temperatureField, temperatureArray = null,
+  // `reduceToSeaLevel` adds this rate back onto the surface temperature, i.e.
+  // it INVERTS Stage 2's own elevation term. So it must be the rate Stage 2
+  // applied -- `surfaceLapseRateCPerKm` where a parameter set carries one,
+  // not the free-air `lapseRateCPerKm`. See humidity.js's header note.
   lapseRateCPerKm, body, atmosphere, params, surfaceGeopotentialByRow = null,
   width = 256, height = 128, reduceToSeaLevel = true,
 }) {

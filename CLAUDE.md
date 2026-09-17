@@ -2923,6 +2923,80 @@ bias survives at half the size, three large cold biases appear beside it, and
 re-derived on A** — it was measured against the field that is itself coldest
 exactly where the land is wettest.
 
+## Climate v1: a surface lapse rate, separate from the free-air one
+
+Full write-up: `docs/climate-v1-surface-lapse-rate.md`. Tool:
+`tools/validate_surface_lapse.mjs`.
+
+**Two rates now, and they must never be merged.** `lapseRateCPerKm` (6.5) is the
+**free-air** standard lapse rate -- a property of an air column. The new
+`surfaceLapseRateCPerKm` is the **surface** rate: how fast surface air
+temperature falls as the *ground* rises, which is smaller because elevated
+ground is heated by the sun at its own level. Stage 2 had been applying the
+free-air number to the surface question. The schema default is 6.5 so every set
+saved before this means what it always meant; **Climate v1 sets 5.2**, in
+`js/climate-v1/earth-temperature-calibration.js`.
+`effectiveSurfaceLapseRateCPerKm(params)` in `js/climate.js` is the one place
+that resolves which applies.
+
+**5.2 was adopted, not fitted.** Measured from Berkeley Earth over ice-free
+land, with latitude removed by the model's own sea-level curve, the observed
+surface rate is **5.27 C/km** and is flat above 500 m (5.08 / 5.26 / 5.17 by
+band), flat across latitude and flat across temperature. Below 500 m the same
+regression returns 7.78, which is the maritime/continental contrast rather than
+a lapse rate -- Europe at 305 m would "require" -11.4 C/km, which is the tell.
+
+**One premise in the brief was wrong, and reading the code settled it.**
+`humidity.js`'s pressure and `wind.js`'s sea-level reduction are *not* free-air
+uses: both **invert Stage 2's own elevation term**. An inversion must use the
+rate the forward step used, so `preview.js` and the Climate v1 tools pass
+`params.surfaceLapseRateCPerKm ?? params.lapseRateCPerKm` there. Handing them
+6.5 while Stage 2 applied 5.2 would recover a sea-level temperature wrong by
++5.8 C over Tibet. The measurement confirms it: with the matching rate the
+reduction cancels and **the wind is unchanged** (max |du| 0.0023 m/s, mean speed
+identical to four decimals; the residual is Float32 plus 3795 below-sea-level
+land cells where the reduction clamps at 0).
+
+**What it moved** (bias = model - Berkeley Earth): チベット **-5.92 -> -0.17**,
+ヒマラヤ周辺 -4.65 -> -1.02, ロッキー -3.29 -> -1.16, グリーンランド -6.40 ->
+-3.62, アンデス -0.78 -> +1.85, 南極 +7.79 -> **+10.48**, ヨーロッパ -5.57 ->
+-5.17, 平地 (0-500 m) +0.12 -> +0.43. Mean |bias| on **ice-free land above
+500 m: 2.54 -> 2.35**; on global land 3.05 -> 3.19, which is worse and was
+expected and accepted in advance -- that figure is dominated by Antarctica,
+whose warm bias any reduction of the lapse rate makes worse and which this
+change does not address.
+
+**Guardrails, measured**: sea temperature exactly unchanged (max |delta| 0.0 C
+over 1,378,437 cells); land at exactly 0 m exactly unchanged; the land change
+equals (6.5-5.2)*z to a maximum residual of 3.6e-6 C over the whole 2048x1024
+grid; no NaN; **Climate v0.8 byte-identical** (`score_climate.mjs` and
+`score_koppen.mjs` print output identical to before -- 63.4% and 10.2%); all
+160 unit-test assertions pass. Downstream, pressure and humidity change only
+through the temperature input (mean 970.346 -> 970.545 hPa, 7.3946 -> 7.4263
+g/kg), which is correct -- a warmer column over high ground thins less and holds
+more vapour.
+
+`classifyStructurePoint` carried its own copy of the lapse line and now calls
+`surfaceAnnualTemperatureC`, so the two cannot drift; identical today.
+
+**Held over, diagnosed and parked -- none of these is "unsolvable"**: 南極's warm
+bias (needs a surface energy balance before albedo means anything; inside a
+minimal Budyko-Sellers balance ice albedo moves 南極 -8.0 C but グリーンランド
+-9.2 C, trading one for the other), グリーンランド's residual -3.6 (an offset,
+not a slope -- its internal rate is already 6.64 C/km, and at the same latitude
+and elevation the teacher puts it 13.8 C warmer than 南極), ヨーロッパ -5.2
+(maritime warmth land never receives), 海温の経度構造 (the model's sea
+temperature is exactly f(latitude): 0.0 C spread within every one of 961 sea
+rows), 海流/AMOC (the Stage 4 wind's stress curl correlates +0.003 with NCEP's
+and its Sverdrup transport is 15-40x too weak with the wrong sign in the North
+Atlantic), 海洋性熱伝達 (the right form is known -- upwind-advected sea
+temperature separates グリーンランド from 南極 by 5x -- but there is no
+longitudinal SST structure to read), and 雪氷アルベド (also: the model's own ice
+diagnosis covers 11.2% of the globe against the teacher's 3.3%).
+
+The experimental evaporative cooling stays out of the formal adoption
+candidates, code intact and default OFF, and was not touched by this change.
+
 ## The UI tidy-up after the Pixel 7a preview confirmation
 
 The user confirmed the Climate v1 preview on their phone and then asked for

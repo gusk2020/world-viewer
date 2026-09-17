@@ -39,10 +39,10 @@ const params = { ...shipped, ...CLIMATE_V1_EARTH_TEMPERATURE_CALIBRATION };
 const terrainField = buildTerrainField({ elevationGrid: { width: png.width, height: png.height, metres }, seaLevelMetres: 0,
   oceanMask: loadOceanMask(config, REPO), waterSurfaceMask: loadWaterSurfaceMask(config, REPO) });
 const temperatureField = buildTemperatureField({ terrainField, axialTiltDegrees: config.body.axialTiltDegrees, params });
-const humidityField = buildHumidityField({ terrainField, temperatureField, lapseRateCPerKm: params.lapseRateCPerKm,
+const humidityField = buildHumidityField({ terrainField, temperatureField, lapseRateCPerKm: params.surfaceLapseRateCPerKm ?? params.lapseRateCPerKm,
   body: { gravityMs2: G }, atmosphere: ATM });
 
-const makeWind = (sg) => buildClimateV1Wind({ terrainField, temperatureField, lapseRateCPerKm: params.lapseRateCPerKm,
+const makeWind = (sg) => buildClimateV1Wind({ terrainField, temperatureField, lapseRateCPerKm: params.surfaceLapseRateCPerKm ?? params.lapseRateCPerKm,
   body: config.body, atmosphere: WIND_ATM, params: WIND_PARAMS, surfaceGeopotentialByRow: sg, width: W, height: HH });
 // Solved on the WIND grid's rows, not the fine temperature grid's.
 const coarseTemp = (() => {

@@ -45,7 +45,7 @@ const terrainField = buildTerrainField({
 });
 const temperatureField = buildTemperatureField({ terrainField, axialTiltDegrees: config.body.axialTiltDegrees, params });
 const humidityField = buildHumidityField({
-  terrainField, temperatureField, lapseRateCPerKm: params.lapseRateCPerKm,
+  terrainField, temperatureField, lapseRateCPerKm: params.surfaceLapseRateCPerKm ?? params.lapseRateCPerKm,
   body: { gravityMs2: G }, atmosphere: ATM,
 });
 

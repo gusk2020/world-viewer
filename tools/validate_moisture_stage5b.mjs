@@ -60,13 +60,13 @@ const terrainField = buildTerrainField({
 });
 const temperatureField = buildTemperatureField({ terrainField, axialTiltDegrees: config.body.axialTiltDegrees, params });
 const humidityField = buildHumidityField({
-  terrainField, temperatureField, lapseRateCPerKm: params.lapseRateCPerKm,
+  terrainField, temperatureField, lapseRateCPerKm: params.surfaceLapseRateCPerKm ?? params.lapseRateCPerKm,
   body: { gravityMs2: EARTH_GRAVITY }, atmosphere: EARTH_ATMOSPHERE,
 });
 
 // ----------------------------------------------------------------- winds ---
 const stage4 = buildClimateV1Wind({
-  terrainField, temperatureField, lapseRateCPerKm: params.lapseRateCPerKm, body: config.body,
+  terrainField, temperatureField, lapseRateCPerKm: params.surfaceLapseRateCPerKm ?? params.lapseRateCPerKm, body: config.body,
   atmosphere: { specificGasConstantJPerKgK: 287, surfacePressureHPa: 1000, levelPressureHPa: 850 },
   params: { thermalResponseStrength: 1, dragTimescaleDays: 0.5, thermalSmoothingKm: 1500 },
   width: GRID_W, height: GRID_H,

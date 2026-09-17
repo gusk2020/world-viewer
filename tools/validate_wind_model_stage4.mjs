@@ -362,7 +362,7 @@ function main() {
   });
 
   const buildNew = (windParams, opts = {}) => buildClimateV1Wind({
-    terrainField, temperatureField, lapseRateCPerKm: params.lapseRateCPerKm,
+    terrainField, temperatureField, lapseRateCPerKm: params.surfaceLapseRateCPerKm ?? params.lapseRateCPerKm,
     body: config.body, atmosphere: EARTH_ATMOSPHERE, params: windParams,
     ...WIND_GRID, ...opts,
   });

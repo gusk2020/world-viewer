@@ -19,4 +19,17 @@
 export const CLIMATE_V1_EARTH_TEMPERATURE_CALIBRATION = {
   insolationSensitivityC: 80.68,
   oceanModeration: 0.818,
+  // The effective *surface* lapse rate, separate from the free-air
+  // `lapseRateCPerKm` (6.5), which is left exactly as it was.
+  //
+  // This is NOT a third calibration knob of the same kind as the two above:
+  // 6.5 C/km is the free-atmosphere standard lapse rate and was never the
+  // right quantity for "how much colder is the ground when it is higher".
+  // Measured from Berkeley Earth over ice-free land, with latitude removed by
+  // the model's own sea-level curve, the surface rate is 5.27 C/km and is flat
+  // above 500 m, flat across latitude and flat across temperature -- so it
+  // behaves like the single constant it is, not like a fit. 5.2 is adopted;
+  // it was not re-fitted against the teacher. See
+  // docs/climate-v1-surface-lapse-rate.md.
+  surfaceLapseRateCPerKm: 5.2,
 };

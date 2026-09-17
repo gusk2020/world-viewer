@@ -122,7 +122,11 @@ console.log("=== Temperature field: relative- vs absolute-elevation check ===");
 
   const tA = sampleTemperatureAt(tempA, everest.lng, everest.lat);
   const tB = sampleTemperatureAt(tempB, everest.lng, everest.lat);
-  const expectedDeltaC = -baseParams.lapseRateCPerKm * (relDeltaM / 1000);
+  // The rate the temperature stage actually applies to ground height --
+  // the free-air rate unless the parameter set carries a surface one.
+  const surfaceRate = Number.isFinite(baseParams.surfaceLapseRateCPerKm)
+    ? baseParams.surfaceLapseRateCPerKm : baseParams.lapseRateCPerKm;
+  const expectedDeltaC = -surfaceRate * (relDeltaM / 1000);
   const actualDeltaC = tB - tA;
   console.log(`  Everest: seaLevel ${seaLevelA}m -> T=${tA.toFixed(2)}C ; seaLevel ${seaLevelB}m -> T=${tB.toFixed(2)}C`);
   console.log(`  relative elevation rose by ${relDeltaM.toFixed(0)}m; expected deltaT=${expectedDeltaC.toFixed(3)}C, actual=${actualDeltaC.toFixed(3)}C`);

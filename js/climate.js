@@ -69,7 +69,28 @@ export const CLIMATE_PARAMETERS = {
   },
   lapseRateCPerKm: {
     value: 6.5, kind: "physical", min: 0, max: 12, search: false,
-    note: "How fast air cools with height. Earth's average is 6.5 C/km.",
+    note:
+      "How fast **free air** cools with height. Earth's average is 6.5 C/km " +
+      "(the ICAO standard atmosphere). This is a property of an air column, " +
+      "not of the ground: it belongs to thickness, geopotential and " +
+      "hydrostatic-pressure work. For how surface air temperature varies with " +
+      "terrain height, see surfaceLapseRateCPerKm -- the two are different " +
+      "physical quantities and must not be merged.",
+  },
+  surfaceLapseRateCPerKm: {
+    value: 6.5, kind: "physical", min: 0, max: 12, search: false,
+    note:
+      "The effective **surface** lapse rate: how fast the annual-mean surface " +
+      "air temperature falls as the ground rises. Smaller than the free-air " +
+      "rate, because elevated ground is itself heated by the sun rather than " +
+      "being free air at that level. Measured from Berkeley Earth over " +
+      "ice-free land, correcting latitude with the model's own sea-level " +
+      "curve, it is 5.27 C/km and is flat above 500 m (5.08 / 5.26 / 5.17 in " +
+      "the 500-1500 / 1500-3000 / 3000+ m bands), flat across latitude and " +
+      "flat across temperature. The default here is the free-air 6.5 so that " +
+      "nothing which has not opted in changes; Climate v1 sets 5.2 (see " +
+      "js/climate-v1/earth-temperature-calibration.js and " +
+      "docs/climate-v1-surface-lapse-rate.md).",
   },
   freezeTemperatureC: {
     value: 0, kind: "physical", min: -40, max: 20, search: false,
@@ -1572,7 +1593,21 @@ export const SURFACE_IS_SEA = 4;
 export function surfaceAnnualTemperatureC({ isSea, seaLevelC, relativeElevationMetres, params }) {
   return isSea
     ? params.meanTemperatureC + params.oceanModeration * (seaLevelC - params.meanTemperatureC)
-    : seaLevelC - params.lapseRateCPerKm * (relativeElevationMetres / 1000);
+    : seaLevelC - effectiveSurfaceLapseRateCPerKm(params) * (relativeElevationMetres / 1000);
+}
+
+/**
+ * The rate this file applies to *ground height* -- `surfaceLapseRateCPerKm`
+ * when a parameter set carries one, otherwise the free-air rate, which is what
+ * every set saved before that parameter existed means. Kept as one function so
+ * the painter, the scorer, Climate v1 and anything inverting the elevation term
+ * (a hydrostatic pressure, a reduction to sea level) cannot disagree about
+ * which rate was used -- the same reasoning that keeps `classifyPoint` shared.
+ */
+export function effectiveSurfaceLapseRateCPerKm(params) {
+  return Number.isFinite(params.surfaceLapseRateCPerKm)
+    ? params.surfaceLapseRateCPerKm
+    : params.lapseRateCPerKm;
 }
 
 export function classifyPoint(
@@ -2192,7 +2227,9 @@ export function classifyStructurePoint(
   metres, seaLevelMetres, seaLevelC, warmDeltaC, coldDeltaC, warmMoisture, coldMoisture, params
 ) {
   if (metres < seaLevelMetres) return null;
-  const annual = seaLevelC - params.lapseRateCPerKm * ((metres - seaLevelMetres) / 1000);
+  const annual = surfaceAnnualTemperatureC({
+    isSea: false, seaLevelC, relativeElevationMetres: metres - seaLevelMetres, params,
+  });
   const warmT = annual + warmDeltaC;
   const coldT = annual + coldDeltaC;
   const hottest = Math.max(warmT, coldT);

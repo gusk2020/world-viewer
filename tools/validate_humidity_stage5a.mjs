@@ -118,7 +118,7 @@ const params = { ...shipped, ...CLIMATE_V1_EARTH_TEMPERATURE_CALIBRATION };
 const terrainField = buildTerrainField({ elevationGrid: { width: png.width, height: png.height, metres }, seaLevelMetres: 0, oceanMask: loadOceanMask(config, REPO), waterSurfaceMask: loadWaterSurfaceMask(config, REPO) });
 const temperatureField = buildTemperatureField({ terrainField, axialTiltDegrees: config.body.axialTiltDegrees, params });
 const humidityField = buildHumidityField({
-  terrainField, temperatureField, lapseRateCPerKm: params.lapseRateCPerKm,
+  terrainField, temperatureField, lapseRateCPerKm: params.surfaceLapseRateCPerKm ?? params.lapseRateCPerKm,
   body: { gravityMs2: EARTH_GRAVITY }, atmosphere: EARTH_ATMOSPHERE,
 });
 

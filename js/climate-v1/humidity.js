@@ -53,6 +53,15 @@
 //    so this pressure field and the temperature field it came from cannot
 //    disagree about what the lapse rate is.
 //
+//    **Which rate that is, is not a free choice.** This is an inversion of
+//    Stage 2's elevation term, so the caller must hand in the rate Stage 2
+//    applied -- `surfaceLapseRateCPerKm` once a parameter set carries one,
+//    not the free-air `lapseRateCPerKm`. Passing the free-air rate to an
+//    inversion of the surface term recovers a sea-level temperature that is
+//    wrong by (free-air - surface) * z, which over Tibet is about 5.8 C. The
+//    argument keeps its name because it still means "the lapse rate this
+//    column was built with"; see docs/climate-v1-surface-lapse-rate.md.
+//
 //    **Elevation is signed on land.** Ground below sea level (the Dead Sea
 //    shore, the Turfan depression, the Qattara and Danakil depressions) is
 //    genuinely under more atmosphere than sea level is, and really does sit

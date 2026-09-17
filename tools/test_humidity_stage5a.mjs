@@ -234,7 +234,7 @@ console.log("\n11. Whole-Earth field: shape, finiteness, and physical range");
 
   const t0 = Date.now();
   const field = buildHumidityField({
-    terrainField, temperatureField, lapseRateCPerKm: params.lapseRateCPerKm,
+    terrainField, temperatureField, lapseRateCPerKm: params.surfaceLapseRateCPerKm ?? params.lapseRateCPerKm,
     body: { gravityMs2: EARTH_GRAVITY }, atmosphere: EARTH_ATMOSPHERE,
   });
   const ms = Date.now() - t0;
