@@ -11,6 +11,7 @@ on:
       - 'js/accessibility.js'
       - 'tests/accessibility-state.test.mjs'
       - 'orchestrator-app-pilot/**'
+      - '.github/workflows/ai-app-pilot-claude.yml'
 
 concurrency:
   group: ai-app-pilot-claude-${{ github.event.pull_request.number }}
