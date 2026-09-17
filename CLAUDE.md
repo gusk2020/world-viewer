@@ -3200,6 +3200,71 @@ and Stage 4 stays frozen -- it has its own negative results
 (`docs/climate-v1-wind-negative-results.md`) and "fix the wind again for
 humidity's sake" is the loop this closure exists to prevent.
 
+## Climate v1: the seasonal cycle (the first time axis)
+
+Full write-up: `docs/climate-v1-seasonal-cycle.md`. Files:
+`js/climate-v1/season.js`, `tools/validate_season.mjs`. **Nothing in the
+shipped pipeline imports it**, no UI changed, and Stage 2's annual field is
+untouched.
+
+    T(lat, lng, phase) = T_annual(lat, lng) + deltaT(lat, surfaceType, phase)
+
+**`deltaT`'s annual mean is zero by construction, not by tuning** -- it is a
+sum of harmonics with no constant term (worst row 1.45e-14 C; averaging 48
+phases of the real grid returns Stage 2's field to 3.6e-7 C per cell). So
+turning the season on cannot move the annual mean of anything.
+
+**`orbitalPhase` runs [0,1) over one orbit** and no calendar is hardcoded;
+phase 0 is the ascending equinox, 0.25 the northern solstice, on any world.
+
+**One layer, solved analytically**: `C dT'/dt = F(t) - lambda T'`, per harmonic
+`k = n*w*tau`, gain `1/sqrt(1+k^2)`, lag `atan(k)/(n*w)` -- amplitude *and*
+phase lag both from the geometry, no time stepping anywhere. Forcing is real
+W/m2 (`0.70 * S0 * insolation anomaly`); **Stage 2's `insolationSensitivityC`
+is deliberately not reused** -- it is an annual-mean regression coefficient
+carrying feedbacks and transport, and reusing it puts 45N at a 42 C
+half-amplitude against an observed 12-15.
+
+**The constants are representative, not universal**: `lambda` = 8 W/m2/K (the
+only free number, empirical), soil 4 m, mixed layer 30 m, absorbed fraction
+0.70 -- no albedo map, no ice feedback, no geography of any kind. All are
+meant to be replaced per planet and per surface. **`oceanModeration` is a
+different question** (annual-mean ocean heat transport) and is never mixed in.
+
+What it gives, with `C_land` 1.88e7 (tau 27 d) and `C_sea` 1.30e8 (tau 188 d):
+45N land **15.1 C half-amplitude peaking 25 days after the solstice**, 45N sea
+**4.9 C**, sea peaking **48 days after land**; amplitude monotone in latitude
+(1.2 at the equator to 21.6 at 85N), +/-45 identical, 45N/45S in antiphase
+(r = -1.000), the equator genuinely **semi-annual** (two maxima, second
+harmonic 1.14 C against the first's 0.07), 85N polar night and midnight sun
+156.7 days each, and **exactly 0.00 C season at tilt 0** rising to 46 C at 80
+degrees.
+
+**The anomaly has no longitude**, because heat capacity here depends only on
+land-or-sea -- so the table is (row x surface x harmonic): **32 KB** for 512
+rows, **44 ms** to build, rebuilt only when the world or its obliquity
+changes, ~100 ns per sample, no interpolation. Four harmonics were measured
+against a 64-harmonic reference: **0.00 C error at 0/30/45/60 deg, 0.23 C at
++/-85** (24 stored phases would cost 96 KB for a worse 0.66 C). **That
+longitude-free assumption is exactly what breaks when state memory arrives**;
+`heatCapacityJPerM2K(surfaceType)` is a separate exported function so the
+replacement point is visible, and `SEASONAL_TIME_AXIS` is the one place a
+future forward integrator reads its axis from.
+
+**Not V0.8's season, and the two must never be mixed.** V0.8's
+`seasonalSensitivityC` / `seaSeasonalDamping` are an instantaneous response to
+the solstice anomaly with no heat capacity and **no phase lag**, and each
+latitude takes the max/min of the two solstices, so that field is a composite
+of two calendar moments rather than the surface at one time. It is a drawing
+correction; neither parameter is read here.
+
+**Regression**: `js/climate.js` gained one exported function
+(`dailyMeanInsolationFactor`) and its two insolation functions now call it
+instead of each inlining the same formula. Checked rather than assumed --
+`score_climate.mjs` and `score_koppen.mjs` print byte-identical output (63.4%
+/ 10.2%) and all ten existing Climate v1 test/validator outputs are
+byte-identical (178 assertions).
+
 ## The UI tidy-up after the Pixel 7a preview confirmation
 
 The user confirmed the Climate v1 preview on their phone and then asked for

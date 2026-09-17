@@ -619,6 +619,27 @@ export function resolveClimateSets(worldConfig = {}) {
 // The model
 // ---------------------------------------------------------------------------
 
+// The daily-mean insolation kernel, in units of the solar constant: the
+// fraction of a star's normal-incidence flux that one latitude receives,
+// averaged over one rotation, at one solar declination. Multiply by the
+// body's solar constant to get W/m2.
+//
+// This is the one implementation of that formula. `annualInsolationByLatitude`
+// averages it around an orbit, `seasonalInsolationByLatitude` evaluates it at
+// the two solstices, and Climate v1's season module evaluates it at an
+// arbitrary orbital phase -- all three must agree exactly, so none of them
+// carries its own copy. Polar night and midnight sun need no special case:
+// the sunrise hour angle simply clamps to 0 or pi.
+export function dailyMeanInsolationFactor(latitudeRad, declinationRad) {
+  const sinLat = Math.sin(latitudeRad);
+  const cosLat = Math.cos(latitudeRad);
+  const sinDec = Math.sin(declinationRad);
+  const cosDec = Math.cos(declinationRad);
+  const cosH = Math.min(1, Math.max(-1, -Math.tan(latitudeRad) * Math.tan(declinationRad)));
+  const h = Math.acos(cosH);
+  return (h * sinLat * sinDec + cosLat * cosDec * Math.sin(h)) / Math.PI;
+}
+
 // Annual-mean insolation by latitude, integrated numerically rather than
 // approximated by the usual second-Legendre fit. The integral is a few
 // thousand evaluations -- nothing on any device -- and it means any obliquity
@@ -629,18 +650,11 @@ export function annualInsolationByLatitude(latitudesRad, tiltDegrees, steps = 18
   const out = new Float64Array(latitudesRad.length);
   for (let i = 0; i < latitudesRad.length; i++) {
     const lat = latitudesRad[i];
-    const sinLat = Math.sin(lat);
-    const cosLat = Math.cos(lat);
     let total = 0;
     for (let s = 0; s < steps; s++) {
       // Orbital longitude around one year; eccentricity is ignored.
       const declination = Math.asin(Math.sin(tilt) * Math.sin((2 * Math.PI * s) / steps));
-      const sinDec = Math.sin(declination);
-      const cosDec = Math.cos(declination);
-      // Hour angle of sunrise, clamped into permanent night or permanent day.
-      const cosH = Math.min(1, Math.max(-1, -Math.tan(lat) * Math.tan(declination)));
-      const h = Math.acos(cosH);
-      total += (h * sinLat * sinDec + cosLat * cosDec * Math.sin(h)) / Math.PI;
+      total += dailyMeanInsolationFactor(lat, declination);
     }
     out[i] = total / steps;
   }
@@ -678,15 +692,7 @@ export function seasonalInsolationByLatitude(
 
   // Daily-mean insolation at one declination, the same formula the annual
   // integral uses one step at a time.
-  const daily = (lat, declination, scale) => {
-    const sinLat = Math.sin(lat);
-    const cosLat = Math.cos(lat);
-    const sinDec = Math.sin(declination);
-    const cosDec = Math.cos(declination);
-    const cosH = Math.min(1, Math.max(-1, -Math.tan(lat) * Math.tan(declination)));
-    const h = Math.acos(cosH);
-    return (scale * (h * sinLat * sinDec + cosLat * cosDec * Math.sin(h))) / Math.PI;
-  };
+  const daily = (lat, declination, scale) => scale * dailyMeanInsolationFactor(lat, declination);
 
   // Inverse-square distance at each solstice. Zero eccentricity gives 1 and 1.
   const distanceScale = (lambda) => {
