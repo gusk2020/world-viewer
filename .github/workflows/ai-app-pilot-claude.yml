@@ -1,0 +1,132 @@
+name: AI App Pilot - Claude
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches:
+      - claude/map-app-v0-1-az6aoa
+    paths:
+      - 'index.html'
+      - 'js/main.js'
+      - 'js/accessibility.js'
+      - 'tests/accessibility-state.test.mjs'
+      - 'orchestrator-app-pilot/**'
+
+concurrency:
+  group: ai-app-pilot-claude-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: read
+  issues: read
+  id-token: write
+
+jobs:
+  claude-turn:
+    if: >-
+      github.repository == 'gusk2020/world-viewer' &&
+      github.event.pull_request.number == 5 &&
+      github.event.pull_request.draft == true &&
+      github.event.pull_request.user.login == 'gusk2020' &&
+      github.event.pull_request.head.repo.full_name == 'gusk2020/world-viewer' &&
+      github.event.pull_request.head.ref == 'ai-app-pilot-accessibility-v1' &&
+      github.event.pull_request.base.ref == 'claude/map-app-v0-1-az6aoa'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - name: Validate state and gate Claude
+        id: gate
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          s = json.loads(Path('orchestrator-app-pilot/state.json').read_text())
+          required = {'test','protocolVersion','cycle','maxCycles','status','lastActor','lastInputSha','lastImplementationSha','stopReason'}
+          if not required.issubset(s):
+              raise SystemExit('Invalid state schema')
+          if s['test'] != 'ai-app-pilot-accessibility-v1' or s['maxCycles'] != 2:
+              raise SystemExit('Unexpected pilot identity or maxCycles')
+          if not 1 <= int(s['cycle']) <= 2:
+              raise SystemExit('Invalid cycle')
+          run = s['status'] == 'CLAUDE_TURN' and s['lastActor'] in {'SETUP','CHATGPT'}
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f"run={'true' if run else 'false'}\n")
+              f.write(f"cycle={s['cycle']}\n")
+          print('Claude gate:', 'OPEN' if run else f"CLOSED ({s['status']}/{s['lastActor']})")
+          PY
+
+      - name: Implement bounded accessibility change
+        if: steps.gate.outputs.run == 'true'
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            Execute cycle ${{ steps.gate.outputs.cycle }} of 2 for the task in orchestrator-app-pilot/TASK.md.
+            Read TASK.md and the latest ChatGPT review before editing.
+            Implement only the requested aria-pressed synchronization; preserve all visible behavior,
+            climate calculations, map behavior, terrain behavior, and styling.
+            You may change only index.html, js/main.js, js/accessibility.js, and
+            tests/accessibility-state.test.mjs. Add or update focused Node built-in tests.
+            Run: node --test tests/accessibility-state.test.mjs
+            Do not edit orchestration files, workflow files, package metadata, or unrelated files.
+            Do not use web tools. Commit and push the implementation to this PR branch.
+          claude_args: |
+            --max-turns 12
+            --allowedTools "Read,Edit,Write,Bash"
+            --disallowedTools "WebSearch,WebFetch"
+
+      - name: Verify implementation and hand off
+        if: steps.gate.outputs.run == 'true'
+        env:
+          INPUT_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+        shell: bash
+        run: |
+          git fetch origin "$HEAD_BRANCH"
+          git reset --hard "origin/$HEAD_BRANCH"
+          test -z "$(git status --porcelain)"
+          node --test tests/accessibility-state.test.mjs
+          python3 - <<'PY'
+          import os, subprocess
+          before = os.environ['INPUT_SHA']
+          changed = subprocess.check_output(['git','diff','--name-only',before+'..HEAD'], text=True).splitlines()
+          allowed = {'index.html','js/main.js','js/accessibility.js','tests/accessibility-state.test.mjs'}
+          unexpected = [p for p in changed if p not in allowed]
+          if unexpected:
+              raise SystemExit('Unexpected implementation paths: ' + ', '.join(unexpected))
+          if not changed:
+              raise SystemExit('Claude produced no implementation change')
+          PY
+          python3 - <<'PY'
+          import json, os, subprocess
+          from datetime import datetime, timezone
+          from pathlib import Path
+          state_path = Path('orchestrator-app-pilot/state.json')
+          report_path = Path('orchestrator-app-pilot/claude-report.md')
+          s = json.loads(state_path.read_text())
+          if s['status'] != 'CLAUDE_TURN':
+              raise SystemExit('State changed before handoff')
+          cycle = int(s['cycle'])
+          impl_sha = subprocess.check_output(['git','rev-parse','HEAD'], text=True).strip()
+          changed = subprocess.check_output(['git','diff','--name-only',os.environ['INPUT_SHA']+'..HEAD'], text=True).splitlines()
+          stamp = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+          with report_path.open('a') as f:
+              f.write(f"\n\n## Cycle {cycle}\n\n- result: IMPLEMENTED\n- input SHA: {os.environ['INPUT_SHA']}\n- implementation SHA: {impl_sha}\n- changed paths: {', '.join(changed)}\n- test: node --test tests/accessibility-state.test.mjs (PASS)\n- UTC time: {stamp}\n- transition: CLAUDE_TURN -> CHATGPT_TURN\n")
+          s.update(status='CHATGPT_TURN', lastActor='CLAUDE',
+                   lastInputSha=os.environ['INPUT_SHA'],
+                   lastImplementationSha=impl_sha, stopReason=None)
+          state_path.write_text(json.dumps(s, indent=2) + '\n')
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add orchestrator-app-pilot/state.json orchestrator-app-pilot/claude-report.md
+          git commit -m "[AI-APP-PILOT][CLAUDE_DONE][cycle=${{ steps.gate.outputs.cycle }}]"
+          git push origin HEAD:"$HEAD_BRANCH"
