@@ -1,0 +1,11 @@
+{
+  "test": "ai-app-pilot-accessibility-v1",
+  "protocolVersion": 1,
+  "cycle": 1,
+  "maxCycles": 2,
+  "status": "SETUP",
+  "lastActor": "SETUP",
+  "lastInputSha": null,
+  "lastImplementationSha": null,
+  "stopReason": null
+}
