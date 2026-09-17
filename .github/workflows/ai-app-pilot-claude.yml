@@ -25,6 +25,14 @@ permissions:
 
 jobs:
   claude-turn:
+    if: >-
+      github.repository == 'gusk2020/world-viewer' &&
+      github.event.pull_request.number == 5 &&
+      github.event.pull_request.draft == true &&
+      github.event.pull_request.user.login == 'gusk2020' &&
+      github.event.pull_request.head.repo.full_name == 'gusk2020/world-viewer' &&
+      github.event.pull_request.head.ref == 'ai-app-pilot-accessibility-v1' &&
+      github.event.pull_request.base.ref == 'claude/map-app-v0-1-az6aoa'
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
@@ -49,14 +57,11 @@ jobs:
               raise SystemExit('Unexpected pilot identity or maxCycles')
           if not 1 <= int(s['cycle']) <= 2:
               raise SystemExit('Invalid cycle')
-          allowed = {'SETUP','CLAUDE_TURN','CHATGPT_TURN','USER_DECISION','DONE','ERROR'}
-          if s['status'] not in allowed:
-              raise SystemExit('Invalid status')
-          run = s['status'] == 'CLAUDE_TURN'
+          run = s['status'] == 'CLAUDE_TURN' and s['lastActor'] in {'SETUP','CHATGPT'}
           with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
               f.write(f"run={'true' if run else 'false'}\n")
               f.write(f"cycle={s['cycle']}\n")
-          print('Claude gate:', 'OPEN' if run else f"CLOSED ({s['status']})")
+          print('Claude gate:', 'OPEN' if run else f"CLOSED ({s['status']}/{s['lastActor']})")
           PY
 
       - name: Implement bounded accessibility change
