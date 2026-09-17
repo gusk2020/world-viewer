@@ -209,6 +209,18 @@ off" bit-identical to "ice does not exist". With one, the row build walks both
 grids' run boundaries together, so a row still costs `(fieldWidth +
 overlayWidth)` colour computations rather than one per pixel.
 
+**What it looks like, checked in rendered frames rather than argued.** A/B at
+the same view with the ice off and on: at northern winter the overlay covers
+exactly the Arctic Ocean, Greenland's land stays the temperature ramp's own
+colour, and the terrain relief is still visible through the ice -- so nothing
+about it can be read as land ice, and the surface underneath is not replaced.
+The Southern Ocean behaves the same half a year later, and empties in between.
+**One honest blemish**: around the Canadian Arctic archipelago the 256x128 ice
+grid against a fine coastline makes the sea-share weighting show as visible
+square steps. That is the coarse grid being shown as what it is rather than a
+fault, and it is the one place where a finer ice grid (not a different rule)
+would look better.
+
 **The spin-up runs once per world**, on the first press of 入, and is then
 cached; the phase slider only ever does a table lookup plus the texture
 repaint it already did. Thickness at three probe cells (the Arctic, seasonal
