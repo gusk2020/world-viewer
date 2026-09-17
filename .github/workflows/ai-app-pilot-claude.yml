@@ -12,9 +12,10 @@ on:
       - 'tests/accessibility-state.test.mjs'
       - 'orchestrator-app-pilot/**'
       - '.github/workflows/ai-app-pilot-claude.yml'
+  workflow_dispatch:
 
 concurrency:
-  group: ai-app-pilot-claude-${{ github.event.pull_request.number }}
+  group: ai-app-pilot-claude-${{ github.event.pull_request.number || 'manual-pr-5' }}
   cancel-in-progress: false
 
 permissions:
@@ -27,20 +28,26 @@ jobs:
   claude-turn:
     if: >-
       github.repository == 'gusk2020/world-viewer' &&
-      github.event.pull_request.number == 5 &&
-      github.event.pull_request.draft == true &&
-      github.event.pull_request.user.login == 'gusk2020' &&
-      github.event.pull_request.head.repo.full_name == 'gusk2020/world-viewer' &&
-      github.event.pull_request.head.ref == 'ai-app-pilot-accessibility-v1' &&
-      github.event.pull_request.base.ref == 'claude/map-app-v0-1-az6aoa'
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event.pull_request.number == 5 &&
+        github.event.pull_request.draft == true &&
+        github.event.pull_request.user.login == 'gusk2020' &&
+        github.event.pull_request.head.repo.full_name == 'gusk2020/world-viewer' &&
+        github.event.pull_request.head.ref == 'ai-app-pilot-accessibility-v1' &&
+        github.event.pull_request.base.ref == 'claude/map-app-v0-1-az6aoa'))
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
       - name: Checkout PR head
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.pull_request.head.ref }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && 'ai-app-pilot-accessibility-v1' || github.event.pull_request.head.ref }}
           fetch-depth: 0
+
+      - name: Capture bounded input SHA
+        id: input
+        shell: bash
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Validate state and gate Claude
         id: gate
@@ -88,8 +95,8 @@ jobs:
       - name: Verify implementation and hand off
         if: steps.gate.outputs.run == 'true'
         env:
-          INPUT_SHA: ${{ github.event.pull_request.head.sha }}
-          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+          INPUT_SHA: ${{ steps.input.outputs.sha }}
+          HEAD_BRANCH: ${{ github.event_name == 'workflow_dispatch' && 'ai-app-pilot-accessibility-v1' || github.event.pull_request.head.ref }}
         shell: bash
         run: |
           git fetch origin "$HEAD_BRANCH"
