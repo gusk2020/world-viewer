@@ -3,9 +3,9 @@
   "protocolVersion": 1,
   "cycle": 1,
   "maxCycles": 2,
-  "status": "CHATGPT_TURN",
-  "lastActor": "CLAUDE",
+  "status": "USER_DECISION",
+  "lastActor": "CHATGPT",
   "lastInputSha": "6276d6836f7cc8a9354a1cfe4d2a79b25d27f254",
   "lastImplementationSha": "19bd97869e0648690fd3dedcd6706f4dd048e669",
-  "stopReason": null
+  "stopReason": "PASS_AWAITING_USER"
 }
