@@ -49,6 +49,44 @@ jobs:
         shell: bash
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
+      - name: Validate manual PR invariants
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os, urllib.request
+          req = urllib.request.Request(
+              'https://api.github.com/repos/gusk2020/world-viewer/pulls/5',
+              headers={
+                  'Accept': 'application/vnd.github+json',
+                  'Authorization': f"Bearer {os.environ['GH_TOKEN']}",
+                  'X-GitHub-Api-Version': '2022-11-28',
+              },
+          )
+          with urllib.request.urlopen(req) as response:
+              pr = json.load(response)
+          expected = {
+              'state': 'open',
+              'draft': True,
+              'user': 'gusk2020',
+              'head': 'ai-app-pilot-accessibility-v1',
+              'head_repo': 'gusk2020/world-viewer',
+              'base': 'claude/map-app-v0-1-az6aoa',
+          }
+          actual = {
+              'state': pr['state'],
+              'draft': pr['draft'],
+              'user': pr['user']['login'],
+              'head': pr['head']['ref'],
+              'head_repo': pr['head']['repo']['full_name'],
+              'base': pr['base']['ref'],
+          }
+          if actual != expected:
+              raise SystemExit(f'PR #5 invariant mismatch: {actual}')
+          PY
+
       - name: Validate state and gate Claude
         id: gate
         shell: bash
