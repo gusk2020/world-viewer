@@ -36,10 +36,10 @@
     <div class="control-row" id="surface-row">
       <label>地表</label>
       <div id="surface-mode" class="segmented">
-        <button type="button" data-surface="standard" class="selected">標準</button>
-        <button type="button" data-surface="rock">岩</button>
-        <button type="button" data-surface="climate">陸地塗り分け</button>
-        <button type="button" data-surface="teacher" id="teacher-button">教師</button>
+        <button type="button" data-surface="standard" class="selected" aria-pressed="true">標準</button>
+        <button type="button" data-surface="rock" aria-pressed="false">岩</button>
+        <button type="button" data-surface="climate" aria-pressed="false">陸地塗り分け</button>
+        <button type="button" data-surface="teacher" id="teacher-button" aria-pressed="false">教師</button>
       </div>
     </div>
     <div class="control-row" id="climate-set-row" hidden>
@@ -56,10 +56,10 @@
     <div class="control-row" id="seabed-row">
       <label>海底の色</label>
       <div id="seabed-style" class="segmented">
-        <button type="button" data-style="photo" class="selected">写真</button>
-        <button type="button" data-style="brown">茶</button>
-        <button type="button" data-style="grey">灰</button>
-        <button type="button" data-style="land">緑茶</button>
+        <button type="button" data-style="photo" class="selected" aria-pressed="true">写真</button>
+        <button type="button" data-style="brown" aria-pressed="false">茶</button>
+        <button type="button" data-style="grey" aria-pressed="false">灰</button>
+        <button type="button" data-style="land" aria-pressed="false">緑茶</button>
       </div>
     </div>
   </div>
@@ -71,9 +71,9 @@
         <div id="world-switch" class="segmented"></div>
       </div>
       <div class="control-row" id="axis-row">
-        <button type="button" id="axis-toggle" class="pill">軸 垂直</button>
+        <button type="button" id="axis-toggle" class="pill" aria-pressed="false">軸 垂直</button>
         <span id="axis-readout">0°</span>
-        <button type="button" id="graticule-toggle" class="pill">線 なし</button>
+        <button type="button" id="graticule-toggle" class="pill" aria-pressed="false">線 なし</button>
       </div>
     </div>
   </div>
