@@ -69,9 +69,8 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-            allowed_bots: 
-            "github-actions[bot]"
-            prompt: |
+          allowed_bots: "github-actions[bot]"
+          prompt: |
             Execute cycle ${{ steps.gate.outputs.cycle }} of 2 for the task in orchestrator-app-pilot/TASK.md.
             Read TASK.md and the latest ChatGPT review before editing.
             Implement only the requested aria-pressed synchronization; preserve all visible behavior,
@@ -85,7 +84,7 @@ jobs:
             --max-turns 35
             --allowedTools "Read,Edit,Write,Bash"
             --disallowedTools "WebSearch,WebFetch"
-
+      
       - name: Verify implementation and hand off
         if: steps.gate.outputs.run == 'true'
         env:
