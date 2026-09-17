@@ -3,9 +3,9 @@
   "protocolVersion": 1,
   "cycle": 1,
   "maxCycles": 2,
-  "status": "CLAUDE_TURN",
+  "status": "ERROR",
   "lastActor": "SETUP",
   "lastInputSha": null,
   "lastImplementationSha": null,
-  "stopReason": null
+  "stopReason": "CLAUDE_WORKFLOW_NOT_PRESENT_ON_DEFAULT_BRANCH"
 }
