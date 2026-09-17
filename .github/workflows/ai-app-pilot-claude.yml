@@ -69,6 +69,7 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          allowed_bots: "github-actions[bot]"
           prompt: |
             Execute cycle ${{ steps.gate.outputs.cycle }} of 2 for the task in orchestrator-app-pilot/TASK.md.
             Read TASK.md and the latest ChatGPT review before editing.
