@@ -3127,8 +3127,13 @@ not: **1.59 mm/day over non-ice land** (Earth ~1.3), 3.55 in the wet tropics
 **Solver**: semi-implicit inside the existing sweep (`k*phi*q_sat` to the
 numerator, `k*phi` to the denominator, phi from the q the sweep holds), never an
 outer loop. 117 sweeps, residual 9.8e-8; at 1e-9 the answer moves by 9.7e-7
-kg/kg. Zero NaN, zero negatives, nothing above saturation, and the same fixed
-point from a dry start, a saturated start and the current field. 165 -> 181 ms.
+kg/kg. Zero NaN, zero negatives, nothing above saturation. 165 -> 181 ms.
+**Corrected afterwards**: the "same fixed point from any start" claim came from
+the pre-evaluation's outer-loop harness, which washes the seed out. Measured
+with an exact replica of the sweep, the ET equation **is bistable on a small
+area** -- 0.1% of land under the model wind (max 6.41 g/kg), 3.5% above
+0.01 g/kg and 1.3% above 0.5 g/kg under the oracle wind. ET OFF is unique to
+float noise.
 
 **Sensitivity**: ramp 0.20-0.70 / 0.25-0.75 / 0.30-0.80 give wet/dry 4.06 / 5.17
 / 5.67x and tau_ET 3 / 4.6 / 7 d give 3.66 / 5.17 / 5.50x -- the structure holds
@@ -3147,6 +3152,53 @@ source, and now one exists. Both are separate stages.
 
 Tests: 50 assertions in `tools/test_moisture_stage5b.mjs` (18 new), all four
 Climate v1 suites pass, and Climate v0.8 is untouched (63.4% / 10.2%).
+
+## Stage 5 is closed, and the bucket was measured and rejected
+
+Index and verdict: `docs/climate-v1-stage5-closed.md`. Nothing was implemented
+in this round and no physics file changed.
+
+**Production baseline, fixed**: Stage 5B transport, explicit diffusion K = 0,
+`moistureResidenceDays` 8, the model's own Stage 4 wind, land ET **OFF**,
+evaporative cooling **OFF**. Closed as "complete within the current
+annual-mean steady-state model and the current Stage 4 wind" -- *not* a claim
+that Earth's humidity is reproduced.
+
+**The bucket (a Manabe-style soil-water reservoir as ET availability) is not
+adopted**, on four measurements rather than a judgement:
+
+- **In an annual-mean steady state a bucket has nothing to remember.** W solves
+  `beta(W)*k*dq + W/tau_drain = P`, whose left side is monotone in W, so W is a
+  deterministic function of (P, PET) -- soil water is P/PET rewritten.
+- **Every precipitation proxy built from the model's own atmosphere inherits
+  the wind's zeros.** Under the production wind, the Amazon and the Congo get
+  **P = 0.00 mm/day** from moisture convergence, the saturation-excess proxy is
+  **identically zero over all land** (the q <= q_sat cap never binds), and the
+  tau-sink proxy is the same `(1-f)/tau` relabel Stage 5C-alpha already
+  rejected. Precipitation as its own stage fails for the same reason, which is
+  why it was not started either.
+- **The coupled solver stops converging.** ET off, the sweep reaches 1e-13 in
+  80/187 passes; with the bucket the residual plateaus at 5.9e-4 (model wind) /
+  9.7e-3 (oracle wind) and individual regions oscillate -- Australia's ET swings
+  0.34 <-> 2.53 mm/day between 400 and 1600 passes. The oscillation sits exactly
+  at the beta knee, i.e. in the semi-arid ground the bucket exists to improve.
+  The earlier "Australia P 11.78 mm/day" was this oscillation, not a coastal
+  grid artefact.
+- **It does not separate deserts from rainforest under the production wind**:
+  wet/dry ET ratio **2.05x** against the ~5.07x required (5.36x with the oracle
+  wind) -- the same split RH availability showed, one level removed.
+
+Also measured: the land water budget closes per cell exactly (global residual
+0.000 / 0.066 mm/day), but **land ET / land P is 0.51-0.56**, i.e. half the rain
+over land is water the land itself evaporated -- the feedback that drives the
+oscillation. Three new parameters would be needed (Wc 150 mm is the only
+literature one; the beta knee and tau_drain are not separable on annual-mean
+data).
+
+**The final bottleneck is the moisture-carrying capacity of the Stage 4 wind**,
+and Stage 4 stays frozen -- it has its own negative results
+(`docs/climate-v1-wind-negative-results.md`) and "fix the wind again for
+humidity's sake" is the loop this closure exists to prevent.
 
 ## The UI tidy-up after the Pixel 7a preview confirmation
 

@@ -150,9 +150,17 @@ pushed past saturation and q can never go negative, by construction.
 Converges in **117 sweeps** at the default tolerance (residual 9.8e-8); at a
 1e-9 tolerance and 8000-sweep cap it takes 147 and the two answers differ by at
 most 9.7e-7 kg/kg. **Zero NaN, zero negative values, zero cells above
-saturation.** The pre-evaluation's separate check found the same fixed point from
-a bone-dry start, a saturated start and the current field, to 0.0000 g/kg -- a
-unique solution with no bistability despite the ramp's positive feedback.
+saturation.**
+
+**Correction, measured after this document first shipped**: the claim that the
+solution is unique came from the pre-evaluation's outer-loop harness, which
+washes the seed out on its first pass. Re-measured with an exact replica of the
+sweep, **the ET equation is bistable on a small area**: with the model wind
+0.1% of land differs between a bone-dry and a saturated start (max 6.41 g/kg),
+and with the oracle wind 3.5% of land differs by more than 0.01 g/kg and 1.3%
+by more than 0.5 g/kg (max 10.98 g/kg at 5N 101E). ET OFF is unique to float
+noise (2e-5 g/kg). That is one of the reasons the RH availability form is not
+adopted in production.
 
 Cost: the whole pipeline is **165 ms off, 181 ms on** (256x128 transport,
 2048x1024 terrain) -- about 10%.
