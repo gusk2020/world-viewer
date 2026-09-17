@@ -3313,6 +3313,86 @@ Representative points off the real grid: 45N land (France) half-amplitude
 **4.9 C** peaking +72 d, 45S land (Chile) 15.2 C -- the design's own
 predictions, on real geography.
 
+## Climate v1: sea ice as a state carried around the year
+
+Full write-up: `docs/climate-v1-sea-ice-state.md`. Files:
+`js/climate-v1/sea-ice-state.js`, `tools/validate_sea_ice_state.mjs`.
+**Nothing in the shipped pipeline imports it**, no UI changed, and
+`meta.feedsBackIntoTemperature` is `false` -- albedo feedback is a later stage.
+
+**The state is thickness; the fraction is diagnosed.** A fraction-only state
+was measured and rejected first: it **saturates**, reading 1.00 at its maximum
+in both the central Arctic and the Bering Sea, so it cannot tell 4.8 m of
+multi-year ice from 0.7 m of first-year ice. Thickness is the latent heat, so
+it is what remembers; `fraction = min(1, h/0.3 m)` and that 0.3 is
+**empirical and provisional** (it stands in for floe-scale processes this model
+does not have).
+
+    freeze (T <= -1.8 C): F = (T_f - T) / (1/lambda + h/k_ice)   Stefan, series
+    melt   (T >  -1.8 C): F = -lambda_melt * (T - T_f)           surface, unshielded
+    both:                 F -= F_w ;  dh/dt = F / (rho_ice L_f)
+
+**The asymmetry is the design**: freezing heat must escape *through* the ice so
+growth self-limits, melting happens at a surface already at the melting point
+so thickness shields nothing. That is what makes perennial ice possible on a
+cold sea and impossible on a warm one.
+
+**F_w is the closure and stays at the literature value.** Without it the
+central Arctic reaches **11 m and is still rising after 40 years**. Default
+**2 W/m2** (Maykut & Untersteiner's Arctic figure). 3 and 4 W/m2 give a
+thickness closer to the observed 2-3 m and are **deliberately not adopted** --
+the user's call and the right one: the sea temperature feeding this has known
+upstream errors, and fitting F_w to observed thickness would absorb them into a
+sea-ice parameter. They are a sensitivity test (88N 5.40 / 4.44 / 3.66 m at
+F_w 2 / 3 / 4; seasonal ice barely moves).
+
+Measured, 256x128, 48 steps/year, 5 years: 88N **3.26/3.00 m**, 80N 2.81/2.62,
+Bering 62N 0.71/**0.00**, 70S 1.25/0.37, 62S 0.71/0.00, 40N and 10N **0.00**
+throughout -- perennial ice where it is always cold, seasonal ice that empties
+each summer, nothing on a warm sea, and the two hemispheres' seasonal maxima
+**0.50 of a year apart**. 48 steps are within **0.017 m** of an 8760-step
+reference (24 within 0.036).
+
+**The two convergences are different questions, and that is reported rather
+than hidden.** The *fraction* reaches a periodic steady state in **2 years**;
+**perennial thickness has not converged in 20** (80N annual max 1.43 -> 1.95 ->
+2.81 -> 4.28 m at 1/2/5/20 years). `meta` carries `yearsUsed`,
+`fractionConverged`, `thicknessConverged` and both year-boundary differences,
+and an unconverged thickness is a result, not a failure. One consequence: at
+F_w = 2 the perennial cells' within-year swing (0.19 m) is *smaller* than the
+spin-up trend they still carry at five years (0.29 m), so the **phase** of
+their maximum is meaningless until the thickness converges -- the seasonal
+zone's phase is not.
+
+**Cost**: 48 ms for 5 years x 48 steps over the whole globe (node), so roughly
+0.15-0.5 s on a Pixel 7a, once per world. Tables **6.0 MB** at 24 stored phases
+(`outputPhaseCount: 12` halves it).
+
+**Against the teacher, only as far as it can say.** The repo's only sea-ice
+teacher is Teacher A's annual photographic snapshot (**1.00% of the globe**),
+with no seasonal maximum, minimum or phase. Model annual maximum **9.19%**
+(N 3.86 / S 5.33), minimum 3.23% -- both hemispheres, both perennial and
+seasonal ice, right order of magnitude, clearly **too large**. The seasonal
+maximum, minimum and phase are **not verified** and must not be described as
+verified.
+
+**The upstream limits, not to be corrected here**: no longitudinal SST
+structure (so the 60-70 band freezes all the way round -- there is no Gulf
+Stream), no currents, no AMOC, and the sea's own cycle lags ~72 days (the 30 m
+mixed layer), so the ice peaks 2-3 months late. The validator therefore asserts
+growth and melt against **each cell's own temperature cycle**, not the
+calendar, because a calendar-anchored assertion would be testing that lag
+instead of this model.
+
+**One harness trap worth keeping**: `present-classes.png` is a *paletted* PNG
+and `tools/png.mjs` returns one class index per pixel. Matching it by RGB
+colour reads **0% sea ice everywhere**, which looks exactly like a broken
+model.
+
+No common seasonal integrator was built -- one state model is not two. The
+(cell, phase, state, tendency) boundaries are kept clean for when land snow
+arrives, which needs precipitation first.
+
 ## The UI tidy-up after the Pixel 7a preview confirmation
 
 The user confirmed the Climate v1 preview on their phone and then asked for
