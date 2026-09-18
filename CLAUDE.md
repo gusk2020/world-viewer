@@ -3293,6 +3293,107 @@ new workflow, no secrets, the same 454 MB public Berkeley Earth object -- with
 the two new paths added to its commit step. The whole run takes about 25
 seconds.
 
+## Climate v1: the seasonal temperature baseline (measured, nothing fitted)
+
+Full write-up: `docs/climate-v1-seasonal-temperature-baseline.md`. Tool:
+`tools/validate_seasonal_temperature.mjs`. **No parameter moved**, no world
+config was written, no physics file changed, V0.8 still reads 63.4% / 10.2%,
+and all existing Climate v1 suites pass.
+
+**A calendar month is an interval, and the calendar lives in the validator.**
+Berkeley Earth's July value is the mean over July, so the model is averaged
+over the same interval with the real Gregorian month lengths. The mean of each
+harmonic over a month's own interval has a closed form, so the exact integral
+is what gets used; the sampled route the brief describes was run at 365 / 1461
+/ 3652 / 14608 samples a year and converges on it (2.6e-1 -> 3.8e-3 C), which
+is what earns the right to use it. **The midpoint single-point approximation
+is wrong by up to 0.562 C**, so it is not used. `js/climate-v1/season.js` still
+knows nothing about months.
+
+**Earth's real orbit is a calibration condition of the validator only** --
+tilt 23.44, e **0.0167**, periapsis **283** -- because fitting a real Earth to
+a circular model would push the periapsis-driven hemispheric asymmetry into
+`seasonalDampingWPerM2K` or a heat capacity. The world's config still carries
+the circular default and the validator asserts that it does.
+
+**The one calendar constant lands on the phase bias, one for one**, which is
+the opposite of the reassuring answer and was measured rather than argued: the
+model's peak is fixed to the equinox while the teacher's twelve numbers are
+not, so a 1-day error in the March equinox date (78.59) moves the phase bias by
+exactly 1.0 d. The real instant varies +/-0.6 d over 1991-2020, so every phase
+bias carries that much calendar uncertainty.
+
+**The headline.** First-harmonic half-amplitude, area-weighted, over 64,779
+teacher cells (21 dropped for a missing month, nothing filled):
+
+| | teacher | model | amp bias | amp MAE | phase bias | phase MAE |
+| --- | --- | --- | --- | --- | --- | --- |
+| land | 9.60 | 11.48 | **+1.88** | 3.35 | **-0.2 d** | 8.4 d |
+| ocean | 2.76 | 3.35 | **+0.59** | 1.72 | **+5.9 d** | 13.0 d |
+
+**The phase is right, and that is a real result**: a land phase bias of -0.2 d
+is exact within the calendar uncertainty. A one-layer relaxation with a real
+heat capacity puts the peak in the right place with nothing fitted to a date.
+
+**The +1.88 C land amplitude bias is not a global bias.** Northern-hemisphere
+land is already right in all three bands -- **-0.03 / +0.63 / +0.26 C** at
+0-30 / 30-60 / 60-90N. The error is two specific structural failures:
+
+- **Maritime land gets a continental swing.** Every land cell has the same
+  heat capacity, so 30-60S land (555 cells: Patagonia, New Zealand, Tasmania)
+  reads 13.39 against a teacher's 5.68, and Antarctica +9.27. The
+  representative points settle it: **Siberia 0.80x (under), France 1.95x,
+  Chile 3.18x** -- four times apart in the direction they pull, so no single
+  `soilDepthM` or lambda can satisfy them. NE Asia is **-4.50** with the
+  opposite sign again.
+- **The Arctic Ocean is given 30 m of water it does not have.** 60-90N ocean
+  is the largest amplitude error on the globe (6.44 against 11.31) and
+  **23.6 days late**; 60-90S ocean is 32.7 d late. Both are ice-covered and
+  thermally thin, while 30-60N ocean is nearly perfect at -0.26.
+  `js/climate-v1/sea-ice-state.js` already has the thickness and deliberately
+  does not feed back; this is the concrete case for eventually letting it, as
+  a heat capacity before any albedo.
+
+**The tropics work.** Within 10 degrees of the equator the teacher's H2/H1 is
+0.902 and the model's **0.984** (ocean 0.688 against 0.676) -- the model
+produces the equatorial double peak with the right relative size, falling out
+of the insolation geometry with nothing fitted. Its H1 there is still 2.06
+against 0.92, and the semi-annual peak arrives ~12 d early over land.
+
+**The hold-out splits, measured as a baseline.** The geographic checkerboard is
+**free**: its halves differ by **0.000 C of amplitude MAE and 0.002 C of
+bias**, so any gap that opens after a fit is over-fitting and nothing else. The
+latitude-band split is a real test (amplitude MAE 0.92 / 2.73 / 5.51 by band).
+**Ice matters more than expected** -- 17% of cells carrying an amplitude MAE of
+8.59 against 1.91 elsewhere -- so every figure must be reported both ways.
+
+**The three parameters are identifiable, and one is weak.** At +/-10%,
+one at a time: `mixedLayerDepthM` moves the ocean and leaves the land at
+**0.00 exactly**; lambda moves land amplitude **ten times** more than
+`soilDepthM` does (1.02 against 0.10) while moving land phase only twice as
+much -- so amplitude identifies lambda and the phase residual then identifies
+`soilDepthM`, exactly as the calibration audit predicted.
+
+**Why lambda barely touches the ocean is physics, not luck**: the gain is
+`1/sqrt(1+k^2)` with `k = omega*C/lambda`, and the sea's tau of 188 days gives
+k = 3.2, deep in the `k >> 1` regime where the amplitude tends to
+`F/(omega*C)` and **lambda cancels out**. The land's tau is 27 days (k = 0.47),
+the regime lambda dominates.
+
+**`soilDepthM` is the weak lever, and the reason is a parameter that is not
+among the three**: `atmosphericColumnHeatCapacityJPerM2K` (1.0e7, fixed) is
+**53% of C_land** against only 8% of C_sea, so 10% of `soilDepthM` moves
+C_land by 4.7% where 10% of `mixedLayerDepthM` moves C_sea by 9.2%. Worth
+knowing before a search reports that `soilDepthM` "wants" a large value.
+
+**Verdict: READY** for the three-variable grid search. It can fix the global
+land and ocean amplitude biases and a degree or two of the ocean's lag; it
+cannot fix maritime land, the Arctic Ocean, or the equatorial
+over-amplification, all of which are structural. The largest risk is that
+Antarctica's 9.3 C error over 6629 cells drags lambda upward and makes Siberia
+and NE Asia worse -- which is why ice in / ice out must both be reported and
+the three parked regions stay out of any fit.
+
 ## Climate v1: the seasonal cycle (the first time axis)
 
 Full write-up: `docs/climate-v1-seasonal-cycle.md`. Files:
