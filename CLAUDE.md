@@ -3251,6 +3251,84 @@ longitude-free assumption is exactly what breaks when state memory arrives**;
 replacement point is visible, and `SEASONAL_TIME_AXIS` is the one place a
 future forward integrator reads its axis from.
 
+### Orbital eccentricity and periapsis direction
+
+Two physical inputs on the body -- `orbitalEccentricity` (e) and
+`periapsisLongitudeDeg` (the angle from the ascending equinox to periapsis
+along the direction of motion; Earth ~283, Mars ~251) -- both defaulting to 0.
+Full write-up in `docs/climate-v1-seasonal-cycle.md`.
+
+`sampleOrbit` solves `M = E - e sinE` by Newton once **per phase** (360 per
+table build, never per latitude or per cell, because the declination and
+(a/r)^2 depend on the phase alone), then the forcing line gains one factor:
+`distanceFactor[s] * dailyMeanInsolationFactor(lat, delta)`, with the
+declination taken from the solar longitude the orbit actually reached. The
+harmonic solver and everything downstream are untouched.
+
+**`orbitalPhase` stays equally spaced in time** -- the true anomaly is never
+the clock. That is load-bearing twice over: the sea-ice integrator steps at a
+constant `yearSeconds/steps`, and the arithmetic mean of the sampled forcing
+is the true time mean only on a uniform-in-time axis, which is what keeps the
+anomaly's annual mean at exactly zero (measured 3.2e-14 C on every orbit
+tested).
+
+**e = 0 bypasses the solver entirely**, so the circular case is bit-identical
+by construction: **0 of 8192 coefficients differ and the sampled anomaly
+differs by 0.0 C**, with a non-zero periapsis passed in to prove it is ignored.
+
+**The harmonic count is derived from e, and had to be.** A fixed 4 harmonics
+gives 0.5 C error at e = 0 but **17 C at e = 0.5** -- the periapsis passage
+becomes a spike narrow in time. Sampling is not the problem (360 phase samples
+agree with 1440 to 0.07 C even at e = 0.8). So
+`harmonicsForEccentricity(e) = min(48, ceil(4/(1-e)^1.6) + 2)` with e = 0
+special-cased to 4 -- **a numerical-accuracy setting, not a fitted
+parameter**, and the bar is the accuracy the circular case already delivers
+(0.504 C), not an invented budget. Measured: H 4/7/7/8/10/12/15/20 at
+e 0/0.0167/0.093/0.2/0.3/0.4/0.5/0.6, error 0.20-0.28 C throughout, 32-160 KB,
+33-125 ms.
+
+**e <= 0.6 is supported and above it `sampleOrbit` throws**, never clamps: at
+e = 0.7 the requirement is 32 harmonics and at 0.8 it is past 48 with 53 C of
+error. A silently reduced eccentricity would draw a plausible season for a
+planet nobody asked for.
+
+**Verified against two exact identities** rather than any one step: phase 0 is
+the ascending equinox at every e and every periapsis direction (worst
+|solar longitude(0)| = 3.8e-15 rad), and the time mean of (a/r)^2 is
+1/sqrt(1-e^2) (worst relative error 5.3e-15). Newton needs at most 5
+iterations up to e = 0.6.
+
+**The hemispheric asymmetry falls out of the geometry and its sign is set by
+the periapsis direction alone** -- nothing fitted, no hemisphere named in the
+code. Land half-amplitude at 45N / 45S: circular 15.1 / 15.2, Earth's own
+orbit 14.3 / **16.0** (the southern summer stronger, as it really is),
+Mars-like 11.1 / **19.8** (its known strong southern bias, unprompted),
+e = 0.3 with northern summer at periapsis **34.2** / 3.7, with southern summer
+at periapsis 3.6 / **34.3**, with periapsis at an equinox 23.7 / 24.4. At
+e = 0.5 the equator reaches 47.6 C because the 1/r^2 term becomes a *global*
+annual cycle dominating the tilt contrast -- right, but not what "season"
+usually means.
+
+**Two limitations, stated rather than hidden.** The orbit-mean insolation
+itself rises as 1/sqrt(1-e^2) (+15.5% at e = 0.5) and **Stage 2's annual-mean
+field never reads e**, so a high-e world has an eccentricity-aware seasonal
+departure added to an eccentricity-blind annual mean; the factor is reported as
+`table.orbit.meanInsolationScale`. And **sea ice's 48 steps/year was only ever
+checked on a circular orbit** -- a sharper high-e melt season needs its own
+diagnosis. No sea-ice setting was touched.
+
+**The Moon is the trap**: its seasonal insolation follows the Earth-Moon
+system's orbit round the Sun, not its own e = 0.055 orbit round the Earth.
+Nothing infers an eccentricity from anything, so this is only a warning for a
+future settings screen.
+
+**No world's config carries the new fields**, so every world is still circular
+and the app draws exactly what it drew. Entering Earth's real 0.0167/283 would
+move the picture (45N 15.1 -> 14.3) and that is a content decision for the
+planet-settings screen, not something to slip in with the capability.
+`ensureSeasonTable` in `main.js` now keys its cache on the orbit as well as the
+row count, which is the whole API readiness for that screen.
+
 **Not V0.8's season, and the two must never be mixed.** V0.8's
 `seasonalSensitivityC` / `seaSeasonalDamping` are an instantaneous response to
 the solstice anomaly with no heat capacity and **no phase lag**, and each

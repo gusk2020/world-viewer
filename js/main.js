@@ -365,9 +365,21 @@ async function main() {
 
   // Built once per world, at the temperature field's own row count so the two
   // line up without resampling. 32 KB and about a tenth of a second.
+  //
+  // The cache is keyed on the orbit as well as the row count, which is the
+  // whole API readiness for a future planet-settings screen: change a body's
+  // eccentricity or periapsis longitude and the next build picks it up, with
+  // no UI or plumbing here. Both are constant per world today, so this is
+  // identical in behaviour to keying on rows alone.
   function ensureSeasonTable(rows) {
-    if (v1SeasonTable && v1SeasonTable.rows === rows) return v1SeasonTable;
-    v1SeasonTable = buildSeasonalTemperatureTable({ rows, body: world.config.body });
+    const body = world.config.body;
+    const e = Number.isFinite(body.orbitalEccentricity) ? body.orbitalEccentricity : 0;
+    const varpi = Number.isFinite(body.periapsisLongitudeDeg) ? body.periapsisLongitudeDeg : 0;
+    if (v1SeasonTable && v1SeasonTable.rows === rows
+      && v1SeasonTable.orbitalEccentricity === e && v1SeasonTable.periapsisLongitudeDeg === varpi) {
+      return v1SeasonTable;
+    }
+    v1SeasonTable = buildSeasonalTemperatureTable({ rows, body });
     return v1SeasonTable;
   }
 

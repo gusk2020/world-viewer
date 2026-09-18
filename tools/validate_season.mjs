@@ -18,8 +18,10 @@ import { buildTemperatureField, latitudeOfRow } from "../js/climate-v1/temperatu
 import { CLIMATE_V1_EARTH_TEMPERATURE_CALIBRATION } from "../js/climate-v1/earth-temperature-calibration.js";
 import {
   SEASONAL_TIME_AXIS, SEASON_PARAMETERS, SURFACE_LAND, SURFACE_SEA,
+  SEASON_SUPPORTED_MAX_ECCENTRICITY,
   buildSeasonalTemperatureTable, buildTemperatureFieldAtPhase, heatCapacityJPerM2K,
-  sampleSeasonalAnomalyC, sampleTemperatureAtPhase, solvePeriodicResponse,
+  harmonicsForEccentricity, sampleOrbit, sampleSeasonalAnomalyC, sampleTemperatureAtPhase,
+  solveEccentricAnomaly, solvePeriodicResponse,
 } from "../js/climate-v1/season.js";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -336,6 +338,176 @@ console.log("\n=== 7. cost ===");
   console.log(`  table size: ${(t.coefficients.byteLength / 1024).toFixed(0)} KB`);
   console.log(`  one anomaly sample: ${perSample.toFixed(0)} ns  (checksum ${acc.toFixed(3)})`);
   ok(t.coefficients.byteLength <= 40 * 1024, "the table fits in the size the design promised", `${(t.coefficients.byteLength / 1024).toFixed(0)} KB`);
+}
+
+console.log("\n=== 8. the orbit: two identities that must hold exactly ===");
+{
+  // 1. Phase 0 is the ascending equinox whatever direction periapsis points.
+  let worstEquinox = 0;
+  for (const e of [0, 0.0167, 0.0934, 0.2, 0.3, 0.4, 0.5, 0.6]) {
+    for (const varpi of [0, 90, 180, 251, 283, 359]) {
+      const o = sampleOrbit({ samples: 360, eccentricity: e, periapsisLongitudeDeg: varpi });
+      // The solar longitude is returned in the true anomaly's branch, so
+      // compare it modulo a full turn.
+      const l0 = Math.abs(Math.atan2(Math.sin(o.solarLongitudeRad[0]), Math.cos(o.solarLongitudeRad[0])));
+      if (l0 > worstEquinox) worstEquinox = l0;
+    }
+  }
+  ok(worstEquinox < 1e-12, "phase 0 is the equinox at every e and every periapsis direction",
+    `worst |solar longitude(0)| = ${worstEquinox.toExponential(1)} rad`);
+
+  // 2. The time mean of (a/r)^2 is exactly 1/sqrt(1-e^2). This checks the
+  //    whole M -> E -> nu -> r chain at once, against an exact result.
+  let worstRel = 0;
+  for (const e of [0, 0.0167, 0.0934, 0.2, 0.3, 0.4, 0.5, 0.6]) {
+    const o = sampleOrbit({ samples: 20000, eccentricity: e, periapsisLongitudeDeg: 283 });
+    let m = 0;
+    for (let i = 0; i < o.distanceFactor.length; i++) m += o.distanceFactor[i];
+    m /= o.distanceFactor.length;
+    const exact = 1 / Math.sqrt(1 - e * e);
+    const rel = Math.abs(m - exact) / exact;
+    if (rel > worstRel) worstRel = rel;
+  }
+  ok(worstRel < 1e-10, "the time mean of (a/r)^2 is 1/sqrt(1-e^2)", `worst relative error ${worstRel.toExponential(1)}`);
+
+  // Kepler's convergence, and that e = 0 never enters the solver.
+  let worstIter = 0;
+  for (const e of [0.0167, 0.0934, 0.3, 0.5, 0.6]) {
+    const o = sampleOrbit({ samples: 3600, eccentricity: e, periapsisLongitudeDeg: 283 });
+    if (o.worstIterations > worstIter) worstIter = o.worstIterations;
+  }
+  ok(worstIter <= 8, "Newton converges in a handful of iterations up to e = 0.6", `worst ${worstIter}`);
+  ok(solveEccentricAnomaly(1.234, 0).iterations === 0, "e = 0 does not enter the Kepler solver at all");
+
+  // Unsupported eccentricity is refused, not clamped.
+  let refused = false;
+  try { sampleOrbit({ samples: 360, eccentricity: 0.7 }); } catch { refused = true; }
+  ok(refused, `e > ${SEASON_SUPPORTED_MAX_ECCENTRICITY} is refused rather than silently clamped`);
+  ok(harmonicsForEccentricity(0) === 4, "e = 0 keeps exactly 4 harmonics");
+}
+
+console.log("\n=== 9. e = 0 is bit-identical to the circular model ===");
+{
+  // The forcing rebuilt here from SEASONAL_TIME_AXIS.declinationRad -- the
+  // circular path, which the orbit layer never touches -- and compared with
+  // what the table builder produced through the orbit layer at e = 0, with a
+  // non-zero periapsis to prove it is ignored when there is no eccentricity.
+  const viaOrbit = buildSeasonalTemperatureTable({
+    rows: ROWS, body: { ...config.body, orbitalEccentricity: 0, periapsisLongitudeDeg: 283 },
+  });
+  let differing = 0;
+  let worst = 0;
+  for (let i = 0; i < table.coefficients.length; i++) {
+    const d = Math.abs(table.coefficients[i] - viaOrbit.coefficients[i]);
+    if (d !== 0) differing++;
+    if (d > worst) worst = d;
+  }
+  ok(differing === 0, "every coefficient is bit-identical at e = 0",
+    `${differing} of ${table.coefficients.length} differ, max |delta| ${worst}`);
+  let worstT = 0;
+  for (let y = 0; y < ROWS; y += 4) {
+    for (const sf of [SURFACE_LAND, SURFACE_SEA]) {
+      for (let k = 0; k < 48; k++) {
+        const p = k / 48;
+        const d = Math.abs(sampleSeasonalAnomalyC(table, y, sf, p) - sampleSeasonalAnomalyC(viaOrbit, y, sf, p));
+        if (d > worstT) worstT = d;
+      }
+    }
+  }
+  ok(worstT === 0, "the sampled anomaly is bit-identical at e = 0", `max |delta| ${worstT.toExponential(1)} C`);
+}
+
+console.log("\n=== 10. harmonic sufficiency across the supported range ===");
+{
+  // The bar is not an invented budget: it is what the circular case already
+  // delivers at four harmonics, since that is the picture already accepted.
+  const refOf = (body) => buildSeasonalTemperatureTable({ rows: 256, body, harmonics: 96, phaseSamples: 1440 });
+  const worstAgainst = (a, b) => {
+    let w = 0;
+    for (let y = 0; y < 256; y += 2) {
+      for (const sf of [SURFACE_LAND, SURFACE_SEA]) {
+        for (let k = 0; k < 120; k++) {
+          const p = k / 120;
+          const d = Math.abs(sampleSeasonalAnomalyC(a, y, sf, p) - sampleSeasonalAnomalyC(b, y, sf, p));
+          if (d > w) w = d;
+        }
+      }
+    }
+    return w;
+  };
+  const circular = { ...config.body, orbitalEccentricity: 0, periapsisLongitudeDeg: 0 };
+  const bar = worstAgainst(refOf(circular), buildSeasonalTemperatureTable({ rows: 256, body: circular }));
+  console.log(`  the accepted bar (e = 0 at H = 4, worst over all rows): ${bar.toFixed(3)} C`);
+  console.log("    e        H   max error C   table KB   build ms");
+  let allWithin = true;
+  for (const e of [0, 0.0167, 0.093, 0.2, 0.3, 0.4, 0.5, 0.6]) {
+    const body = { ...config.body, orbitalEccentricity: e, periapsisLongitudeDeg: 283 };
+    const t0 = process.hrtime.bigint();
+    const t = buildSeasonalTemperatureTable({ rows: ROWS, body });
+    const ms = Number(process.hrtime.bigint() - t0) / 1e6;
+    const err = worstAgainst(refOf(body), buildSeasonalTemperatureTable({ rows: 256, body }));
+    if (err > bar) allWithin = false;
+    console.log(`    ${String(e).padEnd(7)} ${String(t.harmonics).padStart(3)}   ${err.toFixed(3).padStart(9)}   ${(t.coefficients.byteLength / 1024).toFixed(0).padStart(8)}   ${ms.toFixed(0).padStart(8)}`);
+  }
+  ok(allWithin, "every supported eccentricity holds the circular case's own accuracy bar");
+}
+
+console.log("\n=== 11. the orbit produces a hemispheric asymmetry, and periapsis decides its sign ===");
+{
+  const stats = (t, lat, sf) => {
+    let lo = Infinity, hi = -Infinity, pHi = 0, mean = 0;
+    const M = 2880;
+    for (let k = 0; k < M; k++) {
+      const p = k / M;
+      const v = sampleSeasonalAnomalyC(t, rowOf(lat), sf, p);
+      mean += v;
+      if (v > hi) { hi = v; pHi = p; }
+      if (v < lo) lo = v;
+    }
+    return { half: (hi - lo) / 2, pHi, mean: mean / M };
+  };
+  const build = (e, varpi) => buildSeasonalTemperatureTable({
+    rows: ROWS, body: { ...config.body, orbitalEccentricity: e, periapsisLongitudeDeg: varpi },
+  });
+  const CASES = [
+    ["circular            e=0             ", 0, 0],
+    ["Earth-like          e=0.0167 w=283  ", 0.0167, 283],
+    ["Mars-like           e=0.0934 w=251  ", 0.0934, 251],
+    ["N summer at periapsis e=0.3   w=90  ", 0.3, 90],
+    ["S summer at periapsis e=0.3   w=270 ", 0.3, 270],
+    ["equinox at periapsis  e=0.3   w=0   ", 0.3, 0],
+    ["high                e=0.5   w=283   ", 0.5, 283],
+  ];
+  console.log("    case                                    45N            45S           equator    N-S");
+  const got = {};
+  for (const [label, e, varpi] of CASES) {
+    const t = build(e, varpi);
+    const n = stats(t, 45, SURFACE_LAND), sth = stats(t, -45, SURFACE_LAND), q = stats(t, 0, SURFACE_LAND);
+    got[label.trim()] = n.half - sth.half;
+    console.log(`    ${label} ${f1(n.half).padStart(5)}@${n.pHi.toFixed(3)}  ${f1(sth.half).padStart(5)}@${sth.pHi.toFixed(3)}  ${f1(q.half).padStart(5)}   ${(n.half - sth.half >= 0 ? "+" : "") + f2(n.half - sth.half)}`);
+  }
+  ok(Math.abs(got["circular            e=0"]) < 0.2, "a circular orbit is hemispherically symmetric");
+  ok(got["Earth-like          e=0.0167 w=283"] < -0.5,
+    "Earth's own orbit makes the southern summer the stronger one, as it really is");
+  ok(got["N summer at periapsis e=0.3   w=90"] > 20, "northern summer at periapsis makes the north's season the strong one");
+  ok(got["S summer at periapsis e=0.3   w=270"] < -20, "southern summer at periapsis reverses it");
+  ok(Math.abs(got["equinox at periapsis  e=0.3   w=0"]) < 2,
+    "periapsis at an equinox leaves the two hemispheres nearly equal even at e = 0.3");
+
+  // The annual mean stays exactly zero on every orbit -- the property the
+  // whole Stage 2 compatibility argument rests on.
+  let worstMean = 0;
+  for (const [, e, varpi] of CASES) {
+    const t = build(e, varpi);
+    for (let y = 0; y < ROWS; y += 8) {
+      for (const sf of [SURFACE_LAND, SURFACE_SEA]) {
+        const m = Math.abs(stats(t, 90 - ((y + 0.5) * 180) / ROWS, sf).mean);
+        if (m > worstMean) worstMean = m;
+      }
+    }
+  }
+  ok(worstMean < 1e-10, "the annual mean of the anomaly is zero on every orbit tested",
+    `worst |mean| ${worstMean.toExponential(2)} C`);
 }
 
 console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : failures + " CHECK(S) FAILED"}`);
