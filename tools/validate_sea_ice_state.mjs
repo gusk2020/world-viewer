@@ -14,9 +14,11 @@ import { loadOceanMask, loadWaterSurfaceMask } from "./ocean_mask.mjs";
 import { resolveClimateSets } from "../js/climate.js";
 import { buildTerrainField } from "../js/climate-v1/terrain.js";
 import { buildTemperatureField } from "../js/climate-v1/temperature.js";
-import { CLIMATE_V1_EARTH_TEMPERATURE_CALIBRATION } from "../js/climate-v1/earth-temperature-calibration.js";
 import {
-  buildSeasonalTemperatureTable, sampleSeasonalAnomalyC, SURFACE_SEA,
+  CLIMATE_V1_EARTH_TEMPERATURE_CALIBRATION, climateV1SeasonParams,
+} from "../js/climate-v1/earth-temperature-calibration.js";
+import {
+  SEASON_PARAMETERS, buildSeasonalTemperatureTable, sampleSeasonalAnomalyC, SURFACE_SEA,
 } from "../js/climate-v1/season.js";
 import {
   SEA_ICE_DEFAULTS, buildSeaIceCycle, resolveSeaIceParameters,
@@ -49,7 +51,8 @@ const params = { ...sets.sets.find((s) => s.id === sets.defaultId).values, ...CL
 const temperatureField = buildTemperatureField({
   terrainField, axialTiltDegrees: config.body.axialTiltDegrees, params,
 });
-const seasonTable = buildSeasonalTemperatureTable({ rows: 256, body: config.body });
+const seasonParams = climateV1SeasonParams(SEASON_PARAMETERS);
+const seasonTable = buildSeasonalTemperatureTable({ rows: 256, body: config.body, params: seasonParams });
 
 const W = SEA_ICE_DEFAULTS.gridWidth, H = SEA_ICE_DEFAULTS.gridHeight;
 const latOf = (y) => 90 - ((y + 0.5) * 180) / H;
@@ -240,7 +243,9 @@ console.log("\n=== 5. 軸傾斜 ===");
 {
   const rows = [];
   for (const tilt of [0, 10, config.body.axialTiltDegrees, 40]) {
-    const table = buildSeasonalTemperatureTable({ rows: 256, body: { ...config.body, axialTiltDegrees: tilt } });
+    const table = buildSeasonalTemperatureTable({
+      rows: 256, body: { ...config.body, axialTiltDegrees: tilt }, params: seasonParams,
+    });
     const c = buildSeaIceCycle({ temperatureField, terrainField, seasonTable: table, options: { years: 20 } });
     const swing = (i) => { const h = seriesAt(c, i); return Math.max(...h) - Math.min(...h); };
     rows.push({ tilt, north: swing(cellAt(150, 80)), south: swing(cellAt(0, -70)) });

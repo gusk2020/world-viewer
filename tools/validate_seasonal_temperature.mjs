@@ -47,7 +47,9 @@ import { loadOceanMask, loadWaterSurfaceMask } from "./ocean_mask.mjs";
 import { resolveClimateSets } from "../js/climate.js";
 import { buildTerrainField, sampleTerrainAt } from "../js/climate-v1/terrain.js";
 import { buildTemperatureField, sampleTemperatureAt } from "../js/climate-v1/temperature.js";
-import { CLIMATE_V1_EARTH_TEMPERATURE_CALIBRATION } from "../js/climate-v1/earth-temperature-calibration.js";
+import {
+  CLIMATE_V1_EARTH_TEMPERATURE_CALIBRATION, climateV1SeasonParams,
+} from "../js/climate-v1/earth-temperature-calibration.js";
 import {
   SEASON_PARAMETERS, SURFACE_LAND, SURFACE_SEA,
   buildSeasonalTemperatureTable, harmonicsForEccentricity, dampingWPerM2KForSurface,
@@ -96,7 +98,11 @@ const MONTHS = monthIntervals();
 // 3. The season table, at Earth's real orbit.
 const ROWS = 512;
 const calibrationBody = { ...config.body, ...EARTH_CALIBRATION_ORBIT };
-const table = buildSeasonalTemperatureTable({ rows: ROWS, body: calibrationBody });
+// Climate v1's adopted Earth calibration: lambda_land 8, lambda_ocean 10.
+const EARTH_SEASON_PARAMS = climateV1SeasonParams(SEASON_PARAMETERS);
+const table = buildSeasonalTemperatureTable({
+  rows: ROWS, body: calibrationBody, params: EARTH_SEASON_PARAMS,
+});
 
 // The month mean of the seasonal anomaly, per (row, surface).
 //
@@ -626,7 +632,9 @@ function metricsFor(seasonParams) {
   };
   return { land: mk(land), ocean: mk(ocean), timescaleDays: t.timescaleDays };
 }
-const base = metricsFor(SEASON_PARAMETERS);
+// Around the ADOPTED calibration (lambda_land 8 / lambda_ocean 10), so this
+// diagnostic and the headline table above describe the same model.
+const base = metricsFor(EARTH_SEASON_PARAMS);
 say("  " + "variant".padEnd(26) + pad("land amp", 10) + pad("d amp", 8) + pad("land ph", 9) + pad("d ph", 8)
   + pad("sea amp", 10) + pad("d amp", 8) + pad("sea ph", 9) + pad("d ph", 8));
 const sensitivity = [];
@@ -646,10 +654,10 @@ const showVariant = (label, mm) => {
     + pad(f1(r.dLandPhase), 8) + pad(f2(r.seaAmp), 10) + pad(f2(r.dSeaAmp), 8) + pad(f1(r.seaPhase), 9)
     + pad(f1(r.dSeaPhase), 8));
 };
-showVariant("current (lambda 8/4m/30m)", base);
+showVariant("adopted (8|10 /4m/30m)", base);
 for (const [key, label] of [["seasonalDampingWPerM2K", "lambda"], ["soilDepthM", "soilDepth"], ["mixedLayerDepthM", "mixedLayer"]]) {
   for (const sign of [-0.1, +0.1]) {
-    const p = { ...SEASON_PARAMETERS, [key]: SEASON_PARAMETERS[key] * (1 + sign) };
+    const p = { ...EARTH_SEASON_PARAMS, [key]: EARTH_SEASON_PARAMS[key] * (1 + sign) };
     showVariant(`${label} ${sign > 0 ? "+" : "-"}10%  (${f2(p[key])})`, metricsFor(p));
   }
 }

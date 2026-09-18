@@ -8,9 +8,12 @@ import { buildTerrainField } from "./climate-v1/terrain.js";
 import { buildClimateV1Preview, PREVIEW_GRID } from "./climate-v1/preview.js";
 import { EVAPORATIVE_COOLING_PREVIEW_C } from "./climate-v1/evaporative-cooling.js";
 import { buildOracleWind } from "./climate-v1/oracle-wind.js";
-import { CLIMATE_V1_EARTH_TEMPERATURE_CALIBRATION } from "./climate-v1/earth-temperature-calibration.js";
 import {
-  SEASONAL_TIME_AXIS, buildSeasonalTemperatureTable, buildTemperatureFieldAtPhase,
+  CLIMATE_V1_EARTH_TEMPERATURE_CALIBRATION, climateV1SeasonParams,
+} from "./climate-v1/earth-temperature-calibration.js";
+import {
+  SEASON_PARAMETERS, SEASONAL_TIME_AXIS, buildSeasonalTemperatureTable,
+  buildTemperatureFieldAtPhase,
 } from "./climate-v1/season.js";
 import {
   buildSeaIceCycle, seaIceFractionSlice, sampleSeaIceThicknessM,
@@ -536,7 +539,12 @@ async function main() {
       && v1SeasonTable.axialTiltDegrees === body.axialTiltDegrees) {
       return v1SeasonTable;
     }
-    v1SeasonTable = buildSeasonalTemperatureTable({ rows, body });
+    // Climate v1's Earth calibration reaches the season table only here --
+    // the calibration object everything else spreads goes to the *climate*
+    // params, which this function does not take.
+    v1SeasonTable = buildSeasonalTemperatureTable({
+      rows, body, params: climateV1SeasonParams(SEASON_PARAMETERS),
+    });
     return v1SeasonTable;
   }
 

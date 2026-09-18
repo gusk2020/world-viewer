@@ -192,3 +192,57 @@ falling from +5.3 to +1.3 days**. What it does not fix is unchanged from the
 baseline document — the Arctic Ocean needs a different heat capacity from the
 North Pacific (sea ice, not a damping), and there is still no longitudinal SST
 structure, so the North Atlantic stays parked.
+
+## 11. Adopted (2026-09-18)
+
+`oceanSeasonalDampingWPerM2K: 10` is now Earth's Climate v1 calibration. It
+lives in `js/climate-v1/earth-temperature-calibration.js` as
+`CLIMATE_V1_EARTH_SEASON_CALIBRATION` and **not** in any world's
+`config.json`. λ_land stays 8, `soilDepthM` 4 m, `mixedLayerDepthM` 30 m;
+Stage 2, Stage 4, Stage 5, the sea-ice parameters, the orbital parameters and
+the UI are untouched.
+
+**It needed one line of plumbing, and that is worth stating rather than
+hiding.** The three values already in that file are spread into the *climate*
+params on their way to `buildTemperatureField`; the season table takes its own
+parameter object and had never been given one, so a value written into that
+file alone would have been **inert** — the fifth instance in this project of a
+parameter that cannot reach the code path it is supposed to affect
+(`evaporationHalfC`, `advectionRangeKm`, `monsoonStrength`,
+`cellRotationExponent`). `climateV1SeasonParams(SEASON_PARAMETERS)` is the one
+place that carries it across, and three call sites now use it: `js/main.js`'s
+`ensureSeasonTable`, `tools/validate_seasonal_temperature.mjs` and
+`tools/validate_sea_ice_state.mjs`. `tools/validate_season.mjs` deliberately
+does **not** — it tests the season module itself, so leaving it on the module
+defaults keeps it as a guard proving an unset world is unchanged, and its
+output is indeed identical but for timings.
+
+**The size of the gain, honestly.** On the grid search's fit set: ocean
+amplitude MAE 1.60 → 1.56 C (**2.5%**), ocean phase MAE 12.7 → 11.8 d
+(**7%**). Over all 42,553 ocean cells the validator now reports amplitude MAE
+1.72 → 1.68 C, phase MAE 13.0 → 12.0 d, and the effect that actually matters,
+**ocean phase bias +5.9 → +1.9 days**. Every ocean group's bias moves toward
+zero, which is the signature of a timescale change rather than a compensating
+error; `tau_sea` is 188.1 → 150.5 d.
+
+**The land side is exactly unchanged**, checked on the drawn field and not
+only on the coefficients: over five orbital phases of the real 2048×1024 grid,
+**0 of 3,593,575 land-cell comparisons differ** (worst |ΔT| over land exactly
+0.0 C), while sea cells move by at most 0.523 C. In the browser the annual
+frame still hashes `1799c75758ce`, the panels are unchanged (41 px top,
+214 px bottom) and there are no console errors; the seasonal frame changes, as
+it must.
+
+**Sea ice moves slightly, within the range already recorded here.** Global
+annual maximum 9.19% → 9.05% of the globe, minimum 3.23% → 3.29%, 80N annual
+max/min 2.81/2.62 → 2.86/2.66 m, Bering 0.71 → 0.70 m and still seasonal, 70S
+1.25/0.37 → 1.26/0.43 m. Every representative point keeps its perennial /
+seasonal / none class. One diagnostic did shift: the *fraction* now reaches a
+periodic steady state in **3 years rather than 2** (the year-boundary
+difference at 2 years is 1.5e-2 against the old 1.7e-3), which is a slower
+approach, not a failure to converge. `feedsBackIntoTemperature` stays `false`.
+
+**Unchanged and still unsolved**: the Arctic Ocean needs a *different* heat
+capacity from the North Pacific — sea ice as a heat capacity, not a damping —
+and there is no longitudinal SST structure, so the North Atlantic / Europe
+block stays parked. This adoption does not touch either.

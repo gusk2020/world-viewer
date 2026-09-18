@@ -3550,11 +3550,33 @@ stays false.
 wall-clock timings** (three `ms`/`ns` lines and one `build ms` column) with
 every checksum and assertion identical.
 
-**Verdict: READY** to put `oceanSeasonalDampingWPerM2K: 10` into Earth's
-Climate v1 calibration -- stated plainly, that buys 2.5% of amplitude and 7% of
-phase MAE, and its real result is the ocean phase bias falling from +5.3 to
-+1.3 days. It does not fix the Arctic (that needs sea ice as a heat capacity)
-and creates no longitudinal SST structure, so the North Atlantic stays parked.
+**Adopted.** `oceanSeasonalDampingWPerM2K: 10` is now Earth's Climate v1
+calibration, in `js/climate-v1/earth-temperature-calibration.js` (as
+`CLIMATE_V1_EARTH_SEASON_CALIBRATION`) and **never in a world config**. Stated
+plainly, that buys 2.5% of amplitude and 7% of phase MAE, and its real result is
+the ocean phase bias falling from +5.3 to +1.3 days (globally +5.9 -> +1.9). It
+does not fix the Arctic (that needs sea ice as a heat capacity) and creates no
+longitudinal SST structure, so the North Atlantic stays parked.
+
+**It was not a one-line change, because that one line would have been inert.**
+The three values already in that file are spread into the *climate* params on
+their way to `buildTemperatureField`; `buildSeasonalTemperatureTable` takes its
+own parameter object and every caller passed none. So
+`climateV1SeasonParams(SEASON_PARAMETERS)` is the one place that carries the
+calibration across, used by `main.js`'s `ensureSeasonTable`,
+`validate_seasonal_temperature.mjs` and `validate_sea_ice_state.mjs`.
+`validate_season.mjs` deliberately stays on the module defaults, so it remains
+the guard that an unset world is unchanged. This is the fifth time this project
+has caught a parameter that could not reach the code path it names.
+
+**Land is exactly unchanged on the drawn field**, not only in the coefficients:
+0 of 3,593,575 land-cell comparisons differ across five orbital phases of the
+real 2048x1024 grid, worst |dT| over land exactly 0.0 C, while sea moves at most
+0.523 C. The browser's annual frame still hashes `1799c75758ce`, panels 41/214
+px, no console errors. Sea ice moves within the range already recorded: global
+annual maximum 9.19% -> 9.05%, minimum 3.23% -> 3.29%, every representative
+point keeping its class, with the fraction's periodic steady state now reached
+in 3 years rather than 2.
 
 ## Climate v1: the seasonal cycle (the first time axis)
 

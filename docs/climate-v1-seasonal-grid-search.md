@@ -237,3 +237,12 @@ and it is mechanism rather than parameter: a heat capacity that differs
 between maritime and continental land, and one that differs between ice-covered
 and open ocean. `js/climate-v1/sea-ice-state.js` already computes the thickness
 the second of those needs and deliberately does not feed it back.
+
+## Afterword (2026-09-18)
+
+The three variables stayed at **8 / 4 m / 30 m** and still do. What moved
+instead was the assumption behind this whole grid: λ was being asked to serve
+land and ocean at once. Splitting it and adopting **λ_ocean = 10** is recorded
+in `docs/climate-v1-ocean-damping-split.md` §11 — the land side of every number
+in this document is unchanged by it, and the ocean phase bias it was fighting
+falls from +5.3 to +1.3 days on this same fit set.

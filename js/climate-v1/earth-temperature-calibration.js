@@ -33,3 +33,29 @@ export const CLIMATE_V1_EARTH_TEMPERATURE_CALIBRATION = {
   // docs/climate-v1-surface-lapse-rate.md.
   surfaceLapseRateCPerKm: 5.2,
 };
+
+// The seasonal damping over water, separate from `seasonalDampingWPerM2K`
+// (8) which stays the land value. EMPIRICAL, and an Earth calibration --
+// not a universal planetary constant. lambda is dF/dT, and over water the
+// latent term responds far more strongly than over land (unlimited supply,
+// Clausius-Clapeyron), so lambda_ocean > lambda_land is a statement about
+// surfaces rather than a fudge.
+//
+// What it buys, honestly, on the grid search's own fit set: ocean amplitude
+// MAE 1.60 -> 1.56 C (2.5%), ocean phase MAE 12.7 -> 11.8 d (7%), and the
+// real effect -- ocean phase bias +5.3 -> +1.3 d. The land side is exactly
+// unchanged. See docs/climate-v1-ocean-damping-split.md.
+export const CLIMATE_V1_EARTH_SEASON_CALIBRATION = {
+  oceanSeasonalDampingWPerM2K: 10,
+};
+
+// The season module takes its own parameter object, so -- unlike the three
+// values above, which are spread into the *climate* params on their way to
+// `buildTemperatureField` -- an ocean damping written here would never reach
+// `buildSeasonalTemperatureTable` on its own. This is the one place that
+// carries it across; call it with `SEASON_PARAMETERS` wherever Climate v1
+// builds Earth's season table. (The season module is deliberately not
+// imported here: this file must stay a leaf that anything can read.)
+export function climateV1SeasonParams(seasonParameters) {
+  return { ...seasonParameters, ...CLIMATE_V1_EARTH_SEASON_CALIBRATION };
+}
