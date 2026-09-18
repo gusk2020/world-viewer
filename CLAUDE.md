@@ -3394,6 +3394,84 @@ Antarctica's 9.3 C error over 6629 cells drags lambda upward and makes Siberia
 and NE Asia worse -- which is why ice in / ice out must both be reported and
 the three parked regions stay out of any fit.
 
+## Climate v1: the first coarse grid search, and why nothing was adopted
+
+Full write-up: `docs/climate-v1-seasonal-grid-search.md`. Tools:
+`tools/search_seasonal_temperature.mjs`, plus `tools/seasonal_calendar.mjs`
+(the calendar and the harmonic fit, now shared with the validator so the
+measurement and the search cannot drift -- the validator's output is
+byte-identical after the extraction). Candidates:
+`worlds/kasoku-sekai/seasonal-candidates.json`. **Nothing is adopted**: lambda
+is still 8, `soilDepthM` 4, `mixedLayerDepthM` 30; no world config or physics
+file changed; V0.8 still reads 63.4% / 10.2% and every Climate v1 suite passes.
+
+**210 combinations in 5 seconds**, because the forcing does not depend on any
+of the three variables -- its Fourier coefficients are computed once and each
+candidate is a handful of multiplies. Checked rather than trusted: at three
+probe points it reproduces `buildSeasonalTemperatureTable` to **exactly
+0.0e+0 C**.
+
+Seasonal anomalies only; ice, Antarctica, Greenland and the North Atlantic /
+Europe block (13,558 of 64,779 cells) are out of the fit and reported as
+validation. Calibration is the checkerboard's even half, hold-out the odd
+half, and they agree to **0.01 C and 0.0 days** at the baseline.
+
+**55 candidates are Pareto-optimal and exactly 0 are admissible.** The reasons
+are three, and each is a measurement:
+
+- **Both land parameters are already at their own minima.** Sweeping lambda at
+  the baseline depths gives land amplitude MAE 4.85 / 3.50 / 2.73 / **2.48** /
+  2.55 / 2.76 / 3.29 at 5/6/7/8/9/10/12 -- one minimum, landing on the value
+  that was already there, with nothing told what lambda is. `soilDepthM` is
+  the same: 2.555 / 2.521 / **2.479** / 2.482 / 2.539 at 1/2/4/6/8 m, and its
+  phase MAE minimises at 4 m too. Same self-validating pattern as Stage 6's
+  agreement peaking at Earth's own 14 C.
+- **The ocean's amplitude and its phase want opposite heat capacities.**
+  Monotonically: the calibration ocean amplitude MAE wants **50 m** (1.26
+  against 30 m's 1.60) while the phase MAE wants **20 m** (12.1 d against
+  12.7). 30 m already sits between them, and a single layer cannot give both.
+- **Every candidate that looks better is lambda absorbing a parked error.**
+
+**The compensating error, caught in the act.** Lambda correlates with
+Antarctica's amplitude MAE at **r = -0.924** (17.93 at lambda 5 falling to
+3.25 at 12), so Antarctica pulls lambda **up**; NE Asia's bias runs +2.69 to
+**-9.66** over the same range, so it pulls **down**. With the parked regions
+excluded the calibration optimum is **lambda = 8**; admitting them moves it to
+**lambda = 10**. The exclusion is doing exactly its job. **A first version of
+this probe was vacuous and that is worth remembering**: `--include-antarctica`
+changed nothing, because Antarctica is essentially all ice class and the ice
+exclusion had already removed it -- the flag now re-admits ice, Antarctica,
+Greenland and the North Atlantic block together.
+
+**The Arctic/mid-latitude trade, measured.** A 10 m mixed layer collapses the
+Arctic's phase bias from +23.6 d to **+1.6 d** and its amplitude MAE from 6.77
+to 4.96 -- a large, real gain in the worst region on the globe -- while the
+30-60 ocean goes 2.45 -> **7.25**. Not a parameter to tune: the Arctic needs a
+*different* heat capacity from the North Pacific.
+
+**lambda and `soilDepthM` are confounded in amplitude and separated by
+phase**, which the calibration audit predicted and this grid now shows as a
+picture: (7, 8 m), (8, 4 m) and (9, 1 m) score 2.476 / 2.479 / 2.489 on
+amplitude at tau_land 45.6 / 27.2 / 15.7 days -- indistinguishable -- while
+their phase MAE is 14.00 / **8.34** / 13.93. Across 1-8 m of soil the
+amplitude MAE moves 0.075 C and the phase MAE 4.30 d, so phase is the only
+handle on it and the pair is identifiable only together.
+
+**The trap candidate worth knowing: 9 / 6 / 30.** It improves three of the
+four objectives and halves Greenland's error, and it is still rejected --
+land amplitude MAE 2.48 -> 2.62 and NE Asia 4.91 -> **6.87**. That is the
+compensating error arriving through a candidate rather than through a fit.
+
+**Verdict: NOT_READY, stay at 8 / 4 m / 30 m, and a finer grid is not the next
+step.** The Pareto front spans the whole range of lambda and `soilDepthM`,
+which means they are trading against each other rather than being pinned; a
+local refinement between 20 and 40 m of mixed layer is bounded at about 0.3 C
+of amplitude against about 2 days of phase, smaller than the structural errors
+already present. What would move these numbers is mechanism: a heat capacity
+that differs between maritime and continental land, and one that differs
+between ice-covered and open ocean -- and `js/climate-v1/sea-ice-state.js`
+already computes the thickness the second needs.
+
 ## Climate v1: the seasonal cycle (the first time axis)
 
 Full write-up: `docs/climate-v1-seasonal-cycle.md`. Files:

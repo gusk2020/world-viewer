@@ -1,0 +1,2331 @@
+{
+  "_note": "Coarse grid search over Climate v1's three seasonal parameters. NOTHING IS ADOPTED. Seasonal anomalies only; ice, Antarctica, Greenland and the North Atlantic/Europe block are excluded from the fit and reported as validation. See docs/climate-v1-seasonal-grid-search.md.",
+  "grid": {
+    "seasonalDampingWPerM2K": [
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      12
+    ],
+    "soilDepthM": [
+      1,
+      2,
+      4,
+      6,
+      8
+    ],
+    "mixedLayerDepthM": [
+      10,
+      20,
+      30,
+      40,
+      50,
+      75
+    ]
+  },
+  "baselineValues": {
+    "seasonalDampingWPerM2K": 8,
+    "soilDepthM": 4,
+    "mixedLayerDepthM": 30
+  },
+  "orbit": {
+    "axialTiltDegrees": 23.44,
+    "orbitalEccentricity": 0.0167,
+    "periapsisLongitudeDeg": 283
+  },
+  "includeParked": false,
+  "evaluations": 210,
+  "cells": {
+    "total": 64779,
+    "calibration": 25593,
+    "holdOut": 25628,
+    "teacherMissing": 21
+  },
+  "baseline": {
+    "values": {
+      "seasonalDampingWPerM2K": 8,
+      "soilDepthM": 4,
+      "mixedLayerDepthM": 30
+    },
+    "tauLandDays": 27.199074074074073,
+    "tauSeaDays": 188.0787037037037,
+    "calibration": {
+      "land": {
+        "n": 6637,
+        "teacherAmp": 9.11711867437052,
+        "modelAmp": 9.84032156021791,
+        "ampBias": 0.7232028858472108,
+        "ampMae": 2.4790253665525173,
+        "phaseBias": -0.6734014893315854,
+        "phaseMae": 8.341667950627452,
+        "phaseN": 6074
+      },
+      "ocean": {
+        "n": 18956,
+        "teacherAmp": 2.5561776593778314,
+        "modelAmp": 3.2746789720259524,
+        "ampBias": 0.71850131264803,
+        "ampMae": 1.601427916544473,
+        "phaseBias": 5.3032174576900815,
+        "phaseMae": 12.66740566465577,
+        "phaseN": 16285
+      }
+    },
+    "holdOut": {
+      "land": {
+        "n": 6641,
+        "teacherAmp": 9.139721743360388,
+        "modelAmp": 9.865794101892755,
+        "ampBias": 0.7260723585321853,
+        "ampMae": 2.4908752325076917,
+        "phaseBias": -0.7155947155581944,
+        "phaseMae": 8.339853704404408,
+        "phaseN": 6082
+      },
+      "ocean": {
+        "n": 18987,
+        "teacherAmp": 2.558615541564912,
+        "modelAmp": 3.2737577921846666,
+        "ampBias": 0.7151422506196801,
+        "ampMae": 1.6007998008879714,
+        "phaseBias": 5.311615931984938,
+        "phaseMae": 12.67279866946316,
+        "phaseN": 16308
+      }
+    },
+    "regions": {
+      "antarctica": {
+        "n": 6629,
+        "ampBias": 9.268346364270716,
+        "ampMae": 9.268346364270716,
+        "phaseBias": 9.97589185764878,
+        "phaseMae": 10.244634197082771
+      },
+      "greenland": {
+        "n": 799,
+        "ampBias": 5.061220900540869,
+        "ampMae": 5.084275280794172,
+        "phaseBias": -8.866875758615038,
+        "phaseMae": 8.877262780766701
+      },
+      "northAtlanticEurope": {
+        "n": 2100,
+        "ampBias": 4.264751166083397,
+        "ampMae": 4.63091054349055,
+        "phaseBias": -0.6652311465658958,
+        "phaseMae": 8.474135618393559
+      },
+      "neAsia": {
+        "n": 1890,
+        "ampBias": -4.50042606029656,
+        "ampMae": 4.906954453501384,
+        "phaseBias": -2.5681818971993273,
+        "phaseMae": 3.0752230298293735
+      },
+      "arcticOcean": {
+        "n": 6905,
+        "ampBias": -4.87258564030116,
+        "ampMae": 6.770576407273197,
+        "phaseBias": 23.554788536148415,
+        "phaseMae": 23.536248987452115
+      },
+      "midLatOcean": {
+        "n": 15523,
+        "ampBias": 1.835670055343792,
+        "ampMae": 2.4504100824559423,
+        "phaseBias": 4.427996583940518,
+        "phaseMae": 6.657797988942321
+      }
+    },
+    "tropics": {
+      "land": {
+        "teacherH1": 4.420219088618605,
+        "modelH1": 5.607970455622343,
+        "teacherH2": 0.9531341978619973,
+        "modelH2": 0.9313177491868014,
+        "teacherRatio": 0.44741939309695505,
+        "modelRatio": 0.4078991609683801,
+        "phase2Days": 1.2191166129720614
+      },
+      "ocean": {
+        "teacherH1": 1.5834998701037093,
+        "modelH1": 1.7235430473642066,
+        "teacherH2": 0.27930840600313234,
+        "modelH2": 0.19274725573000284,
+        "teacherRatio": 0.3514959014347933,
+        "modelRatio": 0.3023437396332297,
+        "phase2Days": 2.9618911448261183
+      },
+      "deepLand": {
+        "teacherH1": 0.921537112756959,
+        "modelH1": 2.06175251307269,
+        "teacherH2": 0.5733482672590187,
+        "modelH2": 1.0555620523927267,
+        "teacherRatio": 0.9016047132667839,
+        "modelRatio": 0.9842418479118086,
+        "phase2Days": -8.95268175387363
+      }
+    }
+  },
+  "paretoFront": [
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 5,
+        "soilDepthM": 1,
+        "mixedLayerDepthM": 50
+      },
+      "tauLandDays": 28.24074074074074,
+      "tauSeaDays": 486.1111111111111,
+      "objectivesCalibration": {
+        "landAmpMae": 6.526877601124219,
+        "landPhaseMae": 8.216505183497,
+        "oceanAmpMae": 1.2597007027846634,
+        "oceanPhaseMae": 18.82552784676613
+      },
+      "holdOut": {
+        "landAmpMae": 6.54435778933996,
+        "landPhaseMae": 8.218281155014088,
+        "oceanAmpMae": 1.2612185244814853,
+        "oceanPhaseMae": 18.828134375797582
+      },
+      "regionAmpMae": {
+        "antarctica": 21.57783061852962,
+        "greenland": 16.60017648168834,
+        "northAtlanticEurope": 10.854183670625638,
+        "neAsia": 5.732686323795935,
+        "arcticOcean": 7.88498665302042,
+        "midLatOcean": 1.5407826186374185
+      },
+      "deepTropicsRatio": 0.9735614565590256,
+      "rejectedBecause": [
+        "calibration objective 0 worse",
+        "calibration objective 3 worse",
+        "hold-out objective 0 worse",
+        "hold-out objective 3 worse",
+        "antarctica much worse",
+        "greenland much worse",
+        "northAtlanticEurope much worse",
+        "arcticOcean much worse"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 5,
+        "soilDepthM": 2,
+        "mixedLayerDepthM": 50
+      },
+      "tauLandDays": 33.333333333333336,
+      "tauSeaDays": 486.1111111111111,
+      "objectivesCalibration": {
+        "landAmpMae": 5.9755033139112435,
+        "landPhaseMae": 8.775921166869068,
+        "oceanAmpMae": 1.2597007027846634,
+        "oceanPhaseMae": 18.82552784676613
+      },
+      "holdOut": {
+        "landAmpMae": 5.991343074491433,
+        "landPhaseMae": 8.78782221419029,
+        "oceanAmpMae": 1.2612185244814853,
+        "oceanPhaseMae": 18.828134375797582
+      },
+      "regionAmpMae": {
+        "antarctica": 20.398178853984408,
+        "greenland": 15.493171593565744,
+        "northAtlanticEurope": 10.221028482325694,
+        "neAsia": 4.778234446730244,
+        "arcticOcean": 7.88498665302042,
+        "midLatOcean": 1.5407826186374185
+      },
+      "deepTropicsRatio": 0.9250877724550042,
+      "rejectedBecause": [
+        "calibration objective 0 worse",
+        "calibration objective 1 worse",
+        "calibration objective 3 worse",
+        "hold-out objective 0 worse",
+        "hold-out objective 1 worse",
+        "hold-out objective 3 worse",
+        "antarctica much worse",
+        "greenland much worse",
+        "northAtlanticEurope much worse",
+        "arcticOcean much worse"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 5,
+        "soilDepthM": 4,
+        "mixedLayerDepthM": 50
+      },
+      "tauLandDays": 43.51851851851852,
+      "tauSeaDays": 486.1111111111111,
+      "objectivesCalibration": {
+        "landAmpMae": 4.849430713895251,
+        "landPhaseMae": 12.953053298990039,
+        "oceanAmpMae": 1.2597007027846634,
+        "oceanPhaseMae": 18.82552784676613
+      },
+      "holdOut": {
+        "landAmpMae": 4.862297579651985,
+        "landPhaseMae": 12.959276710212515,
+        "oceanAmpMae": 1.2612185244814853,
+        "oceanPhaseMae": 18.828134375797582
+      },
+      "regionAmpMae": {
+        "antarctica": 17.926583720338982,
+        "greenland": 13.174882551291962,
+        "northAtlanticEurope": 8.89487323995402,
+        "neAsia": 3.039045110790309,
+        "arcticOcean": 7.88498665302042,
+        "midLatOcean": 1.5407826186374185
+      },
+      "deepTropicsRatio": 0.8472809732381663,
+      "rejectedBecause": [
+        "calibration objective 0 worse",
+        "calibration objective 1 worse",
+        "calibration objective 3 worse",
+        "hold-out objective 0 worse",
+        "hold-out objective 1 worse",
+        "hold-out objective 3 worse",
+        "antarctica much worse",
+        "greenland much worse",
+        "northAtlanticEurope much worse",
+        "arcticOcean much worse"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 5,
+        "soilDepthM": 6,
+        "mixedLayerDepthM": 50
+      },
+      "tauLandDays": 53.7037037037037,
+      "tauSeaDays": 486.1111111111111,
+      "objectivesCalibration": {
+        "landAmpMae": 3.861677002293287,
+        "landPhaseMae": 18.042433907008252,
+        "oceanAmpMae": 1.2597007027846634,
+        "oceanPhaseMae": 18.82552784676613
+      },
+      "holdOut": {
+        "landAmpMae": 3.8712280755138684,
+        "landPhaseMae": 18.066671898161527,
+        "oceanAmpMae": 1.2612185244814853,
+        "oceanPhaseMae": 18.828134375797582
+      },
+      "regionAmpMae": {
+        "antarctica": 15.490159081237282,
+        "greenland": 10.890379705307538,
+        "northAtlanticEurope": 7.58789735487484,
+        "neAsia": 2.325800722707858,
+        "arcticOcean": 7.88498665302042,
+        "midLatOcean": 1.5407826186374185
+      },
+      "deepTropicsRatio": 0.791397437092662,
+      "rejectedBecause": [
+        "calibration objective 0 worse",
+        "calibration objective 1 worse",
+        "calibration objective 3 worse",
+        "hold-out objective 0 worse",
+        "hold-out objective 1 worse",
+        "hold-out objective 3 worse",
+        "antarctica much worse",
+        "greenland much worse",
+        "northAtlanticEurope much worse",
+        "arcticOcean much worse",
+        "deep-tropics H2/H1 moved"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 5,
+        "soilDepthM": 8,
+        "mixedLayerDepthM": 50
+      },
+      "tauLandDays": 63.888888888888886,
+      "tauSeaDays": 486.1111111111111,
+      "objectivesCalibration": {
+        "landAmpMae": 3.115824446489595,
+        "landPhaseMae": 22.786766770444125,
+        "oceanAmpMae": 1.2597007027846634,
+        "oceanPhaseMae": 18.82552784676613
+      },
+      "holdOut": {
+        "landAmpMae": 3.1230995670430417,
+        "landPhaseMae": 22.77210125996683,
+        "oceanAmpMae": 1.2612185244814853,
+        "oceanPhaseMae": 18.828134375797582
+      },
+      "regionAmpMae": {
+        "antarctica": 13.218372844130133,
+        "greenland": 8.760626303459496,
+        "northAtlanticEurope": 6.369384536573873,
+        "neAsia": 2.734316964689983,
+        "arcticOcean": 7.88498665302042,
+        "midLatOcean": 1.5407826186374185
+      },
+      "deepTropicsRatio": 0.751473789334715,
+      "rejectedBecause": [
+        "calibration objective 0 worse",
+        "calibration objective 1 worse",
+        "calibration objective 3 worse",
+        "hold-out objective 0 worse",
+        "hold-out objective 1 worse",
+        "hold-out objective 3 worse",
+        "antarctica much worse",
+        "greenland much worse",
+        "northAtlanticEurope much worse",
+        "arcticOcean much worse",
+        "deep-tropics H2/H1 moved"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 6,
+        "soilDepthM": 2,
+        "mixedLayerDepthM": 50
+      },
+      "tauLandDays": 27.77777777777778,
+      "tauSeaDays": 405.0925925925926,
+      "objectivesCalibration": {
+        "landAmpMae": 4.104374353332071,
+        "landPhaseMae": 8.260045665265004,
+        "oceanAmpMae": 1.2603220832992612,
+        "oceanPhaseMae": 17.81237391883392
+      },
+      "holdOut": {
+        "landAmpMae": 4.1149993694294,
+        "landPhaseMae": 8.260545206082357,
+        "oceanAmpMae": 1.2618417132078479,
+        "oceanPhaseMae": 17.81483721223071
+      },
+      "regionAmpMae": {
+        "antarctica": 16.128808658585402,
+        "greenland": 11.49226896994978,
+        "northAtlanticEurope": 7.930910588496074,
+        "neAsia": 2.3874441628103096,
+        "arcticOcean": 7.891767746294553,
+        "midLatOcean": 1.5387364141330022
+      },
+      "deepTropicsRatio": 0.9782781060962049,
+      "rejectedBecause": [
+        "calibration objective 0 worse",
+        "calibration objective 3 worse",
+        "hold-out objective 0 worse",
+        "hold-out objective 3 worse",
+        "antarctica much worse",
+        "greenland much worse",
+        "northAtlanticEurope much worse",
+        "arcticOcean much worse"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 6,
+        "soilDepthM": 4,
+        "mixedLayerDepthM": 50
+      },
+      "tauLandDays": 36.26543209876544,
+      "tauSeaDays": 405.0925925925926,
+      "objectivesCalibration": {
+        "landAmpMae": 3.5041320071896958,
+        "landPhaseMae": 9.757180143783978,
+        "oceanAmpMae": 1.2603220832992612,
+        "oceanPhaseMae": 17.81237391883392
+      },
+      "holdOut": {
+        "landAmpMae": 3.5127506171695293,
+        "landPhaseMae": 9.761821258324211,
+        "oceanAmpMae": 1.2618417132078479,
+        "oceanPhaseMae": 17.81483721223071
+      },
+      "regionAmpMae": {
+        "antarctica": 14.47326884299326,
+        "greenland": 9.938821863645213,
+        "northAtlanticEurope": 7.042385742813192,
+        "neAsia": 2.3902808978093737,
+        "arcticOcean": 7.891767746294553,
+        "midLatOcean": 1.5387364141330022
+      },
+      "deepTropicsRatio": 0.9001214020085058,
+      "rejectedBecause": [
+        "calibration objective 0 worse",
+        "calibration objective 1 worse",
+        "calibration objective 3 worse",
+        "hold-out objective 0 worse",
+        "hold-out objective 1 worse",
+        "hold-out objective 3 worse",
+        "antarctica much worse",
+        "greenland much worse",
+        "northAtlanticEurope much worse",
+        "arcticOcean much worse"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 6,
+        "soilDepthM": 6,
+        "mixedLayerDepthM": 50
+      },
+      "tauLandDays": 44.75308641975308,
+      "tauSeaDays": 405.0925925925926,
+      "objectivesCalibration": {
+        "landAmpMae": 2.9875153712085694,
+        "landPhaseMae": 13.561264066893909,
+        "oceanAmpMae": 1.2603220832992612,
+        "oceanPhaseMae": 17.81237391883392
+      },
+      "holdOut": {
+        "landAmpMae": 2.99522495684144,
+        "landPhaseMae": 13.567119189829675,
+        "oceanAmpMae": 1.2618417132078479,
+        "oceanPhaseMae": 17.81483721223071
+      },
+      "regionAmpMae": {
+        "antarctica": 12.749293199703216,
+        "greenland": 8.321935795356852,
+        "northAtlanticEurope": 6.11743251663124,
+        "neAsia": 2.916600662887846,
+        "arcticOcean": 7.891767746294553,
+        "midLatOcean": 1.5387364141330022
+      },
+      "deepTropicsRatio": 0.839458824306519,
+      "rejectedBecause": [
+        "calibration objective 0 worse",
+        "calibration objective 1 worse",
+        "calibration objective 3 worse",
+        "hold-out objective 0 worse",
+        "hold-out objective 1 worse",
+        "hold-out objective 3 worse",
+        "antarctica much worse",
+        "greenland much worse",
+        "northAtlanticEurope much worse",
+        "arcticOcean much worse"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 6,
+        "soilDepthM": 8,
+        "mixedLayerDepthM": 50
+      },
+      "tauLandDays": 53.24074074074074,
+      "tauSeaDays": 405.0925925925926,
+      "objectivesCalibration": {
+        "landAmpMae": 2.6353475824318915,
+        "landPhaseMae": 17.813789324839153,
+        "oceanAmpMae": 1.2603220832992612,
+        "oceanPhaseMae": 17.81237391883392
+      },
+      "holdOut": {
+        "landAmpMae": 2.6452853930539497,
+        "landPhaseMae": 17.83859230671903,
+        "oceanAmpMae": 1.2618417132078479,
+        "oceanPhaseMae": 17.81483721223071
+      },
+      "regionAmpMae": {
+        "antarctica": 11.05935390443338,
+        "greenland": 6.737389707474654,
+        "northAtlanticEurope": 5.224142986641077,
+        "neAsia": 3.7625996309584244,
+        "arcticOcean": 7.891767746294553,
+        "midLatOcean": 1.5387364141330022
+      },
+      "deepTropicsRatio": 0.7935482529625735,
+      "rejectedBecause": [
+        "calibration objective 0 worse",
+        "calibration objective 1 worse",
+        "calibration objective 3 worse",
+        "hold-out objective 0 worse",
+        "hold-out objective 1 worse",
+        "hold-out objective 3 worse",
+        "antarctica much worse",
+        "greenland much worse",
+        "arcticOcean much worse",
+        "deep-tropics H2/H1 moved"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 7,
+        "soilDepthM": 4,
+        "mixedLayerDepthM": 20
+      },
+      "tauLandDays": 31.084656084656086,
+      "tauSeaDays": 148.8095238095238,
+      "objectivesCalibration": {
+        "landAmpMae": 2.7341140864793956,
+        "landPhaseMae": 8.318122270736175,
+        "oceanAmpMae": 2.491337186373183,
+        "oceanPhaseMae": 11.75112394546053
+      },
+      "holdOut": {
+        "landAmpMae": 2.7421601652881877,
+        "landPhaseMae": 8.32781989166505,
+        "oceanAmpMae": 2.4886425707848003,
+        "oceanPhaseMae": 11.750699713143351
+      },
+      "regionAmpMae": {
+        "antarctica": 11.624127328226454,
+        "greenland": 7.2688869243857965,
+        "northAtlanticEurope": 6.37703605984224,
+        "neAsia": 3.4507685361771827,
+        "arcticOcean": 5.7617605931542695,
+        "midLatOcean": 3.995472877049302
+      },
+      "deepTropicsRatio": 0.9457017744819445,
+      "rejectedBecause": [
+        "calibration objective 0 worse",
+        "calibration objective 2 worse",
+        "hold-out objective 0 worse",
+        "hold-out objective 2 worse",
+        "antarctica much worse",
+        "greenland much worse",
+        "northAtlanticEurope much worse",
+        "midLatOcean much worse"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 7,
+        "soilDepthM": 4,
+        "mixedLayerDepthM": 50
+      },
+      "tauLandDays": 31.084656084656086,
+      "tauSeaDays": 347.22222222222223,
+      "objectivesCalibration": {
+        "landAmpMae": 2.7341140864793956,
+        "landPhaseMae": 8.318122270736175,
+        "oceanAmpMae": 1.2610773212807491,
+        "oceanPhaseMae": 16.856163256978203
+      },
+      "holdOut": {
+        "landAmpMae": 2.7421601652881877,
+        "landPhaseMae": 8.32781989166505,
+        "oceanAmpMae": 1.2626012587258786,
+        "oceanPhaseMae": 16.85758400966754
+      },
+      "regionAmpMae": {
+        "antarctica": 11.624127328226454,
+        "greenland": 7.2688869243857965,
+        "northAtlanticEurope": 5.517403133409237,
+        "neAsia": 3.4507685361771827,
+        "arcticOcean": 7.899723189504911,
+        "midLatOcean": 1.5363900174635567
+      },
+      "deepTropicsRatio": 0.9457017744819445,
+      "rejectedBecause": [
+        "calibration objective 0 worse",
+        "calibration objective 3 worse",
+        "hold-out objective 0 worse",
+        "hold-out objective 3 worse",
+        "antarctica much worse",
+        "greenland much worse",
+        "arcticOcean much worse"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 7,
+        "soilDepthM": 6,
+        "mixedLayerDepthM": 20
+      },
+      "tauLandDays": 38.35978835978836,
+      "tauSeaDays": 148.8095238095238,
+      "objectivesCalibration": {
+        "landAmpMae": 2.547487166684084,
+        "landPhaseMae": 10.592298836485107,
+        "oceanAmpMae": 2.491337186373183,
+        "oceanPhaseMae": 11.75112394546053
+      },
+      "holdOut": {
+        "landAmpMae": 2.5587385303171253,
+        "landPhaseMae": 10.597470707747155,
+        "oceanAmpMae": 2.4886425707848003,
+        "oceanPhaseMae": 11.750699713143351
+      },
+      "regionAmpMae": {
+        "antarctica": 10.380444447526502,
+        "greenland": 6.102954339954192,
+        "northAtlanticEurope": 5.738582965819934,
+        "neAsia": 4.167652219062463,
+        "arcticOcean": 5.7617605931542695,
+        "midLatOcean": 3.995472877049302
+      },
+      "deepTropicsRatio": 0.8835948003109528,
+      "rejectedBecause": [
+        "calibration objective 0 worse",
+        "calibration objective 1 worse",
+        "calibration objective 2 worse",
+        "hold-out objective 0 worse",
+        "hold-out objective 1 worse",
+        "hold-out objective 2 worse",
+        "antarctica much worse",
+        "greenland much worse",
+        "northAtlanticEurope much worse",
+        "midLatOcean much worse"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 7,
+        "soilDepthM": 6,
+        "mixedLayerDepthM": 50
+      },
+      "tauLandDays": 38.35978835978836,
+      "tauSeaDays": 347.22222222222223,
+      "objectivesCalibration": {
+        "landAmpMae": 2.547487166684084,
+        "landPhaseMae": 10.592298836485107,
+        "oceanAmpMae": 1.2610773212807491,
+        "oceanPhaseMae": 16.856163256978203
+      },
+      "holdOut": {
+        "landAmpMae": 2.5587385303171253,
+        "landPhaseMae": 10.597470707747155,
+        "oceanAmpMae": 1.2626012587258786,
+        "oceanPhaseMae": 16.85758400966754
+      },
+      "regionAmpMae": {
+        "antarctica": 10.380444447526502,
+        "greenland": 6.102954339954192,
+        "northAtlanticEurope": 4.878950039386939,
+        "neAsia": 4.167652219062463,
+        "arcticOcean": 7.899723189504911,
+        "midLatOcean": 1.5363900174635567
+      },
+      "deepTropicsRatio": 0.8835948003109528,
+      "rejectedBecause": [
+        "calibration objective 0 worse",
+        "calibration objective 1 worse",
+        "calibration objective 3 worse",
+        "hold-out objective 0 worse",
+        "hold-out objective 1 worse",
+        "hold-out objective 3 worse",
+        "antarctica much worse",
+        "greenland much worse",
+        "arcticOcean much worse"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 7,
+        "soilDepthM": 8,
+        "mixedLayerDepthM": 20
+      },
+      "tauLandDays": 45.63492063492063,
+      "tauSeaDays": 148.8095238095238,
+      "objectivesCalibration": {
+        "landAmpMae": 2.4759189916610977,
+        "landPhaseMae": 13.99949391776631,
+        "oceanAmpMae": 2.491337186373183,
+        "oceanPhaseMae": 11.75112394546053
+      },
+      "holdOut": {
+        "landAmpMae": 2.48763779399202,
+        "landPhaseMae": 14.007442099550804,
+        "oceanAmpMae": 2.4886425707848003,
+        "oceanPhaseMae": 11.750699713143351
+      },
+      "regionAmpMae": {
+        "antarctica": 9.112996971253454,
+        "greenland": 4.943379815148465,
+        "northAtlanticEurope": 5.117749954381077,
+        "neAsia": 5.0170464541831326,
+        "arcticOcean": 5.7617605931542695,
+        "midLatOcean": 3.995472877049302
+      },
+      "deepTropicsRatio": 0.8340637523291952,
+      "rejectedBecause": [
+        "calibration objective 1 worse",
+        "calibration objective 2 worse",
+        "hold-out objective 1 worse",
+        "hold-out objective 2 worse",
+        "midLatOcean much worse",
+        "deep-tropics H2/H1 moved"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 7,
+        "soilDepthM": 8,
+        "mixedLayerDepthM": 30
+      },
+      "tauLandDays": 45.63492063492063,
+      "tauSeaDays": 214.94708994708995,
+      "objectivesCalibration": {
+        "landAmpMae": 2.4759189916610977,
+        "landPhaseMae": 13.99949391776631,
+        "oceanAmpMae": 1.6197934363799478,
+        "oceanPhaseMae": 13.528097764508352
+      },
+      "holdOut": {
+        "landAmpMae": 2.48763779399202,
+        "landPhaseMae": 14.007442099550804,
+        "oceanAmpMae": 1.6191153164282373,
+        "oceanPhaseMae": 13.533608821332301
+      },
+      "regionAmpMae": {
+        "antarctica": 9.112996971253454,
+        "greenland": 4.943379815148465,
+        "northAtlanticEurope": 4.567448145421272,
+        "neAsia": 5.0170464541831326,
+        "arcticOcean": 6.740800698770389,
+        "midLatOcean": 2.484923044794212
+      },
+      "deepTropicsRatio": 0.8340637523291952,
+      "rejectedBecause": [
+        "calibration objective 1 worse",
+        "calibration objective 3 worse",
+        "no calibration improvement",
+        "hold-out objective 1 worse",
+        "hold-out objective 3 worse",
+        "deep-tropics H2/H1 moved"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 7,
+        "soilDepthM": 8,
+        "mixedLayerDepthM": 40
+      },
+      "tauLandDays": 45.63492063492063,
+      "tauSeaDays": 281.0846560846561,
+      "objectivesCalibration": {
+        "landAmpMae": 2.4759189916610977,
+        "landPhaseMae": 13.99949391776631,
+        "oceanAmpMae": 1.2976818064390017,
+        "oceanPhaseMae": 15.422393352188674
+      },
+      "holdOut": {
+        "landAmpMae": 2.48763779399202,
+        "landPhaseMae": 14.007442099550804,
+        "oceanAmpMae": 1.298363037918104,
+        "oceanPhaseMae": 15.427199625218124
+      },
+      "regionAmpMae": {
+        "antarctica": 9.112996971253454,
+        "greenland": 4.943379815148465,
+        "northAtlanticEurope": 4.347070131284132,
+        "neAsia": 5.0170464541831326,
+        "arcticOcean": 7.424654963455471,
+        "midLatOcean": 1.7982624876459823
+      },
+      "deepTropicsRatio": 0.8340637523291952,
+      "rejectedBecause": [
+        "calibration objective 1 worse",
+        "calibration objective 3 worse",
+        "hold-out objective 1 worse",
+        "hold-out objective 3 worse",
+        "deep-tropics H2/H1 moved"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 7,
+        "soilDepthM": 8,
+        "mixedLayerDepthM": 50
+      },
+      "tauLandDays": 45.63492063492063,
+      "tauSeaDays": 347.22222222222223,
+      "objectivesCalibration": {
+        "landAmpMae": 2.4759189916610977,
+        "landPhaseMae": 13.99949391776631,
+        "oceanAmpMae": 1.2610773212807491,
+        "oceanPhaseMae": 16.856163256978203
+      },
+      "holdOut": {
+        "landAmpMae": 2.48763779399202,
+        "landPhaseMae": 14.007442099550804,
+        "oceanAmpMae": 1.2626012587258786,
+        "oceanPhaseMae": 16.85758400966754
+      },
+      "regionAmpMae": {
+        "antarctica": 9.112996971253454,
+        "greenland": 4.943379815148465,
+        "northAtlanticEurope": 4.258117027948068,
+        "neAsia": 5.0170464541831326,
+        "arcticOcean": 7.899723189504911,
+        "midLatOcean": 1.5363900174635567
+      },
+      "deepTropicsRatio": 0.8340637523291952,
+      "rejectedBecause": [
+        "calibration objective 1 worse",
+        "calibration objective 3 worse",
+        "hold-out objective 1 worse",
+        "hold-out objective 3 worse",
+        "arcticOcean much worse",
+        "deep-tropics H2/H1 moved"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 8,
+        "soilDepthM": 4,
+        "mixedLayerDepthM": 20
+      },
+      "tauLandDays": 27.199074074074073,
+      "tauSeaDays": 130.20833333333334,
+      "objectivesCalibration": {
+        "landAmpMae": 2.4790253665525173,
+        "landPhaseMae": 8.341667950627452,
+        "oceanAmpMae": 2.421460085272483,
+        "oceanPhaseMae": 12.056897073217444
+      },
+      "holdOut": {
+        "landAmpMae": 2.4908752325076917,
+        "landPhaseMae": 8.339853704404408,
+        "oceanAmpMae": 2.4189259232585267,
+        "oceanPhaseMae": 12.051674412104179
+      },
+      "regionAmpMae": {
+        "antarctica": 9.268346364270716,
+        "greenland": 5.084275280794172,
+        "northAtlanticEurope": 5.146515214397633,
+        "neAsia": 4.906954453501384,
+        "arcticOcean": 5.818829297473547,
+        "midLatOcean": 3.8791270290142927
+      },
+      "deepTropicsRatio": 0.9842418479118086,
+      "rejectedBecause": [
+        "calibration objective 2 worse",
+        "hold-out objective 2 worse",
+        "midLatOcean much worse"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 8,
+        "soilDepthM": 4,
+        "mixedLayerDepthM": 30
+      },
+      "tauLandDays": 27.199074074074073,
+      "tauSeaDays": 188.0787037037037,
+      "objectivesCalibration": {
+        "landAmpMae": 2.4790253665525173,
+        "landPhaseMae": 8.341667950627452,
+        "oceanAmpMae": 1.601427916544473,
+        "oceanPhaseMae": 12.66740566465577
+      },
+      "holdOut": {
+        "landAmpMae": 2.4908752325076917,
+        "landPhaseMae": 8.339853704404408,
+        "oceanAmpMae": 1.6007998008879714,
+        "oceanPhaseMae": 12.67279866946316
+      },
+      "regionAmpMae": {
+        "antarctica": 9.268346364270716,
+        "greenland": 5.084275280794172,
+        "northAtlanticEurope": 4.63091054349055,
+        "neAsia": 4.906954453501384,
+        "arcticOcean": 6.770576407273197,
+        "midLatOcean": 2.4504100824559423
+      },
+      "deepTropicsRatio": 0.9842418479118086,
+      "rejectedBecause": [
+        "no calibration improvement"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 8,
+        "soilDepthM": 4,
+        "mixedLayerDepthM": 40
+      },
+      "tauLandDays": 27.199074074074073,
+      "tauSeaDays": 245.94907407407408,
+      "objectivesCalibration": {
+        "landAmpMae": 2.4790253665525173,
+        "landPhaseMae": 8.341667950627452,
+        "oceanAmpMae": 1.2935761737992262,
+        "oceanPhaseMae": 14.474202737184378
+      },
+      "holdOut": {
+        "landAmpMae": 2.4908752325076917,
+        "landPhaseMae": 8.339853704404408,
+        "oceanAmpMae": 1.2942921648574588,
+        "oceanPhaseMae": 14.479894060078331
+      },
+      "regionAmpMae": {
+        "antarctica": 9.268346364270716,
+        "greenland": 5.084275280794172,
+        "northAtlanticEurope": 4.418099608638623,
+        "neAsia": 4.906954453501384,
+        "arcticOcean": 7.440055876128835,
+        "midLatOcean": 1.7859472334836712
+      },
+      "deepTropicsRatio": 0.9842418479118086,
+      "rejectedBecause": [
+        "calibration objective 3 worse",
+        "hold-out objective 3 worse"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 8,
+        "soilDepthM": 4,
+        "mixedLayerDepthM": 50
+      },
+      "tauLandDays": 27.199074074074073,
+      "tauSeaDays": 303.81944444444446,
+      "objectivesCalibration": {
+        "landAmpMae": 2.4790253665525173,
+        "landPhaseMae": 8.341667950627452,
+        "oceanAmpMae": 1.2619813123651002,
+        "oceanPhaseMae": 15.963798206031036
+      },
+      "holdOut": {
+        "landAmpMae": 2.4908752325076917,
+        "landPhaseMae": 8.339853704404408,
+        "oceanAmpMae": 1.2635179878911678,
+        "oceanPhaseMae": 15.966806813784558
+      },
+      "regionAmpMae": {
+        "antarctica": 9.268346364270716,
+        "greenland": 5.084275280794172,
+        "northAtlanticEurope": 4.3320951538575185,
+        "neAsia": 4.906954453501384,
+        "arcticOcean": 7.9088010249569916,
+        "midLatOcean": 1.533801052628702
+      },
+      "deepTropicsRatio": 0.9842418479118086,
+      "rejectedBecause": [
+        "calibration objective 3 worse",
+        "hold-out objective 3 worse",
+        "arcticOcean much worse"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 9,
+        "soilDepthM": 1,
+        "mixedLayerDepthM": 30
+      },
+      "tauLandDays": 15.689300411522634,
+      "tauSeaDays": 167.18106995884773,
+      "objectivesCalibration": {
+        "landAmpMae": 2.488992026545081,
+        "landPhaseMae": 13.92699069202645,
+        "oceanAmpMae": 1.5816287797145658,
+        "oceanPhaseMae": 12.062405610292588
+      },
+      "holdOut": {
+        "landAmpMae": 2.5003556755203316,
+        "landPhaseMae": 13.94109607688325,
+        "oceanAmpMae": 1.5810057836840552,
+        "oceanPhaseMae": 12.065761741366115
+      },
+      "regionAmpMae": {
+        "antarctica": 8.168685718017977,
+        "greenland": 4.146254861847028,
+        "northAtlanticEurope": 4.10556303055871,
+        "neAsia": 5.693618681705671,
+        "arcticOcean": 6.803513278501453,
+        "midLatOcean": 2.41286442946903
+      },
+      "deepTropicsRatio": 1.1123316091771736,
+      "rejectedBecause": [
+        "calibration objective 1 worse",
+        "hold-out objective 1 worse"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 9,
+        "soilDepthM": 1,
+        "mixedLayerDepthM": 40
+      },
+      "tauLandDays": 15.689300411522634,
+      "tauSeaDays": 218.62139917695472,
+      "objectivesCalibration": {
+        "landAmpMae": 2.488992026545081,
+        "landPhaseMae": 13.92699069202645,
+        "oceanAmpMae": 1.2892198722759,
+        "oceanPhaseMae": 13.644402358853485
+      },
+      "holdOut": {
+        "landAmpMae": 2.5003556755203316,
+        "landPhaseMae": 13.94109607688325,
+        "oceanAmpMae": 1.2900185486552458,
+        "oceanPhaseMae": 13.64978731101199
+      },
+      "regionAmpMae": {
+        "antarctica": 8.168685718017977,
+        "greenland": 4.146254861847028,
+        "northAtlanticEurope": 3.900872871374017,
+        "neAsia": 5.693618681705671,
+        "arcticOcean": 7.457187437164524,
+        "midLatOcean": 1.772559932947679
+      },
+      "deepTropicsRatio": 1.1123316091771736,
+      "rejectedBecause": [
+        "calibration objective 1 worse",
+        "calibration objective 3 worse",
+        "hold-out objective 1 worse",
+        "hold-out objective 3 worse"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 9,
+        "soilDepthM": 1,
+        "mixedLayerDepthM": 50
+      },
+      "tauLandDays": 15.689300411522634,
+      "tauSeaDays": 270.0617283950617,
+      "objectivesCalibration": {
+        "landAmpMae": 2.488992026545081,
+        "landPhaseMae": 13.92699069202645,
+        "oceanAmpMae": 1.2630438140491027,
+        "oceanPhaseMae": 15.13911524727933
+      },
+      "holdOut": {
+        "landAmpMae": 2.5003556755203316,
+        "landPhaseMae": 13.94109607688325,
+        "oceanAmpMae": 1.2645962151087957,
+        "oceanPhaseMae": 15.145009185789032
+      },
+      "regionAmpMae": {
+        "antarctica": 8.168685718017977,
+        "greenland": 4.146254861847028,
+        "northAtlanticEurope": 3.8181174692857702,
+        "neAsia": 5.693618681705671,
+        "arcticOcean": 7.918955846233078,
+        "midLatOcean": 1.5309996978601272
+      },
+      "deepTropicsRatio": 1.1123316091771736,
+      "rejectedBecause": [
+        "calibration objective 1 worse",
+        "calibration objective 3 worse",
+        "hold-out objective 1 worse",
+        "hold-out objective 3 worse",
+        "arcticOcean much worse"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 9,
+        "soilDepthM": 2,
+        "mixedLayerDepthM": 30
+      },
+      "tauLandDays": 18.51851851851852,
+      "tauSeaDays": 167.18106995884773,
+      "objectivesCalibration": {
+        "landAmpMae": 2.5016423692294993,
+        "landPhaseMae": 12.094157629916964,
+        "oceanAmpMae": 1.5816287797145658,
+        "oceanPhaseMae": 12.062405610292588
+      },
+      "holdOut": {
+        "landAmpMae": 2.5126769809585805,
+        "landPhaseMae": 12.098815079722431,
+        "oceanAmpMae": 1.5810057836840552,
+        "oceanPhaseMae": 12.065761741366115
+      },
+      "regionAmpMae": {
+        "antarctica": 7.910006072874425,
+        "greenland": 3.949232901755144,
+        "northAtlanticEurope": 3.989268255094655,
+        "neAsia": 5.884561102144284,
+        "arcticOcean": 6.803513278501453,
+        "midLatOcean": 2.41286442946903
+      },
+      "deepTropicsRatio": 1.080347357855791,
+      "rejectedBecause": [
+        "calibration objective 0 worse",
+        "calibration objective 1 worse",
+        "hold-out objective 0 worse",
+        "hold-out objective 1 worse"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 9,
+        "soilDepthM": 2,
+        "mixedLayerDepthM": 40
+      },
+      "tauLandDays": 18.51851851851852,
+      "tauSeaDays": 218.62139917695472,
+      "objectivesCalibration": {
+        "landAmpMae": 2.5016423692294993,
+        "landPhaseMae": 12.094157629916964,
+        "oceanAmpMae": 1.2892198722759,
+        "oceanPhaseMae": 13.644402358853485
+      },
+      "holdOut": {
+        "landAmpMae": 2.5126769809585805,
+        "landPhaseMae": 12.098815079722431,
+        "oceanAmpMae": 1.2900185486552458,
+        "oceanPhaseMae": 13.64978731101199
+      },
+      "regionAmpMae": {
+        "antarctica": 7.910006072874425,
+        "greenland": 3.949232901755144,
+        "northAtlanticEurope": 3.784578095909962,
+        "neAsia": 5.884561102144284,
+        "arcticOcean": 7.457187437164524,
+        "midLatOcean": 1.772559932947679
+      },
+      "deepTropicsRatio": 1.080347357855791,
+      "rejectedBecause": [
+        "calibration objective 0 worse",
+        "calibration objective 1 worse",
+        "calibration objective 3 worse",
+        "hold-out objective 0 worse",
+        "hold-out objective 1 worse",
+        "hold-out objective 3 worse"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 9,
+        "soilDepthM": 2,
+        "mixedLayerDepthM": 50
+      },
+      "tauLandDays": 18.51851851851852,
+      "tauSeaDays": 270.0617283950617,
+      "objectivesCalibration": {
+        "landAmpMae": 2.5016423692294993,
+        "landPhaseMae": 12.094157629916964,
+        "oceanAmpMae": 1.2630438140491027,
+        "oceanPhaseMae": 15.13911524727933
+      },
+      "holdOut": {
+        "landAmpMae": 2.5126769809585805,
+        "landPhaseMae": 12.098815079722431,
+        "oceanAmpMae": 1.2645962151087957,
+        "oceanPhaseMae": 15.145009185789032
+      },
+      "regionAmpMae": {
+        "antarctica": 7.910006072874425,
+        "greenland": 3.949232901755144,
+        "northAtlanticEurope": 3.7018226938217182,
+        "neAsia": 5.884561102144284,
+        "arcticOcean": 7.918955846233078,
+        "midLatOcean": 1.5309996978601272
+      },
+      "deepTropicsRatio": 1.080347357855791,
+      "rejectedBecause": [
+        "calibration objective 0 worse",
+        "calibration objective 1 worse",
+        "calibration objective 3 worse",
+        "hold-out objective 0 worse",
+        "hold-out objective 1 worse",
+        "hold-out objective 3 worse",
+        "arcticOcean much worse"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 9,
+        "soilDepthM": 4,
+        "mixedLayerDepthM": 30
+      },
+      "tauLandDays": 24.17695473251029,
+      "tauSeaDays": 167.18106995884773,
+      "objectivesCalibration": {
+        "landAmpMae": 2.5458689247044077,
+        "landPhaseMae": 9.20951887353278,
+        "oceanAmpMae": 1.5816287797145658,
+        "oceanPhaseMae": 12.062405610292588
+      },
+      "holdOut": {
+        "landAmpMae": 2.556120466301113,
+        "landPhaseMae": 9.212751729427124,
+        "oceanAmpMae": 1.5810057836840552,
+        "oceanPhaseMae": 12.065761741366115
+      },
+      "regionAmpMae": {
+        "antarctica": 7.305887294115638,
+        "greenland": 3.5352561502424673,
+        "northAtlanticEurope": 3.7242645433102277,
+        "neAsia": 6.337755959301807,
+        "arcticOcean": 6.803513278501453,
+        "midLatOcean": 2.41286442946903
+      },
+      "deepTropicsRatio": 1.0165125397735373,
+      "rejectedBecause": [
+        "calibration objective 0 worse",
+        "calibration objective 1 worse",
+        "hold-out objective 0 worse",
+        "hold-out objective 1 worse",
+        "neAsia much worse"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 9,
+        "soilDepthM": 4,
+        "mixedLayerDepthM": 40
+      },
+      "tauLandDays": 24.17695473251029,
+      "tauSeaDays": 218.62139917695472,
+      "objectivesCalibration": {
+        "landAmpMae": 2.5458689247044077,
+        "landPhaseMae": 9.20951887353278,
+        "oceanAmpMae": 1.2892198722759,
+        "oceanPhaseMae": 13.644402358853485
+      },
+      "holdOut": {
+        "landAmpMae": 2.556120466301113,
+        "landPhaseMae": 9.212751729427124,
+        "oceanAmpMae": 1.2900185486552458,
+        "oceanPhaseMae": 13.64978731101199
+      },
+      "regionAmpMae": {
+        "antarctica": 7.305887294115638,
+        "greenland": 3.5352561502424673,
+        "northAtlanticEurope": 3.5195743841255354,
+        "neAsia": 6.337755959301807,
+        "arcticOcean": 7.457187437164524,
+        "midLatOcean": 1.772559932947679
+      },
+      "deepTropicsRatio": 1.0165125397735373,
+      "rejectedBecause": [
+        "calibration objective 0 worse",
+        "calibration objective 1 worse",
+        "calibration objective 3 worse",
+        "hold-out objective 0 worse",
+        "hold-out objective 1 worse",
+        "hold-out objective 3 worse",
+        "neAsia much worse"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 9,
+        "soilDepthM": 4,
+        "mixedLayerDepthM": 50
+      },
+      "tauLandDays": 24.17695473251029,
+      "tauSeaDays": 270.0617283950617,
+      "objectivesCalibration": {
+        "landAmpMae": 2.5458689247044077,
+        "landPhaseMae": 9.20951887353278,
+        "oceanAmpMae": 1.2630438140491027,
+        "oceanPhaseMae": 15.13911524727933
+      },
+      "holdOut": {
+        "landAmpMae": 2.556120466301113,
+        "landPhaseMae": 9.212751729427124,
+        "oceanAmpMae": 1.2645962151087957,
+        "oceanPhaseMae": 15.145009185789032
+      },
+      "regionAmpMae": {
+        "antarctica": 7.305887294115638,
+        "greenland": 3.5352561502424673,
+        "northAtlanticEurope": 3.436818982037289,
+        "neAsia": 6.337755959301807,
+        "arcticOcean": 7.918955846233078,
+        "midLatOcean": 1.5309996978601272
+      },
+      "deepTropicsRatio": 1.0165125397735373,
+      "rejectedBecause": [
+        "calibration objective 0 worse",
+        "calibration objective 1 worse",
+        "calibration objective 3 worse",
+        "hold-out objective 0 worse",
+        "hold-out objective 1 worse",
+        "hold-out objective 3 worse",
+        "neAsia much worse",
+        "arcticOcean much worse"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 9,
+        "soilDepthM": 6,
+        "mixedLayerDepthM": 30
+      },
+      "tauLandDays": 29.83539094650206,
+      "tauSeaDays": 167.18106995884773,
+      "objectivesCalibration": {
+        "landAmpMae": 2.6200645256584782,
+        "landPhaseMae": 8.208237150977991,
+        "oceanAmpMae": 1.5816287797145658,
+        "oceanPhaseMae": 12.062405610292588
+      },
+      "holdOut": {
+        "landAmpMae": 2.6293319787195943,
+        "landPhaseMae": 8.211900001770816,
+        "oceanAmpMae": 1.5810057836840552,
+        "oceanPhaseMae": 12.065761741366115
+      },
+      "regionAmpMae": {
+        "antarctica": 6.616090373326821,
+        "greenland": 3.141246278679315,
+        "northAtlanticEurope": 3.4403838836544383,
+        "neAsia": 6.866377154895737,
+        "arcticOcean": 6.803513278501453,
+        "midLatOcean": 2.41286442946903
+      },
+      "deepTropicsRatio": 0.9576989413462245,
+      "rejectedBecause": [
+        "calibration objective 0 worse",
+        "hold-out objective 0 worse",
+        "neAsia much worse"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 9,
+        "soilDepthM": 6,
+        "mixedLayerDepthM": 40
+      },
+      "tauLandDays": 29.83539094650206,
+      "tauSeaDays": 218.62139917695472,
+      "objectivesCalibration": {
+        "landAmpMae": 2.6200645256584782,
+        "landPhaseMae": 8.208237150977991,
+        "oceanAmpMae": 1.2892198722759,
+        "oceanPhaseMae": 13.644402358853485
+      },
+      "holdOut": {
+        "landAmpMae": 2.6293319787195943,
+        "landPhaseMae": 8.211900001770816,
+        "oceanAmpMae": 1.2900185486552458,
+        "oceanPhaseMae": 13.64978731101199
+      },
+      "regionAmpMae": {
+        "antarctica": 6.616090373326821,
+        "greenland": 3.141246278679315,
+        "northAtlanticEurope": 3.2356937244697463,
+        "neAsia": 6.866377154895737,
+        "arcticOcean": 7.457187437164524,
+        "midLatOcean": 1.772559932947679
+      },
+      "deepTropicsRatio": 0.9576989413462245,
+      "rejectedBecause": [
+        "calibration objective 0 worse",
+        "calibration objective 3 worse",
+        "hold-out objective 0 worse",
+        "hold-out objective 3 worse",
+        "neAsia much worse"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 9,
+        "soilDepthM": 6,
+        "mixedLayerDepthM": 50
+      },
+      "tauLandDays": 29.83539094650206,
+      "tauSeaDays": 270.0617283950617,
+      "objectivesCalibration": {
+        "landAmpMae": 2.6200645256584782,
+        "landPhaseMae": 8.208237150977991,
+        "oceanAmpMae": 1.2630438140491027,
+        "oceanPhaseMae": 15.13911524727933
+      },
+      "holdOut": {
+        "landAmpMae": 2.6293319787195943,
+        "landPhaseMae": 8.211900001770816,
+        "oceanAmpMae": 1.2645962151087957,
+        "oceanPhaseMae": 15.145009185789032
+      },
+      "regionAmpMae": {
+        "antarctica": 6.616090373326821,
+        "greenland": 3.141246278679315,
+        "northAtlanticEurope": 3.1529383223815013,
+        "neAsia": 6.866377154895737,
+        "arcticOcean": 7.918955846233078,
+        "midLatOcean": 1.5309996978601272
+      },
+      "deepTropicsRatio": 0.9576989413462245,
+      "rejectedBecause": [
+        "calibration objective 0 worse",
+        "calibration objective 3 worse",
+        "hold-out objective 0 worse",
+        "hold-out objective 3 worse",
+        "neAsia much worse",
+        "arcticOcean much worse"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 10,
+        "soilDepthM": 1,
+        "mixedLayerDepthM": 30
+      },
+      "tauLandDays": 14.12037037037037,
+      "tauSeaDays": 150.46296296296296,
+      "objectivesCalibration": {
+        "landAmpMae": 2.660812503277271,
+        "landPhaseMae": 15.023779016299594,
+        "oceanAmpMae": 1.56063633743453,
+        "oceanPhaseMae": 11.760535680009124
+      },
+      "holdOut": {
+        "landAmpMae": 2.670229669663822,
+        "landPhaseMae": 15.042836431376866,
+        "oceanAmpMae": 1.5600761317578633,
+        "oceanPhaseMae": 11.76002902383247
+      },
+      "regionAmpMae": {
+        "antarctica": 6.304285754886902,
+        "greenland": 2.9955705477314645,
+        "northAtlanticEurope": 3.308124074390543,
+        "neAsia": 7.106937254166085,
+        "arcticOcean": 6.839306773045271,
+        "midLatOcean": 2.372760582532852
+      },
+      "deepTropicsRatio": 1.1295070616958347,
+      "rejectedBecause": [
+        "calibration objective 0 worse",
+        "calibration objective 1 worse",
+        "hold-out objective 0 worse",
+        "hold-out objective 1 worse",
+        "neAsia much worse"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 10,
+        "soilDepthM": 1,
+        "mixedLayerDepthM": 40
+      },
+      "tauLandDays": 14.12037037037037,
+      "tauSeaDays": 196.75925925925927,
+      "objectivesCalibration": {
+        "landAmpMae": 2.660812503277271,
+        "landPhaseMae": 15.023779016299594,
+        "oceanAmpMae": 1.2847155265277406,
+        "oceanPhaseMae": 12.944963341374493
+      },
+      "holdOut": {
+        "landAmpMae": 2.670229669663822,
+        "landPhaseMae": 15.042836431376866,
+        "oceanAmpMae": 1.285590281636305,
+        "oceanPhaseMae": 12.951502023083709
+      },
+      "regionAmpMae": {
+        "antarctica": 6.304285754886902,
+        "greenland": 2.9955705477314645,
+        "northAtlanticEurope": 3.1119936617371913,
+        "neAsia": 7.106937254166085,
+        "arcticOcean": 7.475981158839768,
+        "midLatOcean": 1.7582249644311956
+      },
+      "deepTropicsRatio": 1.1295070616958347,
+      "rejectedBecause": [
+        "calibration objective 0 worse",
+        "calibration objective 1 worse",
+        "calibration objective 3 worse",
+        "hold-out objective 0 worse",
+        "hold-out objective 1 worse",
+        "hold-out objective 3 worse",
+        "neAsia much worse"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 10,
+        "soilDepthM": 1,
+        "mixedLayerDepthM": 50
+      },
+      "tauLandDays": 14.12037037037037,
+      "tauSeaDays": 243.05555555555554,
+      "objectivesCalibration": {
+        "landAmpMae": 2.660812503277271,
+        "landPhaseMae": 15.023779016299594,
+        "oceanAmpMae": 1.2642828842027614,
+        "oceanPhaseMae": 14.389954900407204
+      },
+      "holdOut": {
+        "landAmpMae": 2.670229669663822,
+        "landPhaseMae": 15.042836431376866,
+        "oceanAmpMae": 1.2658462055446564,
+        "oceanPhaseMae": 14.39560338143476
+      },
+      "regionAmpMae": {
+        "antarctica": 6.304285754886902,
+        "greenland": 2.9955705477314645,
+        "northAtlanticEurope": 3.032755307253242,
+        "neAsia": 7.106937254166085,
+        "arcticOcean": 7.930161013530214,
+        "midLatOcean": 1.528039002596426
+      },
+      "deepTropicsRatio": 1.1295070616958347,
+      "rejectedBecause": [
+        "calibration objective 0 worse",
+        "calibration objective 1 worse",
+        "calibration objective 3 worse",
+        "hold-out objective 0 worse",
+        "hold-out objective 1 worse",
+        "hold-out objective 3 worse",
+        "neAsia much worse",
+        "arcticOcean much worse"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 10,
+        "soilDepthM": 2,
+        "mixedLayerDepthM": 30
+      },
+      "tauLandDays": 16.666666666666668,
+      "tauSeaDays": 150.46296296296296,
+      "objectivesCalibration": {
+        "landAmpMae": 2.688260946717615,
+        "landPhaseMae": 13.27233068278366,
+        "oceanAmpMae": 1.56063633743453,
+        "oceanPhaseMae": 11.760535680009124
+      },
+      "holdOut": {
+        "landAmpMae": 2.6976647276219716,
+        "landPhaseMae": 13.282666742680004,
+        "oceanAmpMae": 1.5600761317578633,
+        "oceanPhaseMae": 11.76002902383247
+      },
+      "regionAmpMae": {
+        "antarctica": 6.111361430355837,
+        "greenland": 2.9171917784758388,
+        "northAtlanticEurope": 3.23641814091991,
+        "neAsia": 7.2584703685609435,
+        "arcticOcean": 6.839306773045271,
+        "midLatOcean": 2.372760582532852
+      },
+      "deepTropicsRatio": 1.1013841870517582,
+      "rejectedBecause": [
+        "calibration objective 0 worse",
+        "calibration objective 1 worse",
+        "hold-out objective 0 worse",
+        "hold-out objective 1 worse",
+        "neAsia much worse"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 10,
+        "soilDepthM": 2,
+        "mixedLayerDepthM": 40
+      },
+      "tauLandDays": 16.666666666666668,
+      "tauSeaDays": 196.75925925925927,
+      "objectivesCalibration": {
+        "landAmpMae": 2.688260946717615,
+        "landPhaseMae": 13.27233068278366,
+        "oceanAmpMae": 1.2847155265277406,
+        "oceanPhaseMae": 12.944963341374493
+      },
+      "holdOut": {
+        "landAmpMae": 2.6976647276219716,
+        "landPhaseMae": 13.282666742680004,
+        "oceanAmpMae": 1.285590281636305,
+        "oceanPhaseMae": 12.951502023083709
+      },
+      "regionAmpMae": {
+        "antarctica": 6.111361430355837,
+        "greenland": 2.9171917784758388,
+        "northAtlanticEurope": 3.040287728266558,
+        "neAsia": 7.2584703685609435,
+        "arcticOcean": 7.475981158839768,
+        "midLatOcean": 1.7582249644311956
+      },
+      "deepTropicsRatio": 1.1013841870517582,
+      "rejectedBecause": [
+        "calibration objective 0 worse",
+        "calibration objective 1 worse",
+        "calibration objective 3 worse",
+        "hold-out objective 0 worse",
+        "hold-out objective 1 worse",
+        "hold-out objective 3 worse",
+        "neAsia much worse"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 10,
+        "soilDepthM": 2,
+        "mixedLayerDepthM": 50
+      },
+      "tauLandDays": 16.666666666666668,
+      "tauSeaDays": 243.05555555555554,
+      "objectivesCalibration": {
+        "landAmpMae": 2.688260946717615,
+        "landPhaseMae": 13.27233068278366,
+        "oceanAmpMae": 1.2642828842027614,
+        "oceanPhaseMae": 14.389954900407204
+      },
+      "holdOut": {
+        "landAmpMae": 2.6976647276219716,
+        "landPhaseMae": 13.282666742680004,
+        "oceanAmpMae": 1.2658462055446564,
+        "oceanPhaseMae": 14.39560338143476
+      },
+      "regionAmpMae": {
+        "antarctica": 6.111361430355837,
+        "greenland": 2.9171917784758388,
+        "northAtlanticEurope": 2.9610493737826107,
+        "neAsia": 7.2584703685609435,
+        "arcticOcean": 7.930161013530214,
+        "midLatOcean": 1.528039002596426
+      },
+      "deepTropicsRatio": 1.1013841870517582,
+      "rejectedBecause": [
+        "calibration objective 0 worse",
+        "calibration objective 1 worse",
+        "calibration objective 3 worse",
+        "hold-out objective 0 worse",
+        "hold-out objective 1 worse",
+        "hold-out objective 3 worse",
+        "neAsia much worse",
+        "arcticOcean much worse"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 10,
+        "soilDepthM": 4,
+        "mixedLayerDepthM": 30
+      },
+      "tauLandDays": 21.75925925925926,
+      "tauSeaDays": 150.46296296296296,
+      "objectivesCalibration": {
+        "landAmpMae": 2.758630412744615,
+        "landPhaseMae": 10.277972972276736,
+        "oceanAmpMae": 1.56063633743453,
+        "oceanPhaseMae": 11.760535680009124
+      },
+      "holdOut": {
+        "landAmpMae": 2.767769687815652,
+        "landPhaseMae": 10.284040526132838,
+        "oceanAmpMae": 1.5600761317578633,
+        "oceanPhaseMae": 11.76002902383247
+      },
+      "regionAmpMae": {
+        "antarctica": 5.6555455261690994,
+        "greenland": 2.7743680108391917,
+        "northAtlanticEurope": 3.0761382546933698,
+        "neAsia": 7.618883038613333,
+        "arcticOcean": 6.839306773045271,
+        "midLatOcean": 2.372760582532852
+      },
+      "deepTropicsRatio": 1.0434413086607968,
+      "rejectedBecause": [
+        "calibration objective 0 worse",
+        "calibration objective 1 worse",
+        "hold-out objective 0 worse",
+        "hold-out objective 1 worse",
+        "neAsia much worse"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 10,
+        "soilDepthM": 4,
+        "mixedLayerDepthM": 40
+      },
+      "tauLandDays": 21.75925925925926,
+      "tauSeaDays": 196.75925925925927,
+      "objectivesCalibration": {
+        "landAmpMae": 2.758630412744615,
+        "landPhaseMae": 10.277972972276736,
+        "oceanAmpMae": 1.2847155265277406,
+        "oceanPhaseMae": 12.944963341374493
+      },
+      "holdOut": {
+        "landAmpMae": 2.767769687815652,
+        "landPhaseMae": 10.284040526132838,
+        "oceanAmpMae": 1.285590281636305,
+        "oceanPhaseMae": 12.951502023083709
+      },
+      "regionAmpMae": {
+        "antarctica": 5.6555455261690994,
+        "greenland": 2.7743680108391917,
+        "northAtlanticEurope": 2.880007842040017,
+        "neAsia": 7.618883038613333,
+        "arcticOcean": 7.475981158839768,
+        "midLatOcean": 1.7582249644311956
+      },
+      "deepTropicsRatio": 1.0434413086607968,
+      "rejectedBecause": [
+        "calibration objective 0 worse",
+        "calibration objective 1 worse",
+        "calibration objective 3 worse",
+        "hold-out objective 0 worse",
+        "hold-out objective 1 worse",
+        "hold-out objective 3 worse",
+        "neAsia much worse"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 10,
+        "soilDepthM": 4,
+        "mixedLayerDepthM": 50
+      },
+      "tauLandDays": 21.75925925925926,
+      "tauSeaDays": 243.05555555555554,
+      "objectivesCalibration": {
+        "landAmpMae": 2.758630412744615,
+        "landPhaseMae": 10.277972972276736,
+        "oceanAmpMae": 1.2642828842027614,
+        "oceanPhaseMae": 14.389954900407204
+      },
+      "holdOut": {
+        "landAmpMae": 2.767769687815652,
+        "landPhaseMae": 10.284040526132838,
+        "oceanAmpMae": 1.2658462055446564,
+        "oceanPhaseMae": 14.39560338143476
+      },
+      "regionAmpMae": {
+        "antarctica": 5.6555455261690994,
+        "greenland": 2.7743680108391917,
+        "northAtlanticEurope": 2.80076948755607,
+        "neAsia": 7.618883038613333,
+        "arcticOcean": 7.930161013530214,
+        "midLatOcean": 1.528039002596426
+      },
+      "deepTropicsRatio": 1.0434413086607968,
+      "rejectedBecause": [
+        "calibration objective 0 worse",
+        "calibration objective 1 worse",
+        "calibration objective 3 worse",
+        "hold-out objective 0 worse",
+        "hold-out objective 1 worse",
+        "hold-out objective 3 worse",
+        "neAsia much worse",
+        "arcticOcean much worse"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 10,
+        "soilDepthM": 6,
+        "mixedLayerDepthM": 30
+      },
+      "tauLandDays": 26.85185185185185,
+      "tauSeaDays": 150.46296296296296,
+      "objectivesCalibration": {
+        "landAmpMae": 2.8502360322030382,
+        "landPhaseMae": 8.404057359981973,
+        "oceanAmpMae": 1.56063633743453,
+        "oceanPhaseMae": 11.760535680009124
+      },
+      "holdOut": {
+        "landAmpMae": 2.858202898068192,
+        "landPhaseMae": 8.401985674590644,
+        "oceanAmpMae": 1.5600761317578633,
+        "oceanPhaseMae": 11.76002902383247
+      },
+      "regionAmpMae": {
+        "antarctica": 5.126111700868344,
+        "greenland": 2.6811808673794655,
+        "northAtlanticEurope": 2.9138472529195316,
+        "neAsia": 8.039445918863851,
+        "arcticOcean": 6.839306773045271,
+        "midLatOcean": 2.372760582532852
+      },
+      "deepTropicsRatio": 0.9878554936367808,
+      "rejectedBecause": [
+        "calibration objective 0 worse",
+        "hold-out objective 0 worse",
+        "neAsia much worse"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 10,
+        "soilDepthM": 6,
+        "mixedLayerDepthM": 40
+      },
+      "tauLandDays": 26.85185185185185,
+      "tauSeaDays": 196.75925925925927,
+      "objectivesCalibration": {
+        "landAmpMae": 2.8502360322030382,
+        "landPhaseMae": 8.404057359981973,
+        "oceanAmpMae": 1.2847155265277406,
+        "oceanPhaseMae": 12.944963341374493
+      },
+      "holdOut": {
+        "landAmpMae": 2.858202898068192,
+        "landPhaseMae": 8.401985674590644,
+        "oceanAmpMae": 1.285590281636305,
+        "oceanPhaseMae": 12.951502023083709
+      },
+      "regionAmpMae": {
+        "antarctica": 5.126111700868344,
+        "greenland": 2.6811808673794655,
+        "northAtlanticEurope": 2.7177168402661747,
+        "neAsia": 8.039445918863851,
+        "arcticOcean": 7.475981158839768,
+        "midLatOcean": 1.7582249644311956
+      },
+      "deepTropicsRatio": 0.9878554936367808,
+      "rejectedBecause": [
+        "calibration objective 0 worse",
+        "calibration objective 3 worse",
+        "hold-out objective 0 worse",
+        "hold-out objective 3 worse",
+        "neAsia much worse"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 10,
+        "soilDepthM": 6,
+        "mixedLayerDepthM": 50
+      },
+      "tauLandDays": 26.85185185185185,
+      "tauSeaDays": 243.05555555555554,
+      "objectivesCalibration": {
+        "landAmpMae": 2.8502360322030382,
+        "landPhaseMae": 8.404057359981973,
+        "oceanAmpMae": 1.2642828842027614,
+        "oceanPhaseMae": 14.389954900407204
+      },
+      "holdOut": {
+        "landAmpMae": 2.858202898068192,
+        "landPhaseMae": 8.401985674590644,
+        "oceanAmpMae": 1.2658462055446564,
+        "oceanPhaseMae": 14.39560338143476
+      },
+      "regionAmpMae": {
+        "antarctica": 5.126111700868344,
+        "greenland": 2.6811808673794655,
+        "northAtlanticEurope": 2.638478485782225,
+        "neAsia": 8.039445918863851,
+        "arcticOcean": 7.930161013530214,
+        "midLatOcean": 1.528039002596426
+      },
+      "deepTropicsRatio": 0.9878554936367808,
+      "rejectedBecause": [
+        "calibration objective 0 worse",
+        "calibration objective 3 worse",
+        "hold-out objective 0 worse",
+        "hold-out objective 3 worse",
+        "neAsia much worse",
+        "arcticOcean much worse"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 12,
+        "soilDepthM": 1,
+        "mixedLayerDepthM": 40
+      },
+      "tauLandDays": 11.766975308641975,
+      "tauSeaDays": 163.96604938271605,
+      "objectivesCalibration": {
+        "landAmpMae": 3.1981077145577728,
+        "landPhaseMae": 16.780904310641922,
+        "oceanAmpMae": 1.2755664234980715,
+        "oceanPhaseMae": 11.984706591102354
+      },
+      "holdOut": {
+        "landAmpMae": 3.206473523027358,
+        "landPhaseMae": 16.80206794995568,
+        "oceanAmpMae": 1.2765321579489546,
+        "oceanPhaseMae": 11.987996060868776
+      },
+      "regionAmpMae": {
+        "antarctica": 3.5390612335435776,
+        "greenland": 2.7539425564374276,
+        "northAtlanticEurope": 2.3763569314492883,
+        "neAsia": 9.391514889068926,
+        "arcticOcean": 7.518117851982542,
+        "midLatOcean": 1.7271875858419223
+      },
+      "deepTropicsRatio": 1.1538492401802047,
+      "rejectedBecause": [
+        "calibration objective 0 worse",
+        "calibration objective 1 worse",
+        "hold-out objective 0 worse",
+        "hold-out objective 1 worse",
+        "neAsia much worse",
+        "deep-tropics H2/H1 moved"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 12,
+        "soilDepthM": 1,
+        "mixedLayerDepthM": 50
+      },
+      "tauLandDays": 11.766975308641975,
+      "tauSeaDays": 202.5462962962963,
+      "objectivesCalibration": {
+        "landAmpMae": 3.1981077145577728,
+        "landPhaseMae": 16.780904310641922,
+        "oceanAmpMae": 1.2673092101880634,
+        "oceanPhaseMae": 13.131803147783955
+      },
+      "holdOut": {
+        "landAmpMae": 3.206473523027358,
+        "landPhaseMae": 16.80206794995568,
+        "oceanAmpMae": 1.2689128545854542,
+        "oceanPhaseMae": 13.13793088686518
+      },
+      "regionAmpMae": {
+        "antarctica": 3.5390612335435776,
+        "greenland": 2.7539425564374276,
+        "northAtlanticEurope": 2.3047203653861685,
+        "neAsia": 9.391514889068926,
+        "arcticOcean": 7.955507684484468,
+        "midLatOcean": 1.5217594890795851
+      },
+      "deepTropicsRatio": 1.1538492401802047,
+      "rejectedBecause": [
+        "calibration objective 0 worse",
+        "calibration objective 1 worse",
+        "calibration objective 3 worse",
+        "hold-out objective 0 worse",
+        "hold-out objective 1 worse",
+        "hold-out objective 3 worse",
+        "neAsia much worse",
+        "arcticOcean much worse",
+        "deep-tropics H2/H1 moved"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 12,
+        "soilDepthM": 2,
+        "mixedLayerDepthM": 40
+      },
+      "tauLandDays": 13.88888888888889,
+      "tauSeaDays": 163.96604938271605,
+      "objectivesCalibration": {
+        "landAmpMae": 3.2249812734220265,
+        "landPhaseMae": 15.190388049114555,
+        "oceanAmpMae": 1.2755664234980715,
+        "oceanPhaseMae": 11.984706591102354
+      },
+      "holdOut": {
+        "landAmpMae": 3.2335391444093267,
+        "landPhaseMae": 15.210281440906412,
+        "oceanAmpMae": 1.2765321579489546,
+        "oceanPhaseMae": 11.987996060868776
+      },
+      "regionAmpMae": {
+        "antarctica": 3.4497053773037227,
+        "greenland": 2.7759752936157835,
+        "northAtlanticEurope": 2.3635398301579387,
+        "neAsia": 9.485275201443837,
+        "arcticOcean": 7.518117851982542,
+        "midLatOcean": 1.7271875858419223
+      },
+      "deepTropicsRatio": 1.131987187021167,
+      "rejectedBecause": [
+        "calibration objective 0 worse",
+        "calibration objective 1 worse",
+        "hold-out objective 0 worse",
+        "hold-out objective 1 worse",
+        "neAsia much worse"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 12,
+        "soilDepthM": 2,
+        "mixedLayerDepthM": 50
+      },
+      "tauLandDays": 13.88888888888889,
+      "tauSeaDays": 202.5462962962963,
+      "objectivesCalibration": {
+        "landAmpMae": 3.2249812734220265,
+        "landPhaseMae": 15.190388049114555,
+        "oceanAmpMae": 1.2673092101880634,
+        "oceanPhaseMae": 13.131803147783955
+      },
+      "holdOut": {
+        "landAmpMae": 3.2335391444093267,
+        "landPhaseMae": 15.210281440906412,
+        "oceanAmpMae": 1.2689128545854542,
+        "oceanPhaseMae": 13.13793088686518
+      },
+      "regionAmpMae": {
+        "antarctica": 3.4497053773037227,
+        "greenland": 2.7759752936157835,
+        "northAtlanticEurope": 2.2919032640948163,
+        "neAsia": 9.485275201443837,
+        "arcticOcean": 7.955507684484468,
+        "midLatOcean": 1.5217594890795851
+      },
+      "deepTropicsRatio": 1.131987187021167,
+      "rejectedBecause": [
+        "calibration objective 0 worse",
+        "calibration objective 1 worse",
+        "calibration objective 3 worse",
+        "hold-out objective 0 worse",
+        "hold-out objective 1 worse",
+        "hold-out objective 3 worse",
+        "neAsia much worse",
+        "arcticOcean much worse"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 12,
+        "soilDepthM": 4,
+        "mixedLayerDepthM": 40
+      },
+      "tauLandDays": 18.13271604938272,
+      "tauSeaDays": 163.96604938271605,
+      "objectivesCalibration": {
+        "landAmpMae": 3.290812126902404,
+        "landPhaseMae": 12.333484745461934,
+        "oceanAmpMae": 1.2755664234980715,
+        "oceanPhaseMae": 11.984706591102354
+      },
+      "holdOut": {
+        "landAmpMae": 3.2998273565923433,
+        "landPhaseMae": 12.338163688226363,
+        "oceanAmpMae": 1.2765321579489546,
+        "oceanPhaseMae": 11.987996060868776
+      },
+      "regionAmpMae": {
+        "antarctica": 3.249224066477397,
+        "greenland": 2.8400228950840614,
+        "northAtlanticEurope": 2.3374387806982404,
+        "neAsia": 9.710602586893845,
+        "arcticOcean": 7.518117851982542,
+        "midLatOcean": 1.7271875858419223
+      },
+      "deepTropicsRatio": 1.0847492524727118,
+      "rejectedBecause": [
+        "calibration objective 0 worse",
+        "calibration objective 1 worse",
+        "hold-out objective 0 worse",
+        "hold-out objective 1 worse",
+        "neAsia much worse"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 12,
+        "soilDepthM": 4,
+        "mixedLayerDepthM": 50
+      },
+      "tauLandDays": 18.13271604938272,
+      "tauSeaDays": 202.5462962962963,
+      "objectivesCalibration": {
+        "landAmpMae": 3.290812126902404,
+        "landPhaseMae": 12.333484745461934,
+        "oceanAmpMae": 1.2673092101880634,
+        "oceanPhaseMae": 13.131803147783955
+      },
+      "holdOut": {
+        "landAmpMae": 3.2998273565923433,
+        "landPhaseMae": 12.338163688226363,
+        "oceanAmpMae": 1.2689128545854542,
+        "oceanPhaseMae": 13.13793088686518
+      },
+      "regionAmpMae": {
+        "antarctica": 3.249224066477397,
+        "greenland": 2.8400228950840614,
+        "northAtlanticEurope": 2.2658022146351207,
+        "neAsia": 9.710602586893845,
+        "arcticOcean": 7.955507684484468,
+        "midLatOcean": 1.5217594890795851
+      },
+      "deepTropicsRatio": 1.0847492524727118,
+      "rejectedBecause": [
+        "calibration objective 0 worse",
+        "calibration objective 1 worse",
+        "calibration objective 3 worse",
+        "hold-out objective 0 worse",
+        "hold-out objective 1 worse",
+        "hold-out objective 3 worse",
+        "neAsia much worse",
+        "arcticOcean much worse"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 12,
+        "soilDepthM": 6,
+        "mixedLayerDepthM": 40
+      },
+      "tauLandDays": 22.37654320987654,
+      "tauSeaDays": 163.96604938271605,
+      "objectivesCalibration": {
+        "landAmpMae": 3.371846139991103,
+        "landPhaseMae": 9.979876022184229,
+        "oceanAmpMae": 1.2755664234980715,
+        "oceanPhaseMae": 11.984706591102354
+      },
+      "holdOut": {
+        "landAmpMae": 3.3813185648774144,
+        "landPhaseMae": 9.986385299710207,
+        "oceanAmpMae": 1.2765321579489546,
+        "oceanPhaseMae": 11.987996060868776
+      },
+      "regionAmpMae": {
+        "antarctica": 3.0344276039176834,
+        "greenland": 2.9402794305115623,
+        "northAtlanticEurope": 2.3174410116406303,
+        "neAsia": 9.979107761546022,
+        "arcticOcean": 7.518117851982542,
+        "midLatOcean": 1.7271875858419223
+      },
+      "deepTropicsRatio": 1.036493211347215,
+      "rejectedBecause": [
+        "calibration objective 0 worse",
+        "calibration objective 1 worse",
+        "hold-out objective 0 worse",
+        "hold-out objective 1 worse",
+        "neAsia much worse"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 12,
+        "soilDepthM": 6,
+        "mixedLayerDepthM": 50
+      },
+      "tauLandDays": 22.37654320987654,
+      "tauSeaDays": 202.5462962962963,
+      "objectivesCalibration": {
+        "landAmpMae": 3.371846139991103,
+        "landPhaseMae": 9.979876022184229,
+        "oceanAmpMae": 1.2673092101880634,
+        "oceanPhaseMae": 13.131803147783955
+      },
+      "holdOut": {
+        "landAmpMae": 3.3813185648774144,
+        "landPhaseMae": 9.986385299710207,
+        "oceanAmpMae": 1.2689128545854542,
+        "oceanPhaseMae": 13.13793088686518
+      },
+      "regionAmpMae": {
+        "antarctica": 3.0344276039176834,
+        "greenland": 2.9402794305115623,
+        "northAtlanticEurope": 2.2458044455775084,
+        "neAsia": 9.979107761546022,
+        "arcticOcean": 7.955507684484468,
+        "midLatOcean": 1.5217594890795851
+      },
+      "deepTropicsRatio": 1.036493211347215,
+      "rejectedBecause": [
+        "calibration objective 0 worse",
+        "calibration objective 1 worse",
+        "calibration objective 3 worse",
+        "hold-out objective 0 worse",
+        "hold-out objective 1 worse",
+        "hold-out objective 3 worse",
+        "neAsia much worse",
+        "arcticOcean much worse"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 12,
+        "soilDepthM": 8,
+        "mixedLayerDepthM": 40
+      },
+      "tauLandDays": 26.62037037037037,
+      "tauSeaDays": 163.96604938271605,
+      "objectivesCalibration": {
+        "landAmpMae": 3.466411348816649,
+        "landPhaseMae": 8.451608816998286,
+        "oceanAmpMae": 1.2755664234980715,
+        "oceanPhaseMae": 11.984706591102354
+      },
+      "holdOut": {
+        "landAmpMae": 3.4764136414147564,
+        "landPhaseMae": 8.44995886947401,
+        "oceanAmpMae": 1.2765321579489546,
+        "oceanPhaseMae": 11.987996060868776
+      },
+      "regionAmpMae": {
+        "antarctica": 2.8210901875576604,
+        "greenland": 3.0809038450802815,
+        "northAtlanticEurope": 2.3123165380266877,
+        "neAsia": 10.281784053325001,
+        "arcticOcean": 7.518117851982542,
+        "midLatOcean": 1.7271875858419223
+      },
+      "deepTropicsRatio": 0.9902789698824611,
+      "rejectedBecause": [
+        "calibration objective 0 worse",
+        "hold-out objective 0 worse",
+        "neAsia much worse"
+      ]
+    },
+    {
+      "values": {
+        "seasonalDampingWPerM2K": 12,
+        "soilDepthM": 8,
+        "mixedLayerDepthM": 50
+      },
+      "tauLandDays": 26.62037037037037,
+      "tauSeaDays": 202.5462962962963,
+      "objectivesCalibration": {
+        "landAmpMae": 3.466411348816649,
+        "landPhaseMae": 8.451608816998286,
+        "oceanAmpMae": 1.2673092101880634,
+        "oceanPhaseMae": 13.131803147783955
+      },
+      "holdOut": {
+        "landAmpMae": 3.4764136414147564,
+        "landPhaseMae": 8.44995886947401,
+        "oceanAmpMae": 1.2689128545854542,
+        "oceanPhaseMae": 13.13793088686518
+      },
+      "regionAmpMae": {
+        "antarctica": 2.8210901875576604,
+        "greenland": 3.0809038450802815,
+        "northAtlanticEurope": 2.2406799719635693,
+        "neAsia": 10.281784053325001,
+        "arcticOcean": 7.955507684484468,
+        "midLatOcean": 1.5217594890795851
+      },
+      "deepTropicsRatio": 0.9902789698824611,
+      "rejectedBecause": [
+        "calibration objective 0 worse",
+        "calibration objective 3 worse",
+        "hold-out objective 0 worse",
+        "hold-out objective 3 worse",
+        "neAsia much worse",
+        "arcticOcean much worse"
+      ]
+    }
+  ],
+  "admissibleFront": [],
+  "representatives": [
+    {
+      "name": "best land amplitude",
+      "values": {
+        "seasonalDampingWPerM2K": 7,
+        "soilDepthM": 8,
+        "mixedLayerDepthM": 20
+      }
+    },
+    {
+      "name": "best ocean amplitude",
+      "values": {
+        "seasonalDampingWPerM2K": 5,
+        "soilDepthM": 1,
+        "mixedLayerDepthM": 50
+      }
+    },
+    {
+      "name": "best land phase",
+      "values": {
+        "seasonalDampingWPerM2K": 9,
+        "soilDepthM": 6,
+        "mixedLayerDepthM": 30
+      }
+    },
+    {
+      "name": "best ocean phase",
+      "values": {
+        "seasonalDampingWPerM2K": 7,
+        "soilDepthM": 4,
+        "mixedLayerDepthM": 20
+      }
+    },
+    {
+      "name": "most balanced",
+      "values": {
+        "seasonalDampingWPerM2K": 8,
+        "soilDepthM": 4,
+        "mixedLayerDepthM": 30
+      }
+    }
+  ]
+}

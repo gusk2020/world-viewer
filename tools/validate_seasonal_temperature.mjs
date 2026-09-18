@@ -52,6 +52,11 @@ import {
   SEASON_PARAMETERS, SURFACE_LAND, SURFACE_SEA,
   buildSeasonalTemperatureTable, harmonicsForEccentricity,
 } from "../js/climate-v1/season.js";
+import {
+  EARTH_CALIBRATION_ORBIT, MARCH_EQUINOX_DAY_OF_YEAR, MONTH_NAMES, MONTH_DAYS,
+  monthIntervals as buildMonthIntervals, monthMeanWeights, modelMonthAnomalies,
+  buildHarmonicOperator, harmonicsOf, wrapPhase, calendarHelpers,
+} from "./seasonal_calendar.mjs";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const WORLD = path.join(REPO, "worlds", "kasoku-sekai");
@@ -59,30 +64,9 @@ const TD = path.join(WORLD, "teacher");
 const asJson = process.argv.slice(2).includes("--json");
 
 // ---------------------------------------------------------------------------
-// 1. Earth's real orbit, as a CALIBRATION CONDITION of this validator only.
-//
-// These are physical facts about the body, never fitted (the calibration
-// audit lists Earth's tilt, eccentricity and periapsis among the values that
-// may never be fitted). They are supplied here rather than written into the
-// world's config because the config's job is what the app draws, and the app
-// still draws the circular orbit the user has already looked at.
-const EARTH_CALIBRATION_ORBIT = {
-  axialTiltDegrees: 23.44,
-  orbitalEccentricity: 0.0167,
-  periapsisLongitudeDeg: 283,
-};
-
-// The March (ascending) equinox as a day of year, counting Jan 1 00:00 as 0.
-// Mean instant over 1991-2020 is about March 20.35 UTC:
-//   31 (Jan) + 28.2425 (Feb, the tropical-year average) + 19.35 = 78.59.
-// This is the ONLY link between the model's clock and Earth's calendar.
-// Its sensitivity is measured and reported below rather than assumed small.
-const MARCH_EQUINOX_DAY_OF_YEAR = 78.59;
-
-// Real Gregorian month lengths, February carrying the average 28.2425 so the
-// twelve sum to the tropical year the season table itself uses.
-const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const MONTH_DAYS = [31, 28.2425, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+// 1. Earth's real orbit, the calendar constant and the month lengths all live
+// in tools/seasonal_calendar.mjs, shared with the grid search so the two
+// cannot drift apart. Read that file for why each is what it is.
 
 // ---------------------------------------------------------------------------
 const config = JSON.parse(readFileSync(path.join(WORLD, "config.json"), "utf8"));
@@ -102,28 +86,10 @@ const f3 = (v) => (Number.isFinite(v) ? v.toFixed(3) : "  --");
 const pad = (v, n = 9) => String(v).padStart(n);
 
 // ---------------------------------------------------------------------------
-// 2. Month intervals on the model's own [0,1) phase axis.
-//
-// Phase 0 is the ascending equinox, so a day of year maps to a phase by
-// subtracting the equinox's own day and dividing by the year. Month lengths
-// differ, so the intervals differ in width -- which is the whole reason a
-// month mean is an integral rather than a sample.
-function monthIntervals(equinoxDay = MARCH_EQUINOX_DAY_OF_YEAR) {
-  const intervals = [];
-  let day = 0;
-  for (let m = 0; m < 12; m++) {
-    const start = (day - equinoxDay) / YEAR_D;
-    const end = (day + MONTH_DAYS[m] - equinoxDay) / YEAR_D;
-    intervals.push({
-      month: m, name: MONTH_NAMES[m], days: MONTH_DAYS[m],
-      startPhase: start, endPhase: end, centrePhase: (start + end) / 2,
-      // Where the month sits in the year, folded into [0,1).
-      centreWrapped: ((((start + end) / 2) % 1) + 1) % 1,
-    });
-    day += MONTH_DAYS[m];
-  }
-  return intervals;
-}
+// 2. Month intervals on the model's own [0,1) phase axis. Phase 0 is the
+// ascending equinox, so a day of year maps to a phase by subtracting the
+// equinox's own day and dividing by the year.
+const monthIntervals = (equinoxDay = MARCH_EQUINOX_DAY_OF_YEAR) => buildMonthIntervals(YEAR_D, equinoxDay);
 const MONTHS = monthIntervals();
 
 // ---------------------------------------------------------------------------
@@ -184,36 +150,10 @@ function monthMeansBySampling(samples = PHASE_SAMPLES) {
   return { means, counts };
 }
 
-// The exact mean of the harmonics over [p0, p1]:
-//   mean of cos(2 pi n p) = [sin(2 pi n p1) - sin(2 pi n p0)] / (2 pi n (p1-p0))
-//   mean of sin(2 pi n p) = [cos(2 pi n p0) - cos(2 pi n p1)] / (2 pi n (p1-p0))
+// The exact mean of each harmonic over each month's interval, from the shared
+// module -- this is what every number below is built on.
 function monthMeansAnalytic() {
-  const H = table.harmonics;
-  const wCos = new Float64Array(12 * H);
-  const wSin = new Float64Array(12 * H);
-  for (let m = 0; m < 12; m++) {
-    const { startPhase: p0, endPhase: p1 } = MONTHS[m];
-    for (let n = 1; n <= H; n++) {
-      const k = 2 * Math.PI * n, d = k * (p1 - p0);
-      wCos[m * H + n - 1] = (Math.sin(k * p1) - Math.sin(k * p0)) / d;
-      wSin[m * H + n - 1] = (Math.cos(k * p0) - Math.cos(k * p1)) / d;
-    }
-  }
-  const means = new Float64Array(ROWS * 2 * 12);
-  for (let y = 0; y < ROWS; y++) {
-    for (let surface = 0; surface < 2; surface++) {
-      const base = ((y * 2 + surface) * H) * 2;
-      for (let m = 0; m < 12; m++) {
-        let v = 0;
-        for (let n = 0; n < H; n++) {
-          v += table.coefficients[base + n * 2] * wCos[m * H + n]
-             + table.coefficients[base + n * 2 + 1] * wSin[m * H + n];
-        }
-        means[(y * 2 + surface) * 12 + m] = v;
-      }
-    }
-  }
-  return means;
+  return modelMonthAnomalies(table, MONTHS);
 }
 
 // The midpoint approximation the brief asks to measure against.
@@ -245,63 +185,12 @@ function monthMeansMidpoint() {
 // equally spaced points, because the months are not equally spaced. The same
 // operator is applied to the teacher and to the model, so nothing in the
 // comparison depends on this choice being the only defensible one.
-function buildHarmonicOperator(centres) {
-  const rows = centres.length, cols = 5;
-  const X = [];
-  for (const p of centres) {
-    X.push([1, Math.cos(2 * Math.PI * p), Math.sin(2 * Math.PI * p),
-            Math.cos(4 * Math.PI * p), Math.sin(4 * Math.PI * p)]);
-  }
-  // (X'X)^-1 X', by Gauss-Jordan on the 5x5.
-  const A = Array.from({ length: cols }, () => new Float64Array(cols));
-  for (let i = 0; i < cols; i++) for (let j = 0; j < cols; j++) {
-    let s = 0; for (let r = 0; r < rows; r++) s += X[r][i] * X[r][j]; A[i][j] = s;
-  }
-  const I = Array.from({ length: cols }, (_, i) => Float64Array.from({ length: cols }, (_, j) => (i === j ? 1 : 0)));
-  for (let c = 0; c < cols; c++) {
-    let piv = c;
-    for (let r = c + 1; r < cols; r++) if (Math.abs(A[r][c]) > Math.abs(A[piv][c])) piv = r;
-    [A[c], A[piv]] = [A[piv], A[c]]; [I[c], I[piv]] = [I[piv], I[c]];
-    const d = A[c][c];
-    for (let j = 0; j < cols; j++) { A[c][j] /= d; I[c][j] /= d; }
-    for (let r = 0; r < cols; r++) {
-      if (r === c) continue;
-      const f = A[r][c];
-      if (f === 0) continue;
-      for (let j = 0; j < cols; j++) { A[r][j] -= f * A[c][j]; I[r][j] -= f * I[c][j]; }
-    }
-  }
-  const P = Array.from({ length: cols }, () => new Float64Array(rows));
-  for (let i = 0; i < cols; i++) for (let r = 0; r < rows; r++) {
-    let s = 0; for (let j = 0; j < cols; j++) s += I[i][j] * X[r][j]; P[i][r] = s;
-  }
-  return P; // 5 x 12
-}
 const HARM_P = buildHarmonicOperator(MONTHS.map((m) => m.centreWrapped));
 
-/** amplitude and peak phase of the first two annual harmonics. */
-function harmonics(series) {
-  const c = new Float64Array(5);
-  for (let i = 0; i < 5; i++) { let s = 0; for (let m = 0; m < 12; m++) s += HARM_P[i][m] * series[m]; c[i] = s; }
-  const a1 = c[1], b1 = c[2], a2 = c[3], b2 = c[4];
-  const h1 = Math.hypot(a1, b1), h2 = Math.hypot(a2, b2);
-  // A cos t + B sin t peaks where t = atan2(B, A).
-  const p1 = (((Math.atan2(b1, a1) / (2 * Math.PI)) % 1) + 1) % 1;
-  // The second harmonic has two peaks a half-year apart, so its phase is only
-  // defined modulo half a year.
-  const p2 = (((Math.atan2(b2, a2) / (4 * Math.PI)) % 0.5) + 0.5) % 0.5;
-  return { mean: c[0], h1, h2, p1, p2, ratio: h1 > 0 ? h2 / h1 : null };
-}
+const harmonics = (series) => harmonicsOf(HARM_P, series);
 
-// Circular helpers, all in days.
-const wrapPhase = (d) => { const x = ((d % 1) + 1.5) % 1 - 0.5; return x; };
-const phaseToDays = (p) => p * YEAR_D;
-const phaseToDayOfYear = (p) => (((MARCH_EQUINOX_DAY_OF_YEAR + p * YEAR_D) % YEAR_D) + YEAR_D) % YEAR_D;
-function dayOfYearLabel(doy) {
-  let d = doy, m = 0;
-  while (m < 12 && d >= MONTH_DAYS[m]) { d -= MONTH_DAYS[m]; m++; }
-  return `${MONTH_NAMES[Math.min(11, m)]} ${(d + 1).toFixed(0)}`;
-}
+// Circular helpers, all in days, from the shared module.
+const { phaseToDays, phaseToDayOfYear, dayOfYearLabel } = calendarHelpers(YEAR_D);
 
 // ---------------------------------------------------------------------------
 // 5. The model's annual field (Stage 2, current parameters, untouched).
@@ -710,16 +599,7 @@ say("=== 11. +/-10% one-at-a-time sensitivity (diagnostic only -- nothing is fit
 function metricsFor(seasonParams) {
   const t = buildSeasonalTemperatureTable({ rows: ROWS, body: calibrationBody, params: seasonParams });
   const H = t.harmonics;
-  // Month means for this table, analytically, as above.
-  const wCos = new Float64Array(12 * H), wSin = new Float64Array(12 * H);
-  for (let m = 0; m < 12; m++) {
-    const { startPhase: p0, endPhase: p1 } = MONTHS[m];
-    for (let n = 1; n <= H; n++) {
-      const k = 2 * Math.PI * n, d = k * (p1 - p0);
-      wCos[m * H + n - 1] = (Math.sin(k * p1) - Math.sin(k * p0)) / d;
-      wSin[m * H + n - 1] = (Math.cos(k * p0) - Math.cos(k * p1)) / d;
-    }
-  }
+  const { wCos, wSin } = monthMeanWeights(MONTHS, H);
   const cache = new Map();
   const harmOf = (rs2) => {
     let v = cache.get(rs2);
@@ -803,15 +683,7 @@ function phaseBiasAtEquinox(equinoxDay) {
   const months = monthIntervals(equinoxDay);
   const P = buildHarmonicOperator(months.map((m) => m.centreWrapped));
   const H = table.harmonics;
-  const wCos = new Float64Array(12 * H), wSin = new Float64Array(12 * H);
-  for (let m = 0; m < 12; m++) {
-    const { startPhase: p0, endPhase: p1 } = months[m];
-    for (let n = 1; n <= H; n++) {
-      const k = 2 * Math.PI * n, d = k * (p1 - p0);
-      wCos[m * H + n - 1] = (Math.sin(k * p1) - Math.sin(k * p0)) / d;
-      wSin[m * H + n - 1] = (Math.cos(k * p0) - Math.cos(k * p1)) / d;
-    }
-  }
+  const { wCos, wSin } = monthMeanWeights(months, H);
   const fit = (series, op) => {
     const c = new Float64Array(3);
     for (let i = 0; i < 3; i++) { let v = 0; for (let m = 0; m < 12; m++) v += op[i][m] * series[m]; c[i] = v; }
