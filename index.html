@@ -121,6 +121,7 @@
         <input type="range" id="season-phase" min="0" max="1439" step="1" value="360" hidden />
         <button type="button" id="season-next" class="pill" hidden>▶</button>
         <button type="button" id="season-play" class="pill" hidden>再生</button>
+        <button type="button" id="orbit-open" class="pill" title="軸の傾き・軌道の離心率・近日点方向を変える">軌道</button>
       </div>
       <!-- Sea ice: EXPERIMENTAL, off by default, and only while the seasonal
            temperature is on screen. The label says the area is overstated
@@ -135,6 +136,41 @@
         <span id="seaice-note" hidden>実験・面積過大</span>
       </div>
       <p id="climatev1-readout" hidden></p>
+    </div>
+  </div>
+
+  <!-- Planet settings. A separate overlay rather than three more sliders on
+       the main screen: these are set once and then looked at, not adjusted
+       while watching the globe. Opened from the 軌道 button on the season row,
+       and only ever offered where the seasonal model actually runs -- which is
+       Earth, so the Moon can never be given its own geocentric eccentricity by
+       mistake. Nothing here writes to a world's config; it is a temporary
+       override that 元に戻す clears. -->
+  <div id="planet-settings" class="panel" hidden>
+    <div class="control-row">
+      <span class="panel-title">軌道と自転軸</span>
+      <button type="button" id="orbit-close" class="pill">閉じる</button>
+    </div>
+    <div class="control-row">
+      <label for="orbit-tilt">軸傾斜</label>
+      <input type="range" id="orbit-tilt" min="0" max="90" step="0.1" value="23.4" />
+      <span id="orbit-tilt-value" class="orbit-value">23.4°</span>
+    </div>
+    <div class="control-row">
+      <label for="orbit-ecc">離心率</label>
+      <input type="range" id="orbit-ecc" min="0" max="0.6" step="0.005" value="0" />
+      <span id="orbit-ecc-value" class="orbit-value">0.000</span>
+    </div>
+    <div class="control-row">
+      <label for="orbit-peri">近日点</label>
+      <input type="range" id="orbit-peri" min="0" max="359" step="1" value="0" />
+      <span id="orbit-peri-value" class="orbit-value">0°</span>
+    </div>
+    <p id="orbit-hint"></p>
+    <p id="orbit-warning" hidden></p>
+    <div class="control-row">
+      <button type="button" id="orbit-reset" class="pill">元に戻す</button>
+      <span id="orbit-status"></span>
     </div>
   </div>
   <div id="scale-bar" hidden>

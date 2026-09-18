@@ -326,3 +326,61 @@ html, body {
   color: #ffd9a0;
   white-space: nowrap;
 }
+
+/* Planet settings: an overlay, not another three rows on the main screen.
+   Centred rather than docked, because it is opened, used and closed rather
+   than watched alongside the globe -- and because docking it would push the
+   season row it was opened from off the bottom of a Pixel 7a. */
+#planet-settings {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(368px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  z-index: 40;
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.55);
+}
+
+#planet-settings .panel-title {
+  flex: 1;
+  font-size: 0.95rem;
+}
+
+#planet-settings label {
+  flex: 0 0 52px;
+}
+
+.orbit-value {
+  flex: 0 0 56px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+/* The hint says what the periapsis angle means in plain words; the warning is
+   a real limitation of the model and has to stay legible, not decorative. */
+#orbit-hint,
+#orbit-warning {
+  margin: 2px 0 0;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+#orbit-hint {
+  color: #b9c9e2;
+}
+
+#orbit-warning {
+  color: #ffd9a0;
+}
+
+#orbit-status {
+  flex: 1;
+  text-align: right;
+  font-size: 11px;
+  font-weight: 500;
+  color: #b9c9e2;
+}

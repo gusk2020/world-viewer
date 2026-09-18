@@ -61,6 +61,23 @@ async function main() {
   const seasonSlider = document.getElementById("season-phase");
   const seaiceRow = document.getElementById("seaice-row");
   const seaiceNote = document.getElementById("seaice-note");
+  const planetSettings = document.getElementById("planet-settings");
+  const orbitOpen = document.getElementById("orbit-open");
+  const orbitClose = document.getElementById("orbit-close");
+  const orbitReset = document.getElementById("orbit-reset");
+  const orbitHint = document.getElementById("orbit-hint");
+  const orbitWarning = document.getElementById("orbit-warning");
+  const orbitStatus = document.getElementById("orbit-status");
+  const orbitSliders = {
+    tilt: document.getElementById("orbit-tilt"),
+    ecc: document.getElementById("orbit-ecc"),
+    peri: document.getElementById("orbit-peri"),
+  };
+  const orbitValues = {
+    tilt: document.getElementById("orbit-tilt-value"),
+    ecc: document.getElementById("orbit-ecc-value"),
+    peri: document.getElementById("orbit-peri-value"),
+  };
   const worldCycleButton = document.getElementById("world-cycle");
   const virtualNote = document.getElementById("virtual-sea-note");
   const loading = document.getElementById("loading");
@@ -233,6 +250,141 @@ async function main() {
   let seasonPlayLast = 0;
   const seasonButtons = document.querySelectorAll("#season-mode button");
 
+  // --- planet settings: axial tilt, eccentricity, periapsis direction -------
+  //
+  // A temporary override on top of the world's own `body`, never a write to
+  // the config. `orbitOverride` starting null is what keeps the shipped app
+  // exactly what it was: every world still resolves to whatever its config
+  // says, which today is a circular orbit for all three.
+  //
+  // The two kinds of change cost very different amounts, and the code has to
+  // know which is which:
+  //
+  //   * **axial tilt** is read by Stage 2's own annual-mean temperature field,
+  //     so changing it invalidates the whole Climate v1 preview -- wind,
+  //     humidity and moisture all follow the temperature. That is correct
+  //     physics (obliquity really does move the annual-mean insolation), and
+  //     it is the expensive path.
+  //   * **eccentricity and periapsis** are read only by the seasonal module,
+  //     because Stage 2 cannot see them at all (see the warning text below).
+  //     So they rebuild the season table and the sea-ice cycle and nothing
+  //     else, which is the cheap path.
+  const ORBIT_MAX_ECCENTRICITY = 0.6;
+  let orbitOverride = null;   // null = exactly what the world's config says
+
+  /** The body the climate stages should use: the config, plus any override. */
+  function climateBody() {
+    return orbitOverride ? { ...world.config.body, ...orbitOverride } : world.config.body;
+  }
+  function orbitCurrent() {
+    const b = climateBody();
+    return {
+      axialTiltDegrees: b.axialTiltDegrees,
+      orbitalEccentricity: Number.isFinite(b.orbitalEccentricity) ? b.orbitalEccentricity : 0,
+      periapsisLongitudeDeg: Number.isFinite(b.periapsisLongitudeDeg) ? b.periapsisLongitudeDeg : 0,
+    };
+  }
+
+  // What the periapsis angle means in words. Phase 0 is the ascending equinox
+  // and the northern solstice is at 90 degrees of solar longitude, so
+  // periapsis near 90 puts the northern summer closest to the star. The angle
+  // itself is what the model reads; this is only a label.
+  function periapsisHint(deg, e) {
+    if (!(e > 0)) return "離心率が0のときは近日点方向は効きません。";
+    const d = ((deg % 360) + 360) % 360;
+    // Phase 0 is the ascending equinox and the northern solstice sits at 90
+    // degrees of solar longitude, so periapsis near 90 puts the NORTHERN
+    // summer closest to the star. Checked against the measured half-amplitudes:
+    // e = 0.3 at 90 gives 45N 34.2 C against 45S 3.7 C, and 270 reverses it.
+    const apart = (a, b) => { const x = Math.abs(((a - b) % 360 + 360) % 360); return Math.min(x, 360 - x); };
+    let where = "分点のころが近日点（南北ほぼ同じ）";
+    if (apart(d, 90) < 45) where = "北半球の夏が近日点（北の夏が強くなる）";
+    else if (apart(d, 270) < 45) where = "南半球の夏が近日点（南の夏が強くなる）";
+    return `${Math.round(d)}° = ${where}。`;
+  }
+
+  function applyOrbitControls() {
+    const cur = orbitCurrent();
+    orbitSliders.tilt.value = String(cur.axialTiltDegrees);
+    orbitSliders.ecc.value = String(cur.orbitalEccentricity);
+    orbitSliders.peri.value = String(cur.periapsisLongitudeDeg);
+    orbitValues.tilt.textContent = `${Number(cur.axialTiltDegrees).toFixed(1)}°`;
+    orbitValues.ecc.textContent = Number(cur.orbitalEccentricity).toFixed(3);
+    orbitValues.peri.textContent = `${Math.round(cur.periapsisLongitudeDeg)}°`;
+    orbitHint.textContent = periapsisHint(cur.periapsisLongitudeDeg, cur.orbitalEccentricity)
+      + `　離心率は0〜${ORBIT_MAX_ECCENTRICITY.toFixed(2)}まで対応。`;
+    // Shown for ANY non-zero eccentricity, not only a large one: Stage 2's
+    // annual mean never reads the eccentricity at all, so the statement is
+    // equally true at 0.0167 -- it is simply smaller there.
+    const e = cur.orbitalEccentricity;
+    if (e > 0) {
+      const rise = ((1 / Math.sqrt(1 - e * e) - 1) * 100).toFixed(1);
+      orbitWarning.textContent =
+        `離心率があると季節の偏差だけが対応します。年平均の気候は未対応です`
+        + `（軌道平均の日射は+${rise}%になりますが、年平均気温はまだそれを読みません）。`
+        + `海氷の面積と時期は安定していますが、厚さの数値は目安です（e=0.6で最大0.24mの誤差）。`;
+      orbitWarning.hidden = false;
+    } else {
+      orbitWarning.hidden = true;
+    }
+    orbitStatus.textContent = orbitOverride ? "この世界の設定から変更中" : "この世界の設定のまま";
+  }
+
+  // Applied on `change` (i.e. when the finger lifts), never on `input`:
+  // rebuilding costs a few hundred milliseconds on a phone and a slider drag
+  // would otherwise ask for it dozens of times. The readout follows `input`
+  // so the number moves under the finger.
+  function applyOrbitChange({ tiltChanged }) {
+    // The phase is deliberately untouched -- changing the orbit must not
+    // throw away where in the year you were looking.
+    v1SeasonTable = null;
+    v1SeaIceCycle = null;
+    v1SeaIceDisplay = null;
+    if (tiltChanged) v1Cache = new Map();
+    applyOrbitControls();
+    requestAnimationFrame(() => { applyClimateV1(); });
+  }
+
+  function readOrbitSliders() {
+    return {
+      axialTiltDegrees: Number(orbitSliders.tilt.value),
+      orbitalEccentricity: Math.min(ORBIT_MAX_ECCENTRICITY, Number(orbitSliders.ecc.value)),
+      periapsisLongitudeDeg: Number(orbitSliders.peri.value),
+    };
+  }
+
+  for (const [key, slider] of Object.entries(orbitSliders)) {
+    slider.addEventListener("input", () => {
+      // Label only -- no model runs while the finger is down.
+      const v = Number(slider.value);
+      orbitValues[key].textContent = key === "tilt" ? `${v.toFixed(1)}°`
+        : key === "ecc" ? v.toFixed(3) : `${Math.round(v)}°`;
+      if (key !== "tilt") {
+        const e = key === "ecc" ? v : Number(orbitSliders.ecc.value);
+        const deg = key === "peri" ? v : Number(orbitSliders.peri.value);
+        orbitHint.textContent = periapsisHint(deg, e)
+          + `　離心率は0〜${ORBIT_MAX_ECCENTRICITY.toFixed(2)}まで対応。`;
+      }
+    });
+    slider.addEventListener("change", () => {
+      const before = orbitCurrent();
+      orbitOverride = readOrbitSliders();
+      applyOrbitChange({ tiltChanged: orbitOverride.axialTiltDegrees !== before.axialTiltDegrees });
+    });
+  }
+
+  orbitOpen.addEventListener("click", () => {
+    applyOrbitControls();
+    planetSettings.hidden = false;
+  });
+  orbitClose.addEventListener("click", () => { planetSettings.hidden = true; });
+  orbitReset.addEventListener("click", () => {
+    if (!orbitOverride) { applyOrbitControls(); return; }
+    const tiltChanged = orbitOverride.axialTiltDegrees !== world.config.body.axialTiltDegrees;
+    orbitOverride = null;
+    applyOrbitChange({ tiltChanged });
+  });
+
   // --- sea ice (EXPERIMENTAL, off by default) -------------------------------
   //
   // A diagnosis drawn over the seasonal temperature, on the SAME orbitalPhase
@@ -335,6 +487,10 @@ async function main() {
     stopSeasonPlay();
     seasonRow.hidden = true;
     seaiceRow.hidden = true;
+    // The settings overlay is opened from that row, so it goes with it -- an
+    // orbit panel floating over the 2D map or over Mars would be offering to
+    // configure something that is not on screen.
+    planetSettings.hidden = true;
     if (v1SeaIce !== "off") { v1SeaIce = "off"; applySeaIceButtons(); }
   }
 
@@ -372,11 +528,12 @@ async function main() {
   // no UI or plumbing here. Both are constant per world today, so this is
   // identical in behaviour to keying on rows alone.
   function ensureSeasonTable(rows) {
-    const body = world.config.body;
+    const body = climateBody();
     const e = Number.isFinite(body.orbitalEccentricity) ? body.orbitalEccentricity : 0;
     const varpi = Number.isFinite(body.periapsisLongitudeDeg) ? body.periapsisLongitudeDeg : 0;
     if (v1SeasonTable && v1SeasonTable.rows === rows
-      && v1SeasonTable.orbitalEccentricity === e && v1SeasonTable.periapsisLongitudeDeg === varpi) {
+      && v1SeasonTable.orbitalEccentricity === e && v1SeasonTable.periapsisLongitudeDeg === varpi
+      && v1SeasonTable.axialTiltDegrees === body.axialTiltDegrees) {
       return v1SeasonTable;
     }
     v1SeasonTable = buildSeasonalTemperatureTable({ rows, body });
@@ -666,7 +823,7 @@ async function main() {
     // would imply a seasonality that does not exist.
     const showsSeason = showsV1 && v1Mode === "temperature-model";
     seasonRow.hidden = !showsSeason;
-    if (!showsSeason) stopSeasonPlay();
+    if (!showsSeason) { stopSeasonPlay(); planetSettings.hidden = true; }
     if (showsSeason) applySeasonButtons();
     // The ice is a state carried around the year, so it only means anything
     // while a phase is actually being shown -- not on the annual mean, not on
@@ -702,7 +859,7 @@ async function main() {
         const sets = resolveClimateSets(world.config);
         const values = sets.sets.find((set) => set.id === sets.defaultId).values;
         preview = buildClimateV1Preview({
-          terrainField: terrain, body: world.config.body,
+          terrainField: terrain, body: climateBody(),
           // Climate v1 carries its own Earth temperature calibration; it is
           // internal to v1 and never touches the shipped v0.8 parameters.
           params: { ...values, ...CLIMATE_V1_EARTH_TEMPERATURE_CALIBRATION },
@@ -1096,6 +1253,10 @@ async function main() {
     v1PhaseBuffer = null;
     seasonRow.hidden = true;
     applySeasonButtons();
+    // An orbit override belongs to the body it was set on, so it cannot
+    // survive a world switch -- the next world starts from its own config.
+    orbitOverride = null;
+    planetSettings.hidden = true;
     // The ice cycle is this body's sea temperature integrated over this body's
     // year, so it cannot outlive the world it was built for.
     v1SeaIce = "off";

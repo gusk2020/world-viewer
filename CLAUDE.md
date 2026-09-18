@@ -3329,6 +3329,57 @@ planet-settings screen, not something to slip in with the capability.
 `ensureSeasonTable` in `main.js` now keys its cache on the orbit as well as the
 row count, which is the whole API readiness for that screen.
 
+### The planet settings on the phone
+
+A **軌道** button on the season row opens a separate overlay holding
+軸傾斜 / 離心率 / 近日点. Three sliders were deliberately kept OFF the main
+screen -- these are set once and looked at, not adjusted while watching the
+globe. With the overlay closed the panels are unchanged at **41 px top,
+214 px bottom**.
+
+**It only exists where the seasonal model runs** (temperature-model, Earth),
+and closes itself on the teacher, on humidity, in 2D and on a world switch --
+so **the Moon can never be handed its own geocentric e = 0.055**, which is the
+one misconfiguration this control could invite.
+
+**Two kinds of change, and the code knows which is which.** Axial tilt is read
+by **Stage 2's own annual-mean field**, so it invalidates the whole Climate v1
+preview (wind, humidity, moisture all follow) -- correct physics, the expensive
+path. Eccentricity and periapsis are read only by the seasonal module, so they
+rebuild the season table and the sea-ice cycle and nothing else. Both measure
+2.4-2.7 s in the software renderer because the painter dominates either way.
+
+**Nothing is written to any world's config.** `orbitOverride` starts null and
+元に戻す clears it, so the default state is bit-identical: the annual frame is
+still `1799c75758ce` and the seasonal frame at phase 0.25 still `9a360f6532e5`,
+before the panel is opened and again after a full tour of the sliders plus a
+reset. **The phase is never reset** by an orbit change. **The rebuild waits for
+the finger**: the readout follows `input`, the model runs on `change`.
+
+**e is capped at 0.60 by the slider's own range**, so `sampleOrbit`'s throw can
+never be reached from the UI, and the hint says "0〜0.60まで対応" rather than
+clamping silently.
+
+**The warning is shown for any e > 0**, not only a large one, because the
+statement is equally true at 0.0167 -- only smaller. It names the real number
+(+25.0% orbit-mean insolation at e = 0.6) and repeats that sea-ice thickness is
+indicative while its area and timing are stable.
+
+**The thing the warning exists to cover**: at e = 0.3 with periapsis at the
+northern summer the readout shows the Sahara at **60.6 C**. Not a bug -- the
+seasonal departure is eccentricity-aware while the annual mean it is added to
+is not, so at high e the absolute temperatures are meaningless and only the
+*pattern* should be read.
+
+Measured from the UI: tilt 0 collapses the Sahara's seasonal swing to **exactly
+0.0 C** (baseline 15.1), tilt 40 raises it to **24.4 C**, and periapsis 90 vs
+270 at e = 0.3 swaps which hemisphere gets the strong summer, matching the
+design's own predictions.
+
+`applyAxis` (the V0.7.1 posture button) deliberately keeps reading the world's
+own obliquity rather than the override -- editing a *climate* parameter should
+not silently re-pose the globe.
+
 **Not V0.8's season, and the two must never be mixed.** V0.8's
 `seasonalSensitivityC` / `seaSeasonalDamping` are an instantaneous response to
 the solstice anomaly with no heat capacity and **no phase lag**, and each

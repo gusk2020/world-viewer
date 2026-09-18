@@ -339,3 +339,63 @@ Every world still resolves to e = 0, so the app draws exactly what it drew.
 Entering Earth's real 0.0167 / 283 would move the seasonal picture (45N
 15.1 → 14.3 C, 45S 15.2 → 16.0 C) and that is a content decision for the
 planet-settings screen, not something to slip in with the capability.
+
+## The planet settings on the phone
+
+The orbit stopped being a config-only capability this round: a **軌道** button
+on the season row opens a separate overlay holding 軸傾斜 / 離心率 / 近日点.
+Three sliders were deliberately *not* added to the main screen — these are set
+once and then looked at, not adjusted while watching the globe, and the user
+has asked three times for that screen to stop growing. Panel heights with the
+overlay closed are unchanged: **41 px top, 214 px bottom**.
+
+**The overlay only exists where the seasonal model runs**, which is the
+temperature-model view on Earth. It closes itself on the teacher, on humidity,
+on 年間's siblings, in 2D and on a world switch — so **the Moon can never be
+handed its own geocentric e = 0.055**, which is the one misconfiguration this
+control could invite.
+
+**Two kinds of change, and the code has to know which is which.**
+
+- **Axial tilt is read by Stage 2's own annual-mean field**, so changing it
+  invalidates the whole Climate v1 preview — wind, humidity and moisture all
+  follow the temperature. Correct physics, and the expensive path.
+- **Eccentricity and periapsis are read only by the seasonal module**, because
+  Stage 2 cannot see them at all. They rebuild the season table and the
+  sea-ice cycle and nothing else.
+
+Both measured at the same 2.4–2.7 s in the software renderer, because the
+painter dominates either way.
+
+**Nothing is written to any world's config.** `orbitOverride` starts null and
+**元に戻す** clears it, so the app's default state is exactly what it was:
+verified by hash, the annual frame is still `1799c75758ce` and the seasonal
+frame at phase 0.25 still `9a360f6532e5`, both before the panel is opened and
+again after a full tour of the sliders and a reset.
+
+**The phase is never reset.** Changing the orbit keeps you where you were in
+the year, which is the whole point of being able to compare two orbits at one
+moment.
+
+**The rebuild waits for the finger.** The readout follows `input`, the model
+runs on `change`, so dragging a slider across its range costs one rebuild
+rather than fifty.
+
+**The high-eccentricity warning is shown for any e > 0**, not only a large one,
+because the statement is equally true at 0.0167 — it is simply smaller there.
+It names the actual number (the orbit-mean insolation rises by +25.0% at
+e = 0.6) and repeats that sea-ice *thickness* is indicative while its area and
+timing are stable.
+
+**One thing the warning exists to cover, worth stating plainly here too**: at
+e = 0.3 with periapsis at the northern summer, the readout shows the Sahara at
+60.6 °C. That is not a bug and not a claim about any planet — the seasonal
+*departure* is eccentricity-aware while the annual mean it is added to is not,
+so at high e the absolute temperatures are meaningless and only the *pattern*
+(which hemisphere is favoured, and by how much relative to the other) should be
+read.
+
+`applyAxis` — the 軸/線 posture button from V0.7.1 — deliberately keeps reading
+the world's own obliquity rather than the override. Editing a *climate*
+parameter should not silently re-pose the globe, and that row is off screen
+anyway.
