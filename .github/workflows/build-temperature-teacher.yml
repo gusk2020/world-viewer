@@ -1,4 +1,6 @@
-# Rebuilds Earth's annual-mean temperature teacher for Climate v1 (Stage 2) --
+# Rebuilds Earth's temperature teachers for Climate v1 -- the annual mean
+# (Stage 2) and the twelve-month climatology whose average IS that annual
+# mean (the seasonal cycle's calibration teacher) --
 # a small, real reference to validate Climate v1's temperature field against,
 # never to fit it. See docs/climate-v1-temperature-validation.md.
 #
@@ -9,7 +11,10 @@
 # project does: the project's owner only has a phone, so anything that ever
 # needs regenerating (a newer 30-year climatology period, a corrected file
 # upstream) has to be regenerable from the Actions tab. The output is one
-# ~253 KB binary grid plus a small JSON summary -- nothing large is committed.
+# ~253 KB annual grid, a ~3.0 MB monthly grid and two small JSON summaries --
+# nothing large is committed. The builder refuses to write the monthly grid
+# unless the mean of its twelve months reproduces the annual one, so the two
+# files cannot drift apart.
 #
 # Run it from the Actions tab ("Run workflow") if the climatology period
 # should change, or to refresh against an updated source file.
@@ -59,7 +64,11 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add "worlds/${world}/teacher/temperature-annual-mean-c.bin" "worlds/${world}/teacher/temperature-summary.json"
+          git add \
+            "worlds/${world}/teacher/temperature-annual-mean-c.bin" \
+            "worlds/${world}/teacher/temperature-summary.json" \
+            "worlds/${world}/teacher/temperature-monthly-mean-c.bin" \
+            "worlds/${world}/teacher/temperature-monthly-summary.json"
           if git diff --cached --quiet; then
             echo "temperature teacher data unchanged"
             exit 0

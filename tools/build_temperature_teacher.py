@@ -46,6 +46,7 @@ BY-NC 4.0 asks a derivative work to state. This project is a personal,
 non-commercial hobby app; re-check licensing before any commercial use.
 """
 import argparse
+import hashlib
 import json
 import pathlib
 import struct
@@ -110,6 +111,10 @@ def build(source_path, url_for_record):
     if not (lat[0] < lat[-1]):
         raise SystemExit("expected the source file's latitude axis to run south to north")
     annual_mean = np.flipud(annual_mean)
+    # The same flip, applied to all twelve months. This array was already
+    # being computed and thrown away; keeping it is the whole seasonal
+    # teacher, and it needs no second source, URL, download or licence.
+    monthly_mean = np.flip(absolute_by_month, axis=1).astype(np.float32)
     lat_north_to_south = lat[::-1]
     land_mask_reoriented = np.flipud(land_mask)
 
@@ -117,6 +122,7 @@ def build(source_path, url_for_record):
         "width": annual_mean.shape[1],
         "height": annual_mean.shape[0],
         "annual_mean_c": annual_mean,
+        "monthly_mean_c": monthly_mean,
         "lat_north_to_south": lat_north_to_south,
         "lon": lon,
         "land_mask": land_mask_reoriented,
@@ -251,6 +257,150 @@ def main():
     }
     (out_dir / "temperature-summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     print(f"  wrote {out_dir / 'temperature-summary.json'}")
+
+    write_monthly(out_dir, built, lat, land_mask, summary)
+
+
+MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+               "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+
+def write_monthly(out_dir, built, lat, land_mask, annual_summary):
+    """The seasonal teacher: the same twelve months the annual mean averages.
+
+    This is not a second dataset. `absolute_by_month` is what `build()`
+    already computes and then collapses, so the monthly teacher shares the
+    annual one's source file, grid, orientation, mask, units, reference
+    period and licence **by construction** -- there is nothing here that
+    could drift out of step with it.
+
+    Nothing is interpolated and no missing cell is filled. The one hard
+    condition is the identity below: the mean of the twelve committed months
+    must reproduce the committed annual field. If it does not, this refuses
+    to write, because a seasonal teacher that disagrees with the annual one
+    would quietly corrupt every comparison made against either.
+    """
+    monthly = built["monthly_mean_c"]                 # (12, 180, 360) float32
+    annual = built["annual_mean_c"]                   # (180, 360) float32
+    if monthly.shape != (12, annual.shape[0], annual.shape[1]):
+        raise SystemExit(f"unexpected monthly shape {monthly.shape}")
+
+    # --- the identity that has to hold ------------------------------------
+    # Computed in float64 from the float32 values that will actually be
+    # written, so this compares the committed bytes rather than the
+    # higher-precision intermediates they came from.
+    reconstructed = monthly.astype(np.float64).mean(axis=0)
+    both = np.isfinite(reconstructed) & np.isfinite(annual)
+    diff = np.abs(reconstructed[both] - annual[both].astype(np.float64))
+    max_diff = float(diff.max()) if diff.size else 0.0
+    mean_diff = float(diff.mean()) if diff.size else 0.0
+    # Float32 carries ~7 significant digits; around 300 K that is ~3e-5 K per
+    # value, and averaging twelve of them cannot do worse than a few times
+    # that. 1e-3 C is comfortably above the rounding and far below anything
+    # that could matter physically -- tight enough to catch a real mistake
+    # (a wrong flip, a shifted month, a different baseline) at once.
+    tolerance_c = 1e-3
+    monthly_missing = [int((~np.isfinite(monthly[m])).sum()) for m in range(12)]
+    annual_missing = int((~np.isfinite(annual)).sum())
+
+    failures = []
+    if max_diff > tolerance_c:
+        failures.append(
+            f"the mean of the twelve months does not reproduce the annual teacher: "
+            f"max |difference| {max_diff:.3e} C > {tolerance_c:.0e} C"
+        )
+    if int(both.sum()) + annual_missing != annual.size:
+        failures.append("monthly and annual disagree about which cells are missing")
+    if failures:
+        raise SystemExit("monthly temperature teacher failed its own checks:\n  " + "\n  ".join(failures))
+
+    bin_path = out_dir / "temperature-monthly-mean-c.bin"
+    payload = monthly.astype("<f4").tobytes()
+    with open(bin_path, "wb") as f:
+        f.write(payload)
+    print(f"  wrote {bin_path} ({bin_path.stat().st_size} bytes)")
+    print(f"  annual reconstruction: max |diff| {max_diff:.3e} C, mean |diff| {mean_diff:.3e} C")
+
+    land = land_mask > 0.5
+    sea = land_mask <= 0.5
+    months = []
+    for m in range(12):
+        months.append({
+            "index": m,
+            "name": MONTH_NAMES[m],
+            # The observation phase this month stands for, on the model's own
+            # [0,1) orbital axis: a monthly mean is the middle of its month,
+            # NOT its first instant, so January is 0.5/12 rather than 0.
+            # The mapping onto `orbitalPhase` (whose 0 is the ascending
+            # equinox, not January) is the validator's job, never this file's.
+            "observationPhase": round((m + 0.5) / 12, 6),
+            "globalMeanC": round(area_weighted_mean(monthly[m], lat), 3),
+            "landMeanC": round(area_weighted_mean(monthly[m], lat, mask=land), 3),
+            "seaMeanC": round(area_weighted_mean(monthly[m], lat, mask=sea), 3),
+            "missingCells": monthly_missing[m],
+        })
+
+    summary = {
+        "_note": (
+            "Earth's real monthly-mean surface temperature climatology -- the twelve months "
+            "whose average IS the committed annual teacher. Built by the same run of "
+            "tools/build_temperature_teacher.py, from the same file, so the grid, orientation, "
+            "mask, units and reference period match the annual teacher by construction. "
+            "Intended as the CALIBRATION teacher for the seasonal model's amplitude and "
+            "phase; NCEP's monthly air.2m is the separate validation-only teacher. See "
+            "docs/climate-v1-calibration-audit.md."
+        ),
+        "source": annual_summary["source"],
+        "climatology": annual_summary["climatology"],
+        "grid": {
+            **annual_summary["grid"],
+            "shape": [12, built["height"], built["width"]],
+            "valuesFile": "temperature-monthly-mean-c.bin",
+            "axisOrder": "month (0 = January), then row (0 = north pole), then column",
+        },
+        "phaseConvention": (
+            "Stored in calendar-month order. A month's observation phase is "
+            "(monthIndex + 0.5) / 12 -- the middle of the month, not its start. "
+            "January is NOT phase 0; the model's own orbitalPhase 0 is the ascending "
+            "equinox, and aligning the two is the validator's responsibility."
+        ),
+        "months": months,
+        "annualReconstruction": {
+            "method": "mean of the twelve committed float32 months, compared with the committed annual field",
+            "maxAbsDifferenceC": max_diff,
+            "meanAbsDifferenceC": mean_diff,
+            "toleranceC": tolerance_c,
+            "passed": True,
+        },
+        "missingCellsPerMonth": monthly_missing,
+        "missingCellsAnnual": annual_missing,
+        "sha256": hashlib.sha256(payload).hexdigest(),
+        "byteLength": len(payload),
+        "builtAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+    (out_dir / "temperature-monthly-summary.json").write_text(json.dumps(summary, indent=2) + "\n")
+    print(f"  wrote {out_dir / 'temperature-monthly-summary.json'}")
+
+    # Sanity check only -- printed, never asserted against a target, and
+    # nothing here is fitted. A teacher whose 45N land swing came out at 2 C
+    # would be broken in a way no tolerance above would catch.
+    print("  seasonal sanity check (min / max / half-amplitude / peak month):")
+    for label, lng, lat_deg in [
+        ("45N land (France)", 5.0, 45.5),
+        ("45N ocean (N Pacific)", -170.0, 45.5),
+        ("equatorial land (Congo)", 20.0, 0.5),
+        ("60N land (Siberia)", 100.0, 60.5),
+        ("45S land (Chile)", -71.0, -45.5),
+    ]:
+        col = int((lng + 180.0) % 360.0)
+        row = int((90.0 - lat_deg))
+        series = monthly[:, row, col]
+        if not np.all(np.isfinite(series)):
+            print(f"    {label:<24} (missing)")
+            continue
+        lo, hi = float(series.min()), float(series.max())
+        peak = MONTH_NAMES[int(np.argmax(series))]
+        print(f"    {label:<24} {lo:7.2f} / {hi:7.2f} / {(hi - lo) / 2:6.2f} / {peak}")
 
 
 if __name__ == "__main__":

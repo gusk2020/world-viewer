@@ -96,15 +96,24 @@ fitted to a teacher.
 | NCEP 2 m air temperature | **validation only** — it is a model field |
 | NCEP specific humidity, surface pressure | calibration for humidity only; never mixed with Berkeley Earth inside one ratio |
 | NCEP wind 10 m / 850 hPa, annual | validation only (Stage 4 frozen) |
-| **NCEP wind DJF / JJA (U, V)** | **committed but read by no validator** — the natural seasonal hold-out |
+| **NCEP wind DJF / JJA (U, V)** | **committed but read by no validator** — a **半年差・季節振幅の参考診断** only. Two solstice-season means give the seasonal *amplitude* and the hemispheric contrast; they cannot constrain the seasonal *phase*, because two points half a year apart fit any lag as well as any other. Not a seasonal hold-out. |
 | Teacher A (`present-classes.png`) | reference only — v0.8, largely photograph-derived |
 | Teacher B (Köppen) | reference only |
 | Sea-ice snapshot | reference only — annual, no season, no phase |
 
-**The gap that decides the next step**: there is **no seasonal temperature
-teacher**. Berkeley Earth is committed as an annual mean only, so
-`seasonalDampingWPerM2K` and the two heat capacities cannot currently be
-calibrated against anything at all.
+| **Berkeley Earth monthly climatology** (`temperature-monthly-mean-c.bin`) | **calibration (primary) for the seasonal cycle** — the twelve months whose mean *is* the annual teacher above |
+| NCEP `air.2m` monthly | validation only — a model field, and never the thing the seasonal parameters are fitted to |
+
+**The gap this audit found has since been closed.** It read, when written:
+"there is **no seasonal temperature teacher** — Berkeley Earth is committed as
+an annual mean only, so `seasonalDampingWPerM2K` and the two heat capacities
+cannot currently be calibrated against anything at all." The monthly
+climatology was already being computed inside
+`tools/build_temperature_teacher.py` and discarded; it is now committed beside
+the annual field, with twelve months per cell and a phase convention of
+`(monthIndex + 0.5) / 12`. Amplitude **and** phase are therefore both
+observable, which is what separates λ from C (section 1). Nothing has been
+fitted to it — that is the next round's decision, not this one's.
 
 ## 4. Hold-out design
 
@@ -125,8 +134,11 @@ Computable today: annual temperature bias / MAE / RMSE; by elevation band
 temperature; humidity bias / RMSE; wet/dry contrast (アマゾン ÷ サハラ);
 wind direction and speed; sea-ice area to an order of magnitude.
 
-Needs a teacher that does not exist yet: **seasonal amplitude, seasonal phase,
-sea-ice seasonal state**.
+Computable now that the monthly teacher is committed: **seasonal amplitude and
+seasonal phase**, per cell and per latitude band, on land and sea separately.
+
+Still needs a teacher that does not exist: **the sea-ice seasonal state**
+(the committed snapshot is annual, with no maximum, minimum or phase).
 
 Temperature and humidity are known not to improve together, so they are held
 as a 2-objective Pareto front rather than summed.
