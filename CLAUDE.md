@@ -3233,10 +3233,65 @@ q_sat).
 **V0.8's 63.4% / 10.2% are regression guards, not objectives** -- neither
 reads any Climate v1 field.
 
-**The finding that decides the next step**: there is **no seasonal temperature
-teacher** in the repo, so those three parameters cannot currently be
-calibrated against anything. The committed NCEP DJF/JJA wind teachers exist
-but **no validator reads them**.
+**The finding that decided the next step**: there was **no seasonal temperature
+teacher** in the repo, so those three parameters could not be calibrated
+against anything. That gap is now closed -- see the next section -- and the
+audit document records the correction. The committed NCEP DJF/JJA wind
+teachers still exist and **no validator reads them**; they are a
+**半年差・季節振幅の参考診断** and never a seasonal-phase hold-out, because two
+means half a year apart fit any phase lag as well as any other.
+
+## The seasonal temperature teacher was already being computed and thrown away
+
+`tools/build_temperature_teacher.py` has always built `absolute_by_month` --
+twelve months of Berkeley Earth absolute climatology -- and then collapsed it
+to the annual mean it wrote. Keeping it is the entire seasonal teacher:
+**`temperature-monthly-mean-c.bin`, (12, 180, 360) float32 LE, 3,110,400
+bytes**, plus `temperature-monthly-summary.json`. No second dataset, no second
+download, no second licence (CC BY-NC 4.0, carried over verbatim from the
+annual summary's own `source` block so the two cannot drift), and the grid,
+row orientation, land mask, units and 1991-2020 reference period all match the
+annual teacher **by construction** rather than by agreement.
+
+**The one hard condition, enforced before anything is written**: the mean of
+the twelve committed float32 months must reproduce the committed annual field,
+and both must agree about which cells are missing. `write_monthly()` raises
+rather than writing a file that fails either. Measured on the real data:
+**max |diff| 9.5e-06 C, mean 8.4e-07 C** over 64,779 cells (float32 rounding on
+this range is ~1e-5; the tolerance is 1e-3), missing-cell sets identical, and
+the twelve months' global mean is **14.884 C**, the annual teacher's own figure
+to three decimals. The annual `.bin` came back byte-identical from the rebuild
+-- only its summary's `builtAt` changed.
+
+**Nothing is interpolated and no missing cell is filled**, same policy as the
+annual teacher. Missing cells per month run 0-21 (September is the worst, and
+its 21 are exactly the annual field's 21, so September's missing set contains
+every other month's).
+
+**Phase convention, and it matters**: a monthly mean stands for the **middle**
+of its month, so its observation phase is `(monthIndex + 0.5) / 12` --
+**January is not phase 0**. The model's own `orbitalPhase` 0 is the ascending
+equinox, so aligning the two is a validator's job; the summary states the
+convention and does no aligning itself.
+
+What it shows (min / max / half-amplitude / peak month, from the committed
+file): 45N land (France) 4.40 / 19.73 / **7.67** / Jul, 45N ocean (N Pacific)
+5.25 / 13.56 / **4.16** / **Aug**, equatorial land (Congo) 25.97 / 27.44 / 0.73
+/ May, 60N land (Siberia) -29.01 / 14.41 / **21.71** / Jul, 45S land (Chile)
+2.57 / 13.95 / 5.69 / **Jan**. Area-weighted, the NH beyond 20 degrees peaks in
+August and the SH beyond -20 in January, correlation **-0.992**. Land is far
+more seasonal than sea at the same latitude and the sea peaks a month later --
+which is the amplitude-and-lag pair that separates lambda from C, and the whole
+reason a seasonal teacher was needed.
+
+**Nothing has been fitted to it.** `seasonalDampingWPerM2K`, `soilDepthM` and
+`mixedLayerDepthM` are untouched, no validator reads the new file yet, and no
+UI shows it. That is the next round's decision.
+
+The existing `.github/workflows/build-temperature-teacher.yml` builds it -- no
+new workflow, no secrets, the same 454 MB public Berkeley Earth object -- with
+the two new paths added to its commit step. The whole run takes about 25
+seconds.
 
 ## Climate v1: the seasonal cycle (the first time axis)
 
