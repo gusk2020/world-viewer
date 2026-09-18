@@ -109,7 +109,31 @@ export const SEASON_PARAMETERS = {
   // (~2 W/m2/K) because that one describes the whole planet's balance, not
   // one patch of ground. 8 reproduces the observed mid-latitude land swing
   // and its lag; see docs/climate-v1-seasonal-cycle.md.
+  //
+  // This is now specifically the LAND value; see the ocean one below.
   seasonalDampingWPerM2K: 8,
+
+  // The same quantity over water. `kind: empirical`, `search: false`.
+  //
+  // **Null means "use the land value", so a world that says nothing gets the
+  // single shared lambda it always had, bit for bit.** Nothing is adopted by
+  // adding this parameter; it only makes the split expressible.
+  //
+  // Why a split is legitimate rather than a second fudge: lambda is dF/dT,
+  // and over water the latent-heat term responds far more strongly than over
+  // land, because the water supply is unlimited and the evaporative flux
+  // follows Clausius-Clapeyron rather than a soil's availability. So
+  // lambda_ocean > lambda_land is a statement about surfaces, not a knob
+  // invented to move a number.
+  //
+  // It is still an EARTH SEASONAL CALIBRATION CANDIDATE and must not be
+  // quoted as a universal constant. The coarse grid search
+  // (docs/climate-v1-seasonal-grid-search.md) showed a single shared lambda
+  // cannot improve the ocean's amplitude and its phase at once; splitting it
+  // is what makes that possible, because the one-layer ocean then has two
+  // free quantities (lambda, C) for two targets. See
+  // docs/climate-v1-ocean-damping-split.md.
+  oceanSeasonalDampingWPerM2K: null,
 
   // Heat capacity, as an atmospheric column plus whatever ground or water
   // takes part in the annual cycle. The two depths are REPRESENTATIVE
@@ -301,6 +325,20 @@ export const SURFACE_SEA = 1;
  * "land or sea" and becomes a per-cell array. That change replaces this
  * function's callers, not the solver.
  */
+/**
+ * The damping a surface type uses, in W/m2/K.
+ *
+ * The ONE place that resolves land-or-ocean lambda, the same shape
+ * `effectiveSurfaceLapseRateCPerKm` uses in js/climate.js for the two lapse
+ * rates. A null (or absent) `oceanSeasonalDampingWPerM2K` falls back to the
+ * land value, so an unsplit world is bit-for-bit what it was.
+ */
+export function dampingWPerM2KForSurface(surfaceType, params = SEASON_PARAMETERS) {
+  if (surfaceType !== SURFACE_SEA) return params.seasonalDampingWPerM2K;
+  const ocean = params.oceanSeasonalDampingWPerM2K;
+  return Number.isFinite(ocean) ? ocean : params.seasonalDampingWPerM2K;
+}
+
 export function heatCapacityJPerM2K(surfaceType, params = SEASON_PARAMETERS) {
   const air = params.atmosphericColumnHeatCapacityJPerM2K;
   return surfaceType === SURFACE_SEA
@@ -386,6 +424,7 @@ export function buildSeasonalTemperatureTable({
   const yearDays = Number.isFinite(body.yearLengthDays) ? body.yearLengthDays : params.yearLengthDays;
   const yearSeconds = yearDays * 86400;
   const capacities = [heatCapacityJPerM2K(SURFACE_LAND, params), heatCapacityJPerM2K(SURFACE_SEA, params)];
+  const dampings = [dampingWPerM2KForSurface(SURFACE_LAND, params), dampingWPerM2KForSurface(SURFACE_SEA, params)];
 
   // coefficients[((row * 2 + surface) * harmonics + n) * 2 + (0 cos | 1 sin)]
   const coefficients = new Float32Array(rows * 2 * harmonics * 2);
@@ -418,7 +457,7 @@ export function buildSeasonalTemperatureTable({
       const { cos, sin } = solvePeriodicResponse({
         forcingWPerM2: forcing,
         heatCapacity: capacities[surface],
-        dampingWPerM2K: params.seasonalDampingWPerM2K,
+        dampingWPerM2K: dampings[surface],
         yearSeconds,
         harmonics,
       });
@@ -448,10 +487,14 @@ export function buildSeasonalTemperatureTable({
       meanNewtonIterations: orbit.meanIterations,
     },
     heatCapacityJPerM2K: { land: capacities[SURFACE_LAND], sea: capacities[SURFACE_SEA] },
-    dampingWPerM2K: params.seasonalDampingWPerM2K,
+    // `dampingWPerM2K` stays the LAND value, which is what it always was, so
+    // an unsplit world reports exactly what it used to. The ocean's own
+    // value sits beside it rather than replacing it with a pair.
+    dampingWPerM2K: dampings[SURFACE_LAND],
+    oceanDampingWPerM2K: dampings[SURFACE_SEA],
     timescaleDays: {
-      land: capacities[SURFACE_LAND] / params.seasonalDampingWPerM2K / 86400,
-      sea: capacities[SURFACE_SEA] / params.seasonalDampingWPerM2K / 86400,
+      land: capacities[SURFACE_LAND] / dampings[SURFACE_LAND] / 86400,
+      sea: capacities[SURFACE_SEA] / dampings[SURFACE_SEA] / 86400,
     },
   };
 }

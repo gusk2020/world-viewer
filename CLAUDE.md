@@ -3472,6 +3472,90 @@ that differs between maritime and continental land, and one that differs
 between ice-covered and open ocean -- and `js/climate-v1/sea-ice-state.js`
 already computes the thickness the second needs.
 
+## Climate v1: the seasonal damping is split between land and ocean
+
+Full write-up: `docs/climate-v1-ocean-damping-split.md`. One new parameter,
+`oceanSeasonalDampingWPerM2K` in `js/climate-v1/season.js`, `kind: empirical`,
+`search: false`. **Its default is `null` = "use the land value"**, so nothing
+about the app changed: no world config carries a value, no UI shows it, and
+`js/main.js` builds its season table with no `params` at all.
+
+**A two-layer ocean was designed, pre-evaluated and rejected on measurement**,
+and the reason is worth keeping. Per harmonic the two-layer system gives
+`Z = lambda + i w C1 + i w C2/(1 + i w tau_ex)` with `tau_ex = C2/gamma`. At
+any physically representative lower layer `w tau_ex` is about **60**, so the
+deep term saturates to a constant `gamma` and `Z -> (lambda + gamma) + i w C1`
+-- **exactly a one-layer ocean with a larger lambda**. Checked rather than
+argued: two-layer 40 m / gamma 4 / 300 m and one-layer 40 m at lambda 12
+differ by **8.4e-4 C and 7.9e-3 days**, and the degeneracy diagnostic reads
+lambda_eff 12.00 at both harmonics with a capacity ratio of 0.999. The
+genuinely non-degenerate regime (`w tau_ex ~ 1`) is measurably *worse*, a weak
+deep relaxation does nothing at all, and the lower layer's depth is irrelevant
+from 100 m to 2000 m.
+
+**So the amplitude/phase lock was never a one-layer limitation -- it was a
+shared-lambda limitation.** A one-layer ocean already has two free quantities
+(lambda, C) for two targets (amplitude, phase); the grid search could not use
+that because lambda was pinned by the land.
+
+**Why the split is physical**: lambda is dF/dT, and over water the latent term
+responds far more strongly than over land, because the water supply is
+unlimited and the evaporative flux follows Clausius-Clapeyron rather than a
+soil's availability. Still an Earth calibration candidate, never a universal
+constant.
+
+`dampingWPerM2KForSurface(surfaceType, params)` is the one place that resolves
+it -- the same shape `effectiveSurfaceLapseRateCPerKm` uses for the two lapse
+rates. The analytic solution, the harmonic structure and `orbitalPhase` are
+untouched.
+
+**Compatibility, proved**: default vs explicitly setting ocean = land is **0 of
+14,336 coefficients different**; at `lambda_ocean` 10 **zero land coefficients
+change** (7,168 sea ones do) and the land's amplitude MAE / phase MAE / phase
+bias are **exactly** 3.35 / 8.4 d / -0.2 d either way.
+
+**The Earth candidate, lambda_land 8 / lambda_ocean 10**, on the grid search's
+own fit set -- and it reproduces the pre-evaluation exactly:
+
+| | 8 | 10 |
+| --- | --- | --- |
+| ocean amplitude MAE | 1.60 | **1.56** |
+| ocean phase MAE | 12.7 d | **11.8 d** |
+| ocean phase bias | +5.3 d | **+1.3 d** |
+| hold-out | 1.60 / 12.7 / +5.3 | **1.56 / 11.8 / +1.3** |
+
+**Not a compensating error**: every ocean group's phase bias moves toward zero
+(global +5.9 -> **+1.9 d**), which is the signature of a timescale change;
+the **Arctic's amplitude gets slightly worse** (6.77 -> 6.84) so it is not
+choosing the candidate; the North Atlantic block is 1.9% of ocean cells and
+cannot be the driver; and **30-60 N ocean's amplitude is unchanged to two
+decimals** (1.52 -> 1.52) while its phase bias goes +3.3 -> -0.7 d. Tropical
+ocean H2/H1 moves 0.302 -> **0.308** against a teacher of 0.351, i.e. toward
+it. `tau_sea` 188.1 -> 150.5 d, `tau_land` unchanged at 27.2.
+
+**10 is not an isolated point**: sweeping 8/9/10/11/12 the amplitude MAE falls
+monotonically (1.72 -> 1.64) and the phase MAE has a broad shallow minimum at
+**10-11** (12.0 / 12.1) with the phase bias crossing zero near 11. No
+minimum-hunting is warranted.
+
+**Sea ice was diagnosed, not assumed** (`sea-ice-state.js` unmodified): global
+annual maximum area 7.67% -> **7.60%**, minimum 4.63% -> 4.65%, every
+representative point keeps its perennial/seasonal/none class, and only **4 of
+7,295** ice-bearing cells change class anywhere. `feedsBackIntoTemperature`
+stays false.
+
+**Regression**: `score_climate` and `score_koppen` byte-identical (63.4% /
+10.2%), as are `validate_temperature_v1`, `validate_surface_lapse`,
+`test_moisture_stage5b` and `validate_wind_v1`. Five suites differ **only in
+wall-clock timings** (three `ms`/`ns` lines and one `build ms` column) with
+every checksum and assertion identical.
+
+**Verdict: READY** to put `oceanSeasonalDampingWPerM2K: 10` into Earth's
+Climate v1 calibration -- stated plainly, that buys 2.5% of amplitude and 7% of
+phase MAE, and its real result is the ocean phase bias falling from +5.3 to
++1.3 days. It does not fix the Arctic (that needs sea ice as a heat capacity)
+and creates no longitudinal SST structure, so the North Atlantic stays parked.
+
 ## Climate v1: the seasonal cycle (the first time axis)
 
 Full write-up: `docs/climate-v1-seasonal-cycle.md`. Files:

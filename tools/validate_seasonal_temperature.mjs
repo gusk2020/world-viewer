@@ -50,7 +50,7 @@ import { buildTemperatureField, sampleTemperatureAt } from "../js/climate-v1/tem
 import { CLIMATE_V1_EARTH_TEMPERATURE_CALIBRATION } from "../js/climate-v1/earth-temperature-calibration.js";
 import {
   SEASON_PARAMETERS, SURFACE_LAND, SURFACE_SEA,
-  buildSeasonalTemperatureTable, harmonicsForEccentricity,
+  buildSeasonalTemperatureTable, harmonicsForEccentricity, dampingWPerM2KForSurface,
 } from "../js/climate-v1/season.js";
 import {
   EARTH_CALIBRATION_ORBIT, MARCH_EQUINOX_DAY_OF_YEAR, MONTH_NAMES, MONTH_DAYS,
@@ -669,6 +669,142 @@ for (const r of sensitivity) say("  " + r.label.padEnd(26) + pad(f1(r.tauLandDay
 }
 say("");
 
+// --- 11b. the land/ocean damping split ---------------------------------------
+//
+// `oceanSeasonalDampingWPerM2K` is null by default, meaning "use the land
+// value", so everything above this point is unaffected. What follows checks
+// that claim rather than asserting it, then measures the Earth candidate.
+say("=== 11b. the land/ocean seasonal-damping split ===");
+const OCEAN_LAMBDA_CANDIDATE = 10;
+let oceanSplit = null;
+{
+  // (a) the default is bit-identical to the parameter not existing.
+  const plain = buildSeasonalTemperatureTable({ rows: ROWS, body: calibrationBody });
+  const explicit = buildSeasonalTemperatureTable({
+    rows: ROWS, body: calibrationBody,
+    params: { ...SEASON_PARAMETERS, oceanSeasonalDampingWPerM2K: SEASON_PARAMETERS.seasonalDampingWPerM2K },
+  });
+  let differing = 0;
+  for (let i = 0; i < plain.coefficients.length; i++) {
+    if (plain.coefficients[i] !== explicit.coefficients[i]) differing++;
+  }
+  ok(differing === 0, "default (null) === explicitly setting the ocean lambda to the land lambda",
+    `${differing} of ${plain.coefficients.length} coefficients differ`);
+  ok(dampingWPerM2KForSurface(SURFACE_SEA, SEASON_PARAMETERS) === SEASON_PARAMETERS.seasonalDampingWPerM2K,
+    "an unsplit world resolves the ocean lambda to the land lambda",
+    `${dampingWPerM2KForSurface(SURFACE_SEA, SEASON_PARAMETERS)} W/m2/K`);
+  ok(plain.dampingWPerM2K === SEASON_PARAMETERS.seasonalDampingWPerM2K
+    && plain.oceanDampingWPerM2K === SEASON_PARAMETERS.seasonalDampingWPerM2K,
+    "the table still reports the land lambda where it always did");
+
+  // (b) splitting it leaves EVERY land coefficient untouched.
+  const split = buildSeasonalTemperatureTable({
+    rows: ROWS, body: calibrationBody,
+    params: { ...SEASON_PARAMETERS, oceanSeasonalDampingWPerM2K: OCEAN_LAMBDA_CANDIDATE },
+  });
+  let landDiff = 0, seaDiff = 0;
+  for (let y = 0; y < ROWS; y++) {
+    for (let surface = 0; surface < 2; surface++) {
+      for (let n = 0; n < plain.harmonics; n++) {
+        const at = ((y * 2 + surface) * plain.harmonics + n) * 2;
+        for (const off of [0, 1]) {
+          if (plain.coefficients[at + off] !== split.coefficients[at + off]) {
+            if (surface === SURFACE_LAND) landDiff++; else seaDiff++;
+          }
+        }
+      }
+    }
+  }
+  ok(landDiff === 0, `lambda_ocean ${OCEAN_LAMBDA_CANDIDATE} changes ZERO land coefficients`,
+    `${landDiff} land / ${seaDiff} sea`);
+  ok(seaDiff > 0, "and it does change the sea's", `${seaDiff} sea coefficients differ`);
+
+  // (c) the Earth candidate, on the same cells as everything above.
+  const modelFor = (oceanLambda) => {
+    const t = buildSeasonalTemperatureTable({
+      rows: ROWS, body: calibrationBody,
+      params: { ...SEASON_PARAMETERS, oceanSeasonalDampingWPerM2K: oceanLambda },
+    });
+    const an = modelMonthAnomalies(t, MONTHS);
+    const out = new Array(ROWS * 2);
+    for (let rs = 0; rs < ROWS * 2; rs++) out[rs] = harmonicsOf(HARM_P, an, rs * 12);
+    return { table: t, at: (c) => out[c.rs / 12] };
+  };
+  const scoreWith = (rows, m) => {
+    let sw = 0, bias = 0, mae = 0, pw = 0, px = 0, py = 0, pabs = 0;
+    for (const c of rows) {
+      const h = m.at(c); sw += c.weight;
+      bias += c.weight * (h.h1 - c.t.h1); mae += c.weight * Math.abs(h.h1 - c.t.h1);
+      if (c.t.h1 < PHASE_AMPLITUDE_FLOOR_C) continue;
+      const d = wrapPhase(h.p1 - c.t.p1);
+      pw += c.weight; px += c.weight * Math.cos(2 * Math.PI * d); py += c.weight * Math.sin(2 * Math.PI * d);
+      pabs += c.weight * Math.abs(phaseToDays(d));
+    }
+    return { ampBias: bias / sw, ampMae: mae / sw,
+      phaseBias: pw > 0 ? phaseToDays(Math.atan2(py, px) / (2 * Math.PI)) : NaN,
+      phaseMae: pw > 0 ? pabs / pw : NaN };
+  };
+  const OCEAN_GROUPS = {
+    "all ocean": ocean,
+    // The grid search's own fit set, so the pre-evaluation's figures are
+    // directly comparable: ice cells and the parked North Atlantic block out.
+    "fit set (calib)": ocean.filter((c) => !c.ice && !(c.lat >= 45 && c.lat <= 75 && c.lng >= -10 && c.lng <= 60) && (c.x + c.y) % 2 === 0),
+    "fit set (hold-out)": ocean.filter((c) => !c.ice && !(c.lat >= 45 && c.lat <= 75 && c.lng >= -10 && c.lng <= 60) && (c.x + c.y) % 2 === 1),
+    "0-30 ocean": ocean.filter((c) => Math.abs(c.lat) < 30),
+    "30-60 N ocean": ocean.filter((c) => c.lat >= 30 && c.lat < 60),
+    "30-60 S ocean": ocean.filter((c) => c.lat <= -30 && c.lat > -60),
+    "60-90 N (Arctic)": ocean.filter((c) => c.lat >= 60),
+    "60-90 S (Southern)": ocean.filter((c) => c.lat <= -60),
+    "N Atlantic/Europe": ocean.filter((c) => c.lat >= 45 && c.lat <= 75 && c.lng >= -10 && c.lng <= 60),
+  };
+  const base8 = modelFor(SEASON_PARAMETERS.seasonalDampingWPerM2K);
+  const cand10 = modelFor(OCEAN_LAMBDA_CANDIDATE);
+  say(`  tau sea ${f1(base8.table.timescaleDays.sea)} d at lambda_ocean 8 -> `
+    + `${f1(cand10.table.timescaleDays.sea)} d at ${OCEAN_LAMBDA_CANDIDATE}; `
+    + `tau land unchanged at ${f1(base8.table.timescaleDays.land)} d`);
+  say("  " + "group".padEnd(21) + pad("n", 7) + pad("ampMAE 8", 10) + pad("-> 10", 9)
+    + pad("phbias 8", 10) + pad("-> 10", 9) + pad("phMAE 8", 10) + pad("-> 10", 9));
+  const splitRows = [];
+  for (const [label, rows] of Object.entries(OCEAN_GROUPS)) {
+    if (!rows.length) continue;
+    const a = scoreWith(rows, base8), b = scoreWith(rows, cand10);
+    splitRows.push({ label, n: rows.length, base: a, candidate: b });
+    say("  " + label.padEnd(21) + pad(rows.length, 7) + pad(f2(a.ampMae), 10) + pad(f2(b.ampMae), 9)
+      + pad(f1(a.phaseBias) + "d", 10) + pad(f1(b.phaseBias) + "d", 9)
+      + pad(f1(a.phaseMae) + "d", 10) + pad(f1(b.phaseMae) + "d", 9));
+  }
+  const landA = scoreWith(land, base8), landB = scoreWith(land, cand10);
+  ok(landA.ampMae === landB.ampMae && landA.phaseMae === landB.phaseMae && landA.phaseBias === landB.phaseBias,
+    "land amplitude MAE, phase MAE and phase bias are EXACTLY unchanged",
+    `${f2(landA.ampMae)} / ${f1(landA.phaseMae)} d / ${f1(landA.phaseBias)} d`);
+
+  // (d) is 10 an isolated lucky point? A plain sweep, NOT a search.
+  say("  sensitivity (no search -- only: is 10 isolated?):");
+  say("  " + "lambda_ocean".padEnd(16) + pad("amp MAE", 10) + pad("amp bias", 11)
+    + pad("ph bias", 10) + pad("ph MAE", 10) + pad("tau sea", 10));
+  const sweep = [];
+  for (const L of [8, 9, 10, 11, 12]) {
+    const m = modelFor(L), r = scoreWith(ocean, m);
+    sweep.push({ lambda: L, ...r, tauSeaDays: m.table.timescaleDays.sea });
+    say("  " + String(L).padEnd(16) + pad(f2(r.ampMae), 10) + pad(f2(r.ampBias), 11)
+      + pad(f1(r.phaseBias) + "d", 10) + pad(f1(r.phaseMae) + "d", 10)
+      + pad(f1(m.table.timescaleDays.sea) + "d", 10));
+  }
+  const tropicalRatio = (m) => {
+    const rows = ocean.filter((c) => Math.abs(c.lat) < 30);
+    let sw = 0, t = 0, mm = 0;
+    for (const c of rows) { sw += c.weight; t += c.weight * (c.t.ratio ?? 0); mm += c.weight * (m.at(c).ratio ?? 0); }
+    return { teacher: t / sw, model: mm / sw };
+  };
+  const r8 = tropicalRatio(base8), r10 = tropicalRatio(cand10);
+  say(`  tropical ocean H2/H1: teacher ${f3(r8.teacher)}, lambda_ocean 8 ${f3(r8.model)}, `
+    + `${OCEAN_LAMBDA_CANDIDATE} ${f3(r10.model)}`);
+  oceanSplit = { candidate: OCEAN_LAMBDA_CANDIDATE, groups: splitRows, sweep,
+    land: { base: landA, candidate: landB }, tropicalRatio: { base: r8, candidate: r10 },
+    tauSeaDays: { base: base8.table.timescaleDays.sea, candidate: cand10.table.timescaleDays.sea } };
+}
+say("");
+
 // --- 12. the equinox-date sensitivity, measured rather than argued ----------
 //
 // The March equinox's day of year is the ONE constant tying the model's clock
@@ -748,7 +884,7 @@ if (asJson) {
   console.log(JSON.stringify({
     orbit: EARTH_CALIBRATION_ORBIT, equinoxDayOfYear: MARCH_EQUINOX_DAY_OF_YEAR,
     months: MONTHS, integration: { samples: PHASE_SAMPLES, convergence, maxSamplingGapC: maxSampleGap, maxMidpointGapC: maxMidGap },
-    equinoxSensitivity,
+    equinoxSensitivity, oceanSplit,
     cells: cells.length, teacherMissing,
     headline, byBand, secondHarmonic: h2Rows, points: pointRows, splits, absolute: absRows, sensitivity,
     failures,
