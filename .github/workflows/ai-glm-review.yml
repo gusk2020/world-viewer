@@ -1,0 +1,35 @@
+name: AI GLM Review (manual preflight)
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_sha:
+        description: Full 40-character commit SHA to review in a later GLM execution stage
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-glm-review-${{ github.workflow }}-${{ github.ref }}-${{ inputs.target_sha }}
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    name: Validate review request
+    runs-on: ubuntu-latest
+    env:
+      TARGET_SHA: ${{ inputs.target_sha }}
+    steps:
+      - name: Validate target SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "target_sha must be a lowercase 40-character commit SHA." >&2
+            exit 1
+          fi
+          echo "Manual GLM preflight passed for $TARGET_SHA."
+          echo "GLM execution is intentionally disabled in this Draft PR."
+          echo "No secret was accessed and no repository content was modified."
