@@ -1,0 +1,171 @@
+{
+  "_note": "Earth's real monthly-mean surface temperature climatology -- the twelve months whose average IS the committed annual teacher. Built by the same run of tools/build_temperature_teacher.py, from the same file, so the grid, orientation, mask, units and reference period match the annual teacher by construction. Intended as the CALIBRATION teacher for the seasonal model's amplitude and phase; NCEP's monthly air.2m is the separate validation-only teacher. See docs/climate-v1-calibration-audit.md.",
+  "source": {
+    "product": "Berkeley Earth Land+Ocean Gridded Temperature (native 1x1 degree, monthly)",
+    "file": "Land_and_Ocean_LatLong1.nc",
+    "url": "https://berkeley-earth-temperature.s3.amazonaws.com/Global/Gridded/Land_and_Ocean_LatLong1.nc",
+    "fileSizeBytes": 454568996,
+    "institution": "Berkeley Earth Surface Temperature Project",
+    "variable": "Air Surface Temperature -- land cells: near-surface (~2 m) air temperature from station data; ocean cells: sea-surface temperature converted to an air-temperature-equivalent basis. One blended field, Berkeley Earth's own convention, not raw SST.",
+    "license": "Creative Commons BY-NC 4.0 (attribution required, non-commercial use only). This repository commits only a small derived grid (not the source file), for climate-model validation in a non-commercial hobby project.",
+    "citation": "Berkeley Earth Surface Temperature Project, https://berkeleyearth.org/data/"
+  },
+  "climatology": {
+    "referencePeriod": "1991-2020",
+    "method": "Berkeley Earth's own fixed absolute baseline climatology (Jan 1951 - Dec 1980, from this same file) plus the mean monthly anomaly over the reference period, from this same file's anomaly time series -- Berkeley Earth's own documented method for an absolute climatology of any period.",
+    "baselinePeriod": "1951-1980"
+  },
+  "grid": {
+    "width": 360,
+    "height": 180,
+    "resolutionDeg": 1.0,
+    "row0": "north pole (cell centre ~89.5N)",
+    "col0": "cell centre ~-179.5, increasing eastward",
+    "valuesFile": "temperature-monthly-mean-c.bin",
+    "dtype": "float32le",
+    "units": "degC",
+    "missingValue": "NaN",
+    "shape": [
+      12,
+      180,
+      360
+    ],
+    "axisOrder": "month (0 = January), then row (0 = north pole), then column"
+  },
+  "phaseConvention": "Stored in calendar-month order. A month's observation phase is (monthIndex + 0.5) / 12 -- the middle of the month, not its start. January is NOT phase 0; the model's own orbitalPhase 0 is the ascending equinox, and aligning the two is the validator's responsibility.",
+  "months": [
+    {
+      "index": 0,
+      "name": "Jan",
+      "observationPhase": 0.041667,
+      "globalMeanC": 13.091,
+      "landMeanC": 3.698,
+      "seaMeanC": 16.886,
+      "missingCells": 0
+    },
+    {
+      "index": 1,
+      "name": "Feb",
+      "observationPhase": 0.125,
+      "globalMeanC": 13.231,
+      "landMeanC": 4.034,
+      "seaMeanC": 16.948,
+      "missingCells": 0
+    },
+    {
+      "index": 2,
+      "name": "Mar",
+      "observationPhase": 0.208333,
+      "globalMeanC": 13.788,
+      "landMeanC": 5.897,
+      "seaMeanC": 16.977,
+      "missingCells": 0
+    },
+    {
+      "index": 3,
+      "name": "Apr",
+      "observationPhase": 0.291667,
+      "globalMeanC": 14.714,
+      "landMeanC": 8.82,
+      "seaMeanC": 17.095,
+      "missingCells": 0
+    },
+    {
+      "index": 4,
+      "name": "May",
+      "observationPhase": 0.375,
+      "globalMeanC": 15.635,
+      "landMeanC": 11.601,
+      "seaMeanC": 17.264,
+      "missingCells": 0
+    },
+    {
+      "index": 5,
+      "name": "Jun",
+      "observationPhase": 0.458333,
+      "globalMeanC": 16.346,
+      "landMeanC": 13.795,
+      "seaMeanC": 17.377,
+      "missingCells": 0
+    },
+    {
+      "index": 6,
+      "name": "Jul",
+      "observationPhase": 0.541667,
+      "globalMeanC": 16.613,
+      "landMeanC": 14.7,
+      "seaMeanC": 17.386,
+      "missingCells": 0
+    },
+    {
+      "index": 7,
+      "name": "Aug",
+      "observationPhase": 0.625,
+      "globalMeanC": 16.528,
+      "landMeanC": 14.362,
+      "seaMeanC": 17.403,
+      "missingCells": 3
+    },
+    {
+      "index": 8,
+      "name": "Sep",
+      "observationPhase": 0.708333,
+      "globalMeanC": 15.966,
+      "landMeanC": 12.634,
+      "seaMeanC": 17.313,
+      "missingCells": 21
+    },
+    {
+      "index": 9,
+      "name": "Oct",
+      "observationPhase": 0.791667,
+      "globalMeanC": 15.12,
+      "landMeanC": 10.078,
+      "seaMeanC": 17.158,
+      "missingCells": 2
+    },
+    {
+      "index": 10,
+      "name": "Nov",
+      "observationPhase": 0.875,
+      "globalMeanC": 14.126,
+      "landMeanC": 6.978,
+      "seaMeanC": 17.015,
+      "missingCells": 3
+    },
+    {
+      "index": 11,
+      "name": "Dec",
+      "observationPhase": 0.958333,
+      "globalMeanC": 13.408,
+      "landMeanC": 4.74,
+      "seaMeanC": 16.911,
+      "missingCells": 0
+    }
+  ],
+  "annualReconstruction": {
+    "method": "mean of the twelve committed float32 months, compared with the committed annual field",
+    "maxAbsDifferenceC": 9.5367431640625e-06,
+    "meanAbsDifferenceC": 8.428354805012594e-07,
+    "toleranceC": 0.001,
+    "passed": true
+  },
+  "missingCellsPerMonth": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    3,
+    21,
+    2,
+    3,
+    0
+  ],
+  "missingCellsAnnual": 21,
+  "sha256": "91003341017c9ee4d7387bff5fc4a750868ce8d571c48c6af28d2ae752926543",
+  "byteLength": 3110400,
+  "builtAt": "2026-09-18T10:43:55Z"
+}
