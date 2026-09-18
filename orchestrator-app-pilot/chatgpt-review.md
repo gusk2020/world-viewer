@@ -16,3 +16,11 @@ The branch already contains a partial Claude implementation from an earlier inte
 - test evidence: Claude report records `node --test tests/accessibility-state.test.mjs` (PASS)
 - safety: no unrelated or unsafe implementation change found
 - transition: CHATGPT_TURN -> USER_DECISION
+
+## User decision and merge
+
+- user decision: APPROVE_MERGE
+- pull request: #5
+- merge commit: aea825b42e6cc7b9fb8d475e930d2ecb256c14fe
+- result: MERGED
+- transition: USER_DECISION -> DONE
