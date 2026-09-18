@@ -3200,6 +3200,44 @@ and Stage 4 stays frozen -- it has its own negative results
 (`docs/climate-v1-wind-negative-results.md`) and "fix the wind again for
 humidity's sake" is the loop this closure exists to prevent.
 
+## Climate v1: the calibration audit (what may be fitted, and what may not)
+
+Full document: `docs/climate-v1-calibration-audit.md`. Audit only -- nothing
+was fitted, searched or changed to produce it, and no parameter moved.
+
+**The three that may be calibrated first, and nothing else**:
+`seasonalDampingWPerM2K`, `soilDepthM`, `mixedLayerDepthM`. Chosen because the
+seasonal anomaly's annual mean is **exactly zero by construction**, so moving
+them cannot damage Stage 2's annual field -- the part the user has already
+accepted. `shortwaveAbsorbedFraction` 0.70 stays fixed: amplitude goes as
+F/lambda, so 0.70 and lambda are *exactly* degenerate. The lag depends only on
+tau = C/lambda while the amplitude carries an extra 1/lambda, so **fitting
+amplitude and phase together identifies lambda and C separately; either alone
+does not.**
+
+**Never fitted, because they are physical facts**: the seawater freezing point
+-1.8, ice density, latent heat, ice conductivity, the Magnus coefficients, the
+solar constant, the year length, Kepler's equation, and Earth's own tilt
+23.44 / eccentricity 0.0167 / periapsis 283. Also `oceanBasalHeatFluxWPerM2` 2
+(the user's own explicit ruling) and `evapotranspirationTimescaleDays` 4.6
+(derived, not fitted). `surfaceLapseRateCPerKm` 5.2 was **measured and
+adopted** (observed 5.27), so it is fixed rather than free.
+
+**The compensating-error pairs to keep apart** are listed in the doc; the ones
+that would do the most damage are `fullCoverThicknessM` against the sea-ice
+area teacher (the only thickness-to-area conversion, so it would hide every
+upstream SST error), `landEvapotranspirationWeight` against the Stage 4 wind's
+error, and `surfaceRelativeHumidity` against Stage 2's warm bias (q = RH *
+q_sat).
+
+**V0.8's 63.4% / 10.2% are regression guards, not objectives** -- neither
+reads any Climate v1 field.
+
+**The finding that decides the next step**: there is **no seasonal temperature
+teacher** in the repo, so those three parameters cannot currently be
+calibrated against anything. The committed NCEP DJF/JJA wind teachers exist
+but **no validator reads them**.
+
 ## Climate v1: the seasonal cycle (the first time axis)
 
 Full write-up: `docs/climate-v1-seasonal-cycle.md`. Files:
