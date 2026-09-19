@@ -3578,6 +3578,64 @@ annual maximum 9.19% -> 9.05%, minimum 3.23% -> 3.29%, every representative
 point keeping its class, with the fraction's periodic steady state now reached
 in 3 years rather than 2.
 
+## Climate v1 is a present-Earth diagnostic model, and the ice sheets are an input
+
+Full audit: `docs/climate-v1-scope-and-ice-sheet-boundary.md`. Audit only --
+no physics file changed, nothing fitted, no parameter moved.
+
+**The user asked the right question**: if today's ice sheets are assumed from
+the start, shouldn't the model instead begin ice-free and grow Antarctica and
+Greenland for itself? Yes -- for a *world generator*. Climate v1 is not one,
+and this is now written down so nothing mistakes it for one.
+
+**The tracks are formally split.** This branch (`climate-v1-redesign`) is the
+**Present-Earth diagnostic model** and nothing else. The **Equilibrium world
+generator** (bedrock -> climate -> self-formed ice sheets) is a separate track
+on `climate-equilibrium-prototype`, run by a different AI. **Do not implement
+the equilibrium side here.**
+
+**Where the ice sheets actually enter, measured by reading the code**: no file
+under `js/` reads an ice map of any kind. They enter in **one** place -- the
+**elevation field**, because `terrain.source` is GEBCO_2026's **ice surface**
+grid, so Antarctica and Greenland are the top of the ice. The land/sea mask
+inherits that (ice shelves count as land). Everything else is either generated
+(V0.8's land-ice class from temperature x moisture, 80.0% IoU; Climate v1's
+sea ice from temperature) or validation-only (Teacher A's Natural Earth ice).
+**There is no albedo anywhere** -- `shortwaveAbsorbedFraction` 0.70 is one
+global scalar.
+
+**The measurement that reverses the intuition.** Area-weighted over land:
+Antarctica's mean ice-surface elevation is **1967 m** (54% above 2000 m) and
+Greenland's **1483 m**, so at the surface lapse rate of 5.2 C/km the model is
+handed **10.2 C** and 7.7 C of polar cooling for free, purely because it reads
+the top of the ice. **And Antarctica is still +10.5 C too warm.** So the polar
+error is the ice sheet's missing *energy balance* (no albedo), not the fact
+that its shape is prescribed -- and **swapping to bedrock today would roughly
+double that warm bias**, not fix it.
+
+**The blocker for the other track, stated once**: six of the seven pieces of a
+minimal `dh/dt = accumulation - ablation - flow` could be written today; the
+seventh cannot, because **Climate v1 has no precipitation** and Stage 5's
+closure measured why (every proxy inherits the Stage 4 wind's zeros -- 0.00
+mm/day over the Amazon and the Congo). The prerequisite order is bedrock ->
+surface energy balance with albedo -> precipitation -> mass balance.
+
+**Bedrock is one URL away**: CEDA serves `sub_ice_topography_bathymetry/` from
+the same directory as the ice-surface grid `build-terrain.yml` already
+downloads. `js/climate-v1/terrain.js` already reserves `TERRAIN_STATES.BEDROCK`
+and forbids approximating `DEGLACIATED_EQUILIBRIUM` (that needs a real GIA
+model).
+
+**What the other track inherits** is in the document's section 9, and the most
+valuable part is the negative results (the two-layer ocean's degeneracy, the
+bucket, the wind's, the precipitation proxies' zeros, the ice-albedo trade
+that moves Antarctica -8.0 C but Greenland -9.2 C). **What it must not inherit
+is any parameter fitted in polar cells on the ice-surface DEM.**
+
+**This branch's next step is unchanged**: the sea surface has no longitudinal
+structure, which is upstream of the overstated sea-ice area, which is what
+currently blocks adopting the sea-ice heat-capacity feedback.
+
 ## Climate v1: the sea-ice heat-capacity feedback, pre-evaluated and NOT built
 
 Diagnosis only -- no code changed in that round. Kept because the numbers
