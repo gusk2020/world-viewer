@@ -1,10 +1,10 @@
 {
   "pilot": "glm-independent-review-v1",
-  "cycle": 0,
+  "cycle": 1,
   "maxCycles": 2,
-  "status": "WAITING_AUTH",
+  "status": "USER_DECISION",
   "lastActor": "CHATGPT",
-  "lastInputSha": null,
-  "lastReviewSha": null,
-  "stopReason": "DRAFT_CONFIGURATION_AWAITING_USER_REVIEW"
+  "lastInputSha": "19bd97869e0648690fd3dedcd6706f4dd048e669",
+  "lastReviewSha": "19bd97869e0648690fd3dedcd6706f4dd048e669",
+  "stopReason": "PASS_AWAITING_USER"
 }
