@@ -13,6 +13,10 @@ Run GLM as an independent, non-authoritative second reviewer for a user-selected
 - Maximum review cycles: 2.
 - Any transition to PR-event automation, repository writes, or shared orchestration requires a separate reviewed Draft PR.
 
-## Initial operation
+## Verified manual operation
 
-The workflow is manual-only and performs a preflight check. It intentionally does not invoke GLM or access an API key. A later, separately reviewed change may add an execution step after the user has configured a dedicated GitHub Actions secret and approved the exact runner behavior.
+- GLM runs only in the user's Codespaces session through the local `glm` wrapper.
+- The Z.ai credential stays in the Codespaces secret environment. It is not copied to GitHub Actions.
+- The reviewer receives a full commit SHA and an explicit read-only instruction. It must return one JSON object with `PASS`, `FINDINGS`, or `BLOCKED`.
+- ChatGPT independently verifies any model output against GitHub before it is recorded.
+- The existing workflow remains a manual preflight only. It validates an input SHA but does not invoke GLM, access a Z.ai credential, or modify repository content.
