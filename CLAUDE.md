@@ -3578,6 +3578,99 @@ annual maximum 9.19% -> 9.05%, minimum 3.23% -> 3.29%, every representative
 point keeping its class, with the fraction's periodic steady state now reached
 in 3 years rather than 2.
 
+## Climate v1: the sea-ice heat-capacity feedback, pre-evaluated and NOT built
+
+Diagnosis only -- no code changed in that round. Kept because the numbers
+decide the next two stages.
+
+**The question**: the largest seasonal residual on the globe is 60-90N ocean
+(model amplitude 6.28 C against the teacher's 11.31, phase +19.5 days). Ice
+insulates the mixed layer, so does giving ice-covered cells a smaller effective
+heat capacity fix it?
+
+**It works, and at full physical strength it overshoots.** Four candidates were
+measured; the zero-parameter physical one (a thin ice slab over a reservoir at
+the freezing point, with `k_ice/h` as extra damping) gives 13.48 C and a -32 day
+phase, past the teacher in both. What matches is one lumped empirical number,
+an effective under-ice mixed-layer depth of about **10 m** (6.28 -> 11.53 C,
+phase +19.5 -> -1.0 d), and **that number is a fit to the Arctic**, which is the
+compensating-error tell.
+
+**Three findings worth keeping.**
+- **It is a redistribution, not a gain.** Whole-ocean amplitude MAE 1.68 ->
+  1.69: the Arctic improves and the Southern Ocean degrades by as much.
+- **The southern damage is the ice-area error, not the mechanism.** Driving the
+  same mechanism with the *teacher's* own ice map puts 60-90S back at MAE 3.22
+  against a baseline 3.20 (the model's own phase-mean ice fraction there is
+  **0.69 against the teacher's 0.02**).
+- **The feedback is stable but it destroyed every multi-year ice cell**: 88N
+  3.30/3.03 m -> 1.76/0.00 m, perennial area 3.35% of the globe -> 0.00%.
+  Current, cold and warm starts all reached the *same* periodic solution in six
+  outer iterations, so this is not bistability -- it is a missing mechanism.
+
+**Verdict: NOT_READY, and the blocker was named**: a melting surface has no
+temperature ceiling in this model, so a correct amplitude drives a melt that
+nothing pays for. Build the latent coupling first (below), then re-evaluate.
+`iceEffectiveMixedLayerDepthM = 10` is **not** an adopted value.
+
+## Climate v1: sea ice pays for its own latent heat
+
+Full write-up: the last section of `docs/climate-v1-sea-ice-state.md`. Code:
+`js/climate-v1/sea-ice-state.js`, `tools/validate_sea_ice_state.mjs`. The app's
+drawn fields are untouched -- `meta.feedsBackIntoTemperature` is still `false`
+and the annual frame still hashes `1799c75758ce`.
+
+**The bug this fixes.** The air-ice flux `Phi` entered the ice's thickness
+equation and no other budget, so melting cost the atmosphere nothing and
+freezing warmed nothing: **10.19 W/m2 averaged over the 7,295 ice-bearing
+cells**, created at one and destroyed at the other. Beside it, clamping `h` at
+zero discarded the leftover melting energy. Both are now closed: `Phi` is a
+transfer (subtracted from the air, added to the ice, once each), and an `h = 0`
+crossing spends only what melts the ice that is there and returns the rest to
+the water. **Residual: max 1.22e-13 W/m2 over the whole ocean.**
+
+**No new parameter**, and the six existing constants each appear exactly once.
+
+**Which temperature is which, and why nothing is clipped.** Berkeley Earth's
+Arctic ocean cells run **-26.0 C in January and +3.2 C in July at 88N**, which
+no sea-surface temperature can do -- water under ice sits at the freezing
+point. So the teacher's ocean value there, and this module's own state, are
+**near-surface air temperature over sea ice**, and clipping it at the melting
+point would be both wrong by definition and the very non-conservation being
+fixed. The constraint is on the *exchange*: melting ties the air to a surface
+at the melting point through 15 W/m2/K (large beside lambda = 10, so the summer
+is held down), while in winter the same tie runs through the ice and is
+**0.95 W/m2/K under 2 m** (so the cold season is untouched). That asymmetry was
+already in the flux law.
+
+**The forcing is recovered from the season table rather than rebuilt** --
+`solvePeriodicResponse`'s map is invertible, so `rowForcingFromSeasonTable`
+inverts it. Verified: with the air-ice exchange off, integrating that forcing
+reproduces the table's analytic amplitude to **6.96e-3 C**.
+
+**On its own it barely moves anything**, which is the point: ice area max
+7.58% -> **7.51%**, min 4.63% -> 4.75%, and every representative point keeps
+its perennial/seasonal/none class (88N 3.26/2.99 -> 2.74/2.48 m). **The
+uncoupled path is kept and is bit-identical to what shipped** (worst |df| and
+|dh| exactly 0), which is what makes that comparison a measurement.
+
+**`stepsPerYear` moved 48 -> 96**: the coupling makes the melt season the
+step-sensitive part, and the perennial-ice share reads 3.28 / 3.36 / 3.40 /
+3.42 / 3.43 % at 24 / 48 / 96 / 192 / 365 steps against an 8760-step
+reference's 3.44%. 96 costs 462 ms against 244 ms in node for a 20-year run.
+
+**Not bistable, measured rather than asserted.** From an ice-free ocean, from
+5 m of ice at -20 C and from +20 C, the ice *fraction* never differs by more
+than 0.01. The perennial *thickness* differs by 1.21 m at 20 years and that
+spread decays **1.206 -> 0.249 -> 0.033 -> 0.001 m at 20 / 60 / 120 / 240
+years** -- unconverged, not two solutions.
+
+**Teacher sanity, not a fit**: the model's own air temperature at 88N runs
+-15.8 / -1.1 C against -26.0 / +3.2. The amplitude is still too small, which is
+the 30 m mixed layer this round deliberately did not touch -- i.e. exactly what
+the heat-capacity feedback is for, and it can now be re-evaluated without
+losing the multi-year ice.
+
 ## Climate v1: the seasonal cycle (the first time axis)
 
 Full write-up: `docs/climate-v1-seasonal-cycle.md`. Files:
