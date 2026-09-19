@@ -20,3 +20,10 @@ Run GLM as an independent, non-authoritative second reviewer for a user-selected
 - The reviewer receives a full commit SHA and an explicit read-only instruction. It must return one JSON object with `PASS`, `FINDINGS`, or `BLOCKED`.
 - ChatGPT independently verifies any model output against GitHub before it is recorded.
 - The existing workflow remains a manual preflight only. It validates an input SHA but does not invoke GLM, access a Z.ai credential, or modify repository content.
+
+## Optional local runner
+
+- Run `./orchestrator-glm-pilot/run-codespaces-review.sh <40-character-lowercase-SHA>` from a clean Codespaces checkout.
+- The runner validates the SHA format, confirms the commit exists locally, and stops if the working tree is not clean.
+- It invokes the local `glm` wrapper with a fixed read-only review prompt, then emits only the validated final JSON object.
+- It never fetches, checks out, stages, commits, pushes, changes configuration, or writes repository files.
