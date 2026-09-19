@@ -59,3 +59,29 @@ export const CLIMATE_V1_EARTH_SEASON_CALIBRATION = {
 export function climateV1SeasonParams(seasonParameters) {
   return { ...seasonParameters, ...CLIMATE_V1_EARTH_SEASON_CALIBRATION };
 }
+
+// Earth's land-sea thermal coupling timescale. EMPIRICAL and an Earth
+// calibration, never a universal constant: it stands for how long
+// near-surface air over this planet keeps the anomaly it picked up over the
+// sea, which depends on the boundary layer, the surface exchange and the
+// wind, none of which this model resolves.
+//
+// 7 days is the middle of a plateau, not a minimum. Non-ice land MAE reads
+// 2.31 / 2.31 / 2.31 C at 5 / 7 / 10 days and only reaches 2.35 at 2 days and
+// 2.33 at 20, so nothing here is balanced on the value. See
+// docs/climate-v1-land-sea-thermal-coupling.md.
+//
+// **Deliberately NOT merged into CLIMATE_V1_EARTH_TEMPERATURE_CALIBRATION.**
+// Those three values are spread into the climate params that reach
+// `buildTemperatureField`, and anything that lands there also reaches Stage 4's
+// wind and Stage 5's humidity, both of which read the temperature field. This
+// coupling is a separate stage with its own module, so it is carried across
+// separately and switching it on is a deliberate act.
+export const CLIMATE_V1_EARTH_LAND_SEA_CALIBRATION = {
+  landSeaThermalRelaxationDays: 7,
+};
+
+/** Earth's coupling parameters, for whatever runs the land-sea coupling. */
+export function climateV1LandSeaParams(overrides = {}) {
+  return { ...CLIMATE_V1_EARTH_LAND_SEA_CALIBRATION, ...overrides };
+}

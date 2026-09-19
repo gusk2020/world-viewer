@@ -3578,6 +3578,94 @@ annual maximum 9.19% -> 9.05%, minimum 3.23% -> 3.29%, every representative
 point keeping its class, with the fraction's periodic steady state now reached
 in 3 years rather than 2.
 
+## Climate v1: land-sea thermal coupling (the sea finally reaches the land)
+
+Full write-up: `docs/climate-v1-land-sea-thermal-coupling.md`. Code:
+`js/climate-v1/land-sea-coupling.js`, validator
+`tools/validate_land_sea_coupling.mjs`. **Nothing in the shipped pipeline
+imports it**, no UI changed, and `landSeaThermalRelaxationDays` defaults to 0.
+
+**The gap it closes, measured first.** Stage 2's land temperature is
+`seaLevelC(lat) - lapse*z` and reads no ocean at all, so the SST longitude
+pre-evaluation found that an ocean-only correction of any size changes
+**exactly 0 land cells** (worst |dT| 0.00e+0 C). Improving the North Atlantic
+could never move Europe. This is the missing link, built deliberately *before*
+any SST longitude structure.
+
+**What is carried is an anomaly, never an absolute temperature.**
+
+    A_surface = seaFraction * (T_sea - seaLevelC(lat))   over water, 0 over land
+    dA/dt = (A_surface - A)/tau   along the back trajectory
+    T_land = T_stage2 + A
+
+The literal form in the brief -- relax toward the surface *temperature* and
+advect that -- was built first and **failed**: the Stage 4 wind's meridional
+component is systematically poleward in the NH (+0.4 to +0.65 m/s), so every
+back trajectory arrives from the equatorward side and imports a warm bias.
+Non-ice land MAE **2.43 -> 2.95** and NE Asia **+3.33 -> +5.76**. The wind's
+error was becoming a temperature error one for one. The anomaly form closes
+that channel structurally, and gives the interior decay for free: mean
+|anomaly| **1.46 / 0.83 / 0.43 / 0.13 / 0.02 C** at 0-250 / 250-500 /
+500-1000 / 1000-2000 / 2000-4000 km from the sea, with **no distance rule
+anywhere in the model**.
+
+**Isotropic oceanicity was rejected although it scores better.** MAE 2.19 at
+L = 1000 km against the directional form's 2.31 -- but it worsens NE Asia
+(+3.33 -> +4.06) and the eastern US (+3.29 -> +3.62) and pushes marine air
+2000 km inland (0.54 C where the directional form gives 0.13). It cannot tell
+air that came off the sea from land that happens to be near it.
+
+**One parameter, and `mixingEfficiency` is forbidden on algebra rather than
+taste**: `A_ocean = (1 - oceanModeration)*(meanTemperatureC - seaLevelC)`
+identically, so a mixing efficiency over land is **exactly degenerate with
+`oceanModeration`**. `landSeaThermalRelaxationDays` = **7 days**, empirical,
+an Earth calibration, and a plateau rather than a minimum (MAE 2.35 / 2.32 /
+2.31 / 2.32 / 2.34 at 2 / 5 / 7 / 10 / 20 d). The horizon (6 timescales,
+discarding 0.25% of the kernel) and the step (tau/12) are numerical settings,
+not parameters -- same status as `harmonicsForEccentricity`.
+
+**What it buys**, non-ice land against Berkeley Earth: global MAE **2.47 ->
+2.31**, bias +0.41 -> **+0.13**, Europe **-5.62 -> -4.96**, NE Asia +3.30 ->
+**+3.32** (not traded away), N. America east +3.27 -> +3.09, west -1.99 ->
+-1.64, South America +2.03 -> +1.65, Australia +2.23 -> **+0.96**, tropical
+interior +2.47 -> +2.40. Every elevation band improves or holds (0-200 m
+2.93 -> 2.56; 2000 m+ 1.85 -> 1.88) with `surfaceLapseRateCPerKm` untouched
+at 5.2. **The ocean is unchanged on every cell**, so SST, sea ice and the
+ocean's seasonal cycle cannot have moved.
+
+**Europe gains only 0.66 of its 5.62 C, and the reason is upstream**: with a
+latitude-only SST the marine anomaly is only **+4.24 C at 60-70N**. There is
+no more warmth in the model's sea to carry. Fed the SST round's upper-bound
+diagnostic (a longitudinal harmonic fit of the teacher's sea, zero row mean,
+not implemented anywhere), the same coupling takes Europe to **-3.20** and the
+global MAE to 2.23 -- so the chain **SST longitude -> marine air -> land** is
+connected and worth about 1.8 C to Europe. That is the case for re-evaluating
+the gyre east-west dipole next.
+
+**The Stage 4 wind is used only as "which way does the air come from", and its
+error is reported rather than hidden.** Running the same coupling on NCEP's
+observed 850 hPa wind as a diagnostic gives global MAE 2.10 against 2.31, and
+the whole gap is tropical (tropical interior +2.40 vs **+1.34**, South America
++1.65 vs **+0.72**) while the three mid-latitude regions agree to under 0.4 C.
+Stage 4 has no trade winds -- at Sao Paulo it gives u = +2.80 m/s where NCEP
+gives -1.18. **The wind stage stays frozen and was not re-fitted.**
+
+**Why it is not wired into the preview.** Turning it on inside
+`buildClimateV1Preview` would move Stage 4's wind and Stage 5's humidity, both
+of which read the temperature field, and this round's regression condition was
+that neither changes. So 7 days is carried by its own accessor,
+`climateV1LandSeaParams()`, deliberately **not** merged into
+`CLIMATE_V1_EARTH_TEMPERATURE_CALIBRATION` (whose three values are spread into
+the params that reach `buildTemperatureField`, and therefore into wind and
+humidity). Same shape as `climateV1SeasonParams`. Wiring it in is the next
+round's decision, together with the SST longitude work.
+
+**Regression**: the diff is 26 added lines in one existing file plus two new
+files, and nothing under `js/` or `index.html` imports either, so the app is
+provably unchanged. V0.8 reads 63.4% / 10.2%, and all seventeen existing
+Climate v1 test/validator suites pass with output identical apart from
+wall-clock timings.
+
 ## Climate v1 is a present-Earth diagnostic model, and the ice sheets are an input
 
 Full audit: `docs/climate-v1-scope-and-ice-sheet-boundary.md`. Audit only --
