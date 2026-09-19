@@ -24,12 +24,12 @@ if [[ -n "$(git status --porcelain)" ]]; then
   exit 73
 fi
 
-if ! git cat-file -e "\${sha}^{commit}" 2>/dev/null; then
+if ! git cat-file -e "${sha}^{commit}" 2>/dev/null; then
   echo "Commit is not available locally. Update the clean checkout first, then retry." >&2
   exit 65
 fi
 
-prompt="Read-only only; no edits, files, commits, pushes, config changes, or network tools. Inspect commit \${sha}. Audit selected/toggle aria-pressed synchronization and initial HTML state only. Reply JSON only: {\"commit\":\"\${sha}\",\"verdict\":\"PASS|FINDINGS|BLOCKED\",\"findings\":[]}"
+prompt="Read-only only; no edits, files, commits, pushes, config changes, or network tools. Inspect commit ${sha}. Audit selected/toggle aria-pressed synchronization and initial HTML state only. Reply JSON only: {\"commit\":\"${sha}\",\"verdict\":\"PASS|FINDINGS|BLOCKED\",\"findings\":[]}"
 
 last_line="$(glm -p "$prompt" | tail -n 1)"
 
