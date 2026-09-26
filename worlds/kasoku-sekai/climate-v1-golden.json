@@ -1,0 +1,28 @@
+{
+  "_note": "Climate v1 stable golden reference. Regenerate with `node tools/golden_climate_v1.mjs --write` ONLY after a deliberate model change, and say in the commit what moved and why.",
+  "recordedAt": "2026-09-26",
+  "values": {
+    "v0.8 teacherA": "総合 (4クラス平均 IoU) 63.4%",
+    "v0.8 teacherB": "総合 (8クラス平均 IoU) 10.2%",
+    "terrain landCells": 718715,
+    "stage2 annual digest": "2bccdd5c",
+    "stage2 land mean C": -1.1814,
+    "stage2 sea mean C": 12.3683,
+    "surface lapse C/km": 5.2,
+    "season tau_land d": 27.2,
+    "season tau_sea d": 150.46,
+    "season 45N land halfAmp C": 15.077,
+    "season 45N sea halfAmp C": 4.799,
+    "season coefficients digest": "96976e9d",
+    "seaice annual max %": 7.513,
+    "seaice annual min %": 4.746,
+    "seaice perennial %": 3.682,
+    "seaice worst energy residual W/m2": 1.22e-13,
+    "wind mean speed m/s": 2.0187,
+    "wind digest": "6073813d/01d3ed4c",
+    "humidity land qsat g/kg": 10.5858,
+    "moisture land q g/kg": 7.4263,
+    "land-sea coupling tau d": 7,
+    "land-sea coupling digest": "d1533569"
+  }
+}
