@@ -39,10 +39,8 @@ import { fileURLToPath } from "node:url";
 
 import { readPng } from "./png.mjs";
 import {
-  CLIMATE_PARAMETERS,
   computeClimate,
   computeGeography,
-  resolveClimateParams,
   resolveClimateSets,
   scoreAgainstTeacher,
   searchableParameters,

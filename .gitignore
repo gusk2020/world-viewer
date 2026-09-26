@@ -1,1 +1,6 @@
 __pycache__/
+
+# Search checkpoints. tools/search_*.mjs default to ./search-<world>.json,
+# so an accidental run in the repo root leaves one behind; they are scratch.
+search-*.json
+seasonal-search-*.json

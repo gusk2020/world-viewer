@@ -78,6 +78,13 @@ export const RECYCLING_PARAMETERS = {
       "large-scale condensation closures; the range is taken from that, not from any " +
       "teacher comparison.",
   },
+  // NAME COLLISION, deliberate and worth knowing: js/climate-v1/moisture.js
+  // exports a parameter with this same name whose default is 4.6 days and
+  // whose kind is `physical` (it is derived from a bulk exchange coefficient,
+  // not fitted). This one is 5 days and `empirical`, and it belongs to the
+  // REJECTED Stage 5C-alpha recycling experiment. The two modules resolve
+  // their own parameters separately so they cannot collide at run time, but
+  // do not copy a value from one to the other.
   evapotranspirationTimescaleDays: {
     default: 5,
     kind: "empirical",

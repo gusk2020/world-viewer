@@ -23,7 +23,6 @@ import {
   hydrostaticSurfacePressureHPa,
   saturationSpecificHumidity,
   saturationVapourPressureHPa,
-  WATER_SATURATION_COEFFICIENTS,
 } from "../js/climate-v1/humidity.js";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");

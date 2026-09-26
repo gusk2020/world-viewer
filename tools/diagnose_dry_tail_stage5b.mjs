@@ -15,7 +15,7 @@ import { buildTemperatureField } from "../js/climate-v1/temperature.js";
 import { CLIMATE_V1_EARTH_TEMPERATURE_CALIBRATION } from "../js/climate-v1/earth-temperature-calibration.js";
 import { buildHumidityField } from "../js/climate-v1/humidity.js";
 import { parseWindGrid } from "../js/climate-v1/wind-teacher.js";
-import { parseTeacherGrid } from "../js/climate-v1/humidity-teacher.js";
+import {  } from "../js/climate-v1/humidity-teacher.js";
 import { buildMoistureField, WIND_MODES } from "../js/climate-v1/moisture.js";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");

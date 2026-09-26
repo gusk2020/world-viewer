@@ -16,7 +16,7 @@
 // Every Climate v1 tool must load it the same way, or two tools would
 // disagree about whether the Black Sea is ocean. That is why this is one
 // shared function and not four lines copied into each tool.
-import { readFileSync, existsSync } from "node:fs";
+import { existsSync } from "node:fs";
 import path from "node:path";
 
 import { readPng } from "./png.mjs";

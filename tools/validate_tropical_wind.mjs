@@ -18,7 +18,7 @@ import { buildHadleyCirculation, buildGillCirculation } from "../js/climate-v1/t
 import { parseWindGrid } from "../js/climate-v1/wind-teacher.js";
 import { parseTeacherGrid } from "../js/climate-v1/humidity-teacher.js";
 import { buildMoistureField, WIND_MODES } from "../js/climate-v1/moisture.js";
-import { scoreWindBands, formatWindBandTable, WIND_LATITUDE_BANDS } from "../js/climate-v1/wind-diagnostic.js";
+import { scoreWindBands, formatWindBandTable } from "../js/climate-v1/wind-diagnostic.js";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const WORLD = path.join(REPO, "worlds", "kasoku-sekai"), TD = path.join(WORLD, "teacher");

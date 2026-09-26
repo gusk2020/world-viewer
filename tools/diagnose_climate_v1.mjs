@@ -14,7 +14,7 @@ import assert from "node:assert/strict";
 
 import { readPng } from "./png.mjs";
 import { resolveClimateSets } from "../js/climate.js";
-import { buildTerrainField, sampleTerrainCell, sampleTerrainAt, TERRAIN_STATES } from "../js/climate-v1/terrain.js";
+import { buildTerrainField, sampleTerrainAt, TERRAIN_STATES } from "../js/climate-v1/terrain.js";
 import { loadOceanMask, loadWaterSurfaceMask } from "./ocean_mask.mjs";
 import { buildTemperatureField, sampleTemperatureAt } from "../js/climate-v1/temperature.js";
 import { currentModelWind, compareWindToTeacher } from "../js/climate-v1/wind-diagnostic.js";

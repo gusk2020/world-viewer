@@ -29,14 +29,14 @@ import { readPng } from "./png.mjs";
 import { loadOceanMask, loadWaterSurfaceMask } from "./ocean_mask.mjs";
 import { resolveClimateSets, dailyMeanInsolationFactor } from "../js/climate.js";
 import { buildTerrainField, sampleTerrainAt } from "../js/climate-v1/terrain.js";
-import { buildTemperatureField, sampleTemperatureAt, latitudeOfRow } from "../js/climate-v1/temperature.js";
+import { buildTemperatureField, latitudeOfRow } from "../js/climate-v1/temperature.js";
 import { CLIMATE_V1_EARTH_TEMPERATURE_CALIBRATION } from "../js/climate-v1/earth-temperature-calibration.js";
 import {
   SEASONAL_TIME_AXIS, SEASON_PARAMETERS, SURFACE_LAND, SURFACE_SEA,
   buildSeasonalTemperatureTable, harmonicsForEccentricity, heatCapacityJPerM2K, sampleOrbit,
 } from "../js/climate-v1/season.js";
 import {
-  EARTH_CALIBRATION_ORBIT, MONTH_NAMES,
+  EARTH_CALIBRATION_ORBIT,
   monthIntervals, monthMeanWeights, buildHarmonicOperator, harmonicsOf, wrapPhase, calendarHelpers,
 } from "./seasonal_calendar.mjs";
 

@@ -161,6 +161,14 @@ export const SEASON_PARAMETERS = {
   // including the sharply non-sinusoidal polar forcing, at 32 KB for 512
   // rows. An eccentric orbit needs more, and `harmonicsForEccentricity`
   // works out how many -- a numerical-accuracy setting, not a fitted one.
+  //
+  // **This one is read as a module constant, not through a params object.**
+  // `harmonicsForEccentricity` reads it here directly, and
+  // `buildSeasonalTemperatureTable` takes its own `harmonics` argument for an
+  // explicit override. So `params: { harmonics: 8 }` is silently ignored --
+  // pass `harmonics: 8` beside `params` instead. (Found by the stabilization
+  // round's reachability audit; stated rather than changed, because every
+  // caller already uses the argument.)
   harmonics: 4,
 };
 
