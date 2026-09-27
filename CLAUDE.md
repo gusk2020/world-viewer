@@ -246,6 +246,17 @@ humidity (ERA5 dewpoint via the public NSF NCAR mirror on AWS) -> 5
 precipitation -> 6 land ice, each chained on the previous predictions, with
 "地球適合" (in-sample) and "地域保留" (6-sector hold-out) kept separate.
 
+**Vegetation layer (separate branch `claude/anti-kytera-vegetation`, its own
+Draft PR, based on the PR #12 head; never merged by Claude).** Everything is in
+`anti-kytera/veg/` -- read `anti-kytera/veg/VEG.md` first. Input is only
+`anti-kytera/handoff/interface_v3.npz`; teacher is Ramankutty & Foley potential
+natural vegetation (0.5 deg, public S3 copy reachable from the sandbox). One
+all-year map, codes 11-25 = R&F class + 10, draw order sea < vegetation <
+(reserved: cropland 40/41 < inland water 30 < urban 50) < land ice. Holdout
+agreement 33% (15 classes), 55% in 4 groups; with teacher climate as a
+diagnostic only, 49% -- so the classifier limit and the holdout climate error
+are roughly equal parts. PR #12 code is not changed by this branch.
+
 ## Architecture (Three.js for 3D, OpenLayers for 2D, one page, toggle button)
 
 **Three.js** for the 3D globe, **OpenLayers** for the 2D map, both mounted
