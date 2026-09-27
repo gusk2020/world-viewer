@@ -9,8 +9,15 @@ page.on('response', response => {
   if (response.status() >= 400) errors.push(`${response.status()} ${response.url()}`);
 });
 const ready = async name => {
-  await page.waitForFunction(label => document.getElementById('world-cycle').textContent.includes(label) &&
-    document.getElementById('loading').classList.contains('hidden'), name, { timeout: 90000 });
+  try {
+    await page.waitForFunction(label => document.getElementById('world-cycle').textContent.includes(label) &&
+      document.getElementById('loading').classList.contains('hidden'), name, { timeout: 45000 });
+  } catch (error) {
+    console.log('Waiting for:', name, 'current:', await page.locator('#world-cycle').textContent(),
+      'loading:', await page.locator('#loading').textContent(), 'page errors:', errors);
+    await page.screenshot({ path: '/tmp/smoke-failure.png' });
+    throw error;
+  }
 };
 const click = async selector => page.locator(selector).click({ timeout: 15000 });
 try {

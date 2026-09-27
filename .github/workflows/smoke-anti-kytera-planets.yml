@@ -20,6 +20,9 @@ jobs:
         run: |
           python3 -m http.server 8765 --bind 127.0.0.1 >/tmp/anti-kytera-server.log 2>&1 &
           node tools/smoke_planets.mjs
+      - name: Server diagnostics
+        if: failure()
+        run: tail -60 /tmp/anti-kytera-server.log
       - name: Phone preview endpoint
         run: |
           curl --fail --show-error --silent --location --head --max-time 30 \
