@@ -1,0 +1,32 @@
+name: Smoke Anti-KyTerra planets
+
+on:
+  push:
+    branches: [codex/anti-kyterra-mercury-venus]
+    paths:
+      - 'tools/smoke_planets.mjs'
+      - '.github/workflows/smoke-anti-kytera-planets.yml'
+      - 'anti-kytera/viewer/js/**'
+  workflow_dispatch:
+
+jobs:
+  mobile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm install --no-save playwright && npx playwright install --with-deps chromium
+      - name: Mobile browser smoke
+        run: |
+          python3 -m http.server 8765 --bind 127.0.0.1 >/tmp/anti-kytera-server.log 2>&1 &
+          node tools/smoke_planets.mjs
+      - name: Phone preview endpoint
+        run: |
+          curl --fail --show-error --silent --location --head --max-time 30 \
+            'https://raw.githack.com/gusk2020/world-viewer/codex/anti-kyterra-mercury-venus/anti-kytera/viewer/index.html' | head -20
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: planet-mobile-screenshots
+          path: /tmp/*.png
+          if-no-files-found: ignore
