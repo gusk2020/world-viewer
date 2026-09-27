@@ -147,15 +147,15 @@
       ],
       "sourceFirstLongitude": -19009777.2544,
       "sourceCoordinateUnits": "projected metres",
-      "sourceValueScale": 1,
-      "sourceValueOffsetMetres": 0,
+      "sourceValueScale": 1.0,
+      "sourceValueOffsetMetres": 0.0,
       "sourceReferenceRadiusMetres": 6051000,
       "displayReferenceRadiusMetres": 6051800,
       "datumShiftMetres": -800,
       "resampling": "GDAL average to 2048x1024, then 2x2 area means for lower levels",
       "outputMinMaxMetres": [
-        -3685,
-        10567
+        -3685.0,
+        10567.0
       ],
       "missingCellsAfterResampling": 166494,
       "missingFractionAfterResampling": 0.0793905258178711,

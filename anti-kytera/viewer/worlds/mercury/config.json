@@ -148,7 +148,7 @@
       "sourceFirstLongitude": -7663601.1191669,
       "sourceCoordinateUnits": "projected metres",
       "sourceValueScale": 0.5,
-      "sourceValueOffsetMetres": 0,
+      "sourceValueOffsetMetres": 0.0,
       "sourceReferenceRadiusMetres": 2439400,
       "displayReferenceRadiusMetres": 2439400,
       "datumShiftMetres": 0,
@@ -158,7 +158,7 @@
         4434.5
       ],
       "missingCellsAfterResampling": 0,
-      "missingFractionAfterResampling": 0,
+      "missingFractionAfterResampling": 0.0,
       "missingLatitudeBoundsDegrees": null,
       "missingPolicy": "none"
     }
