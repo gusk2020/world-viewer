@@ -1,0 +1,23 @@
+name: Verify public Anti-KyTerra preview
+
+on:
+  push:
+    branches: [codex/anti-kyterra-mercury-venus]
+    paths:
+      - 'tools/verify_pages_preview.mjs'
+      - '.github/workflows/verify-anti-kytera-preview.yml'
+
+jobs:
+  phone:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm install --no-save playwright && npx playwright install --with-deps chromium
+      - run: node tools/verify_pages_preview.mjs
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: pages-preview-failure
+          path: /tmp/pages-preview-failure.png
+          if-no-files-found: ignore
