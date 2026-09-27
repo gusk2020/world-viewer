@@ -39,6 +39,7 @@ try {
     }
     if (!await page.locator('#ak-score').textContent().then(t => t.includes('教師なし')))
       throw Error(`${name}: teacher disclosure missing`);
+    await page.screenshot({ path: `/tmp/${name}-3d.png` });
     await page.locator('#sea-level-slider').evaluate(el => { el.value = '10'; el.dispatchEvent(new Event('input', { bubbles: true })); });
     await page.locator('#climate-temp-slider').evaluate(el => { el.value = '18'; el.dispatchEvent(new Event('input', { bubbles: true })); });
     if (await page.locator('#ak-condition').isHidden()) throw Error(`${name}: slider limitation hidden`);
@@ -57,6 +58,13 @@ try {
   await ready('地球');
   await click('[data-surface="veg"]');
   await page.waitForFunction(() => !document.getElementById('ak-info').hidden);
+  const preview = await browser.newPage({ viewport: { width: 393, height: 851 }, isMobile: true, hasTouch: true });
+  await preview.goto('https://raw.githack.com/gusk2020/world-viewer/codex/anti-kyterra-mercury-venus/anti-kytera/viewer/index.html',
+    { waitUntil: 'domcontentloaded', timeout: 45000 });
+  await preview.waitForFunction(() => document.getElementById('world-cycle')?.textContent.includes('地球') &&
+    document.getElementById('loading')?.classList.contains('hidden'), null, { timeout: 90000 });
+  console.log('Public phone preview loaded.');
+  await preview.close();
   if (errors.length) throw Error(errors.join('\n'));
   console.log('Mobile smoke passed: Earth, Moon, Mars, Mercury, Venus; 7 stages; 2D/3D; sliders; Earth return.');
 } finally {
