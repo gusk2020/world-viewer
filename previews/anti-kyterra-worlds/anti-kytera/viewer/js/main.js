@@ -248,6 +248,7 @@ async function main() {
   let loadSequence = 0;
   async function loadWorld(entry) {
     const token = ++loadSequence;
+    window.__akWorldId = null;
     loading.classList.remove("hidden");
     loading.textContent = `${entry.label}を読み込み中…`;
     if (mode !== "3d") { mode = "3d"; applyMode(); }
@@ -264,7 +265,7 @@ async function main() {
       console.error("Failed to switch world:", err);
       if (token === loadSequence) {
         loading.textContent = "読み込みに失敗しました。通信状況を確認してください。";
-        setTimeout(() => { if (token === loadSequence) loading.classList.add("hidden"); }, 2500);
+        worldSelect.value = world?.entry.id || entry.id;
       }
       return;
     }
@@ -295,6 +296,7 @@ async function main() {
     applyMode();
     loading.classList.add("hidden");
     window.__akReady = true;
+    window.__akWorldId = entry.id;
   }
   worldSelect.addEventListener("change", () => {
     const next = index.worlds.find(e => e.id === worldSelect.value);
