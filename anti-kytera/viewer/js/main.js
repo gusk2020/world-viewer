@@ -21,7 +21,7 @@ const $ = (id) => document.getElementById(id);
 
 async function main() {
   const index = await (await fetch(WORLD_INDEX_URL)).json();
-  const stagesPromise = loadStages(AK_BASE);
+  const earthStagesPromise = loadStages(AK_BASE);
   let stages = null;
 
   const appEl = $("app"), map2dEl = $("map2d"), loading = $("loading");
@@ -42,7 +42,8 @@ async function main() {
   let surface = "standard", src = "model", vmode = "fit";
   let legendOpen = true;
 
-  const isEarth = () => Boolean(world && globe3d && globe3d.supportsStages);
+  const isEarth = () => world?.entry.id === "kasoku-sekai";
+  const hasStages = () => Boolean(world && globe3d && globe3d.supportsStages && stages);
   const inStage = () => surface !== "standard";
 
   // ------------------------------------------------ 3D / 2D
@@ -56,7 +57,7 @@ async function main() {
   }
   function draw2d(extent, w, h) {
     return stages.renderMercator(globe3d.renderer, extent, w, h, {
-      photo: !inStage(), photoTexture: globe3d.photoTexture, elevation: globe3d.getElevation(),
+      photo: !inStage() && Boolean(globe3d.photoTexture), photoTexture: globe3d.photoTexture, elevation: globe3d.getElevation(),
     });
   }
   let refreshQueued = false;
@@ -75,7 +76,7 @@ async function main() {
     const metres = seaLevelMetres();
     globe3d.setSeaLevel(metres);
     seaLevelReadout.textContent = metres === 0 ? "±0m" : `${metres > 0 ? "+" : ""}${metres}m`;
-    if (stages) { stages.state.seaLevel = isEarth() ? metres : 0; stages.apply(); }
+    if (stages) { stages.state.seaLevel = metres; stages.apply(); }
     updateCondition(); refresh2d(); lastReadout = "";
   }
   function applyWaterOpacity() {
@@ -91,13 +92,13 @@ async function main() {
   }
   // The estimates are fixed at today's conditions; say so the moment a slider moves away from them.
   function updateCondition() {
-    if (!isEarth()) { condition.hidden = true; return; }
+    if (!hasStages()) { condition.hidden = true; return; }
     const sea = seaLevelMetres(), temp = Number(tempSlider.value);
     const moved = sea !== 0 || temp !== PRESENT_MEAN_C;
     condition.hidden = !moved;
     if (!moved) return;
     condition.textContent = inStage()
-      ? `塗り分けは現在の条件（平均気温${PRESENT_MEAN_C}℃・海面0 m）の推定のままで、条件に追従しません。` +
+      ? `${isEarth() ? "塗り分けは現在の条件" : "地球由来の試験的な塗り分けは基準条件"}（平均気温${PRESENT_MEAN_C}℃・海面0 m）の推定のままで、条件に追従しません。` +
         (sea !== 0 ? "海面は操作どおりに表示し、塗り分けと食い違う所は海面を優先。" : "")
       : `標準（衛星写真）は条件に追従しません。${sea !== 0 ? "海面だけが動きます。" : ""}`;
   }
@@ -111,8 +112,9 @@ async function main() {
     selectButtons("#stage-src button", "src", src);
     selectButtons("#stage-mode button", "mode", vmode);
     srcRow.hidden = !isEarth() || !inStage() || surface === "bed" || surface === "sea";
-    document.getElementById("cross").hidden = !isEarth();
-    if (!isEarth()) { globe3d.setStage(null); info.hidden = true; return; }
+    $("stage-mode").parentElement.hidden = !isEarth();
+    document.getElementById("cross").hidden = !hasStages();
+    if (!hasStages()) { globe3d.setStage(null); info.hidden = true; return; }
     info.hidden = false;
     if (stages) {
       Object.assign(stages.state, { v: inStage() ? surface : "bed", src, mode: vmode });
@@ -167,7 +169,7 @@ async function main() {
     return globe3d.getCentre();
   }
   function updateReadout() {
-    if (!isEarth() || !stages) return;
+    if (!hasStages()) return;
     const c = centre();
     let html;
     if (!c) html = "中央: 地球の外";
@@ -233,12 +235,16 @@ async function main() {
     loading.classList.remove("hidden");
     loading.textContent = `${entry.label}を読み込み中…`;
     if (mode !== "3d") { mode = "3d"; applyMode(); }
-    let config, next;
+    let config, next, nextStages;
     try {
       config = await (await fetch(entry.config)).json();
       next = await initGlobe3D("app", config, onFrame);
-      if (next.supportsStages && !stages) stages = await stagesPromise;
+      if (next.supportsStages)
+        nextStages = entry.id === "kasoku-sekai" ? await earthStagesPromise :
+          await loadStages(`./worlds/${entry.id}/`, true);
+      else nextStages = null;
     } catch (err) {
+      if (next) next.dispose();
       console.error("Failed to switch world:", err);
       if (token === loadSequence) {
         loading.textContent = "読み込みに失敗しました。通信状況を確認してください。";
@@ -249,6 +255,7 @@ async function main() {
     if (token !== loadSequence) { next.dispose(); return; }
     if (globe3d) globe3d.dispose();
     globe3d = next;
+    stages = nextStages;
     shownAxis = null; shownScale = null;
     world = { entry, config };
     const sea = config.display.seaLevel;
@@ -256,11 +263,11 @@ async function main() {
     seaLevelSlider.min = String(Math.round(sea.downToMetres / sea.downStepMetres));
     seaLevelSlider.max = String(Math.round(sea.upToMetres / sea.upStepMetres));
     seaLevelSlider.value = "0";
-    const earth = globe3d.supportsStages;
-    surfaceRow.hidden = !earth;
-    tempRow.hidden = !earth;
-    toggleButton.hidden = !earth;
-    virtualNote.hidden = earth;
+    const enabled = globe3d.supportsStages;
+    surfaceRow.hidden = !enabled;
+    tempRow.hidden = !enabled;
+    toggleButton.hidden = !enabled;
+    virtualNote.hidden = isEarth();
     surface = "standard";
     worldCycleButton.textContent = `天体 ${entry.label}`;
     applySeaLevel();

@@ -15,8 +15,8 @@ import { loadStageData } from "./stage-data.js";
 import { createStageDraw, colourScale } from "./stage-draw.js";
 import { createStagePanel } from "./stage-panel.js";
 
-export async function loadStages(base) {
-  const data = await loadStageData(base);
+export async function loadStages(base, planetary = false) {
+  const data = await loadStageData(base, planetary);
   const state = { v: "bed", src: "model", mode: "fit", seaLevel: 0, opacity: 0.4 };
   const ctx = {
     ...data,
@@ -29,6 +29,7 @@ export async function loadStages(base) {
   const draw = createStageDraw(ctx);
   const panel = createStagePanel(ctx);
   return {
+    hasTeacher: data.hasTeacher,
     state,
     apply: draw.apply,
     createMaterial: draw.createMaterial,

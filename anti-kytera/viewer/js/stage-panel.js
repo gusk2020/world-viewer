@@ -6,7 +6,7 @@ import { ICE_MIN_M, POLAR_AVERAGE_LAT, MODE_JA } from "./stage-data.js";
 import { ramp, seaColour, AGREE, EXPOSED, BED_LO, BED_HI } from "./stage-draw.js";
 
 export function createStagePanel(ctx) {
-  const { S, V, vcol, vlab, state, cell, bilinear, drawnComposite, rawComposite, isClimate, vm, scale } = ctx;
+  const { S, V, vcol, vlab, state, cell, bilinear, drawnComposite, rawComposite, isClimate, vm, scale, hasTeacher } = ctx;
   // ------------------------------------------------ legend and notes
   const pct = (x) => (x * 100).toFixed(0) + "%";
   function legend() {
@@ -20,7 +20,7 @@ export function createStagePanel(ctx) {
           [AGREE.none, "教師なし"], [AGREE.sea, "海"]);
       } else {
         for (const c of V.classes) {
-          const iou = sc.iou[String(c.code)];
+          const iou = hasTeacher ? sc.iou[String(c.code)] : null;
           items.push([c.rgb, c.ja, state.src === "model" && iou != null ? Math.round(iou * 100) : null]);
         }
         items.push([vcol[1], "陸氷"], [seaColour(-3000), "海"]);
@@ -28,7 +28,7 @@ export function createStagePanel(ctx) {
       }
       if (state.seaLevel < 0) items.push([EXPOSED, "干上がった海底（推定なし）"]);
       out.classes = items;
-      out.score = `${MODE_JA[state.mode]}：15区分 一致 ${pct(sc.accuracy)}・κ ${sc.kappa.toFixed(2)}・大区分 ${pct(sc.group)}`;
+      out.score = hasTeacher ? `${MODE_JA[state.mode]}：15区分 一致 ${pct(sc.accuracy)}・κ ${sc.kappa.toFixed(2)}・大区分 ${pct(sc.group)}` : "地球で学習した規則による試験的な塗り分け・教師なし";
       out.note = {
         model: "モデル：年平均の気温・降水・水蒸気圧（3〜5段階と同じ推定値）と岩盤地形から分類した、通年の代表的な自然植生。数字は種類ごとの一致度（%）。",
         teacher: "教師：Ramankutty & Foley (1999) 潜在自然植生（人の土地利用が無い場合）。南極は教師に区分が無い。",
@@ -43,15 +43,16 @@ export function createStagePanel(ctx) {
       out.bar = { colours, lo, hi, unit: unit + (state.src === "diff" && isClimate() ? "（差）" : "") };
       if (!isClimate()) { out.score = S.stages[state.v].score; out.note = S.stages[state.v].note; }
       else {
-        out.score = `${MODE_JA[state.mode]}：${vm().score[state.mode]}`;
+        out.score = hasTeacher ? `${MODE_JA[state.mode]}：${vm().score[state.mode]}` : "地球で学習した規則による試験的な塗り分け・教師なし";
         out.note = (state.src === "teacher" ? vm().teacherNote : state.src === "model" ? vm().modelNote : "差 = モデル − 教師。") +
           " " + S.modeNote[state.mode];
       }
     }
-    if (isClimate() || veg) out.note += " 地球適合＝見たことのある場所への当てはめ（ほぼ一致して当然）。実力の目安は地域保留。";
+    if (hasTeacher && (isClimate() || veg)) out.note += " 地球適合＝見たことのある場所への当てはめ（ほぼ一致して当然）。実力の目安は地域保留。";
+    if (!hasTeacher) out.note = "地球条件から学習した規則を当てた試験表示。実際の天体環境ではない。教師なし。" + out.note;
     out.note += " 画面の色：緯度60°より極側は、極付近の細いセルの筋を抑えるため東西に平均した値で描く（描画だけ）。" +
       "海岸線・氷の縁は隣のセルとの間を補間した線。中央の数値は常に平均前の元データのセルの値。" +
-      " 形は Anti-KyTerra の岩盤（GEBCO_2026 氷床下地形）、光と海面は v1s と同じ。";
+      (hasTeacher ? " 形は Anti-KyTerra の岩盤（GEBCO_2026 氷床下地形）、光と海面は v1s と同じ。" : " 地形は探査機の地形図、海面は仮想。日射は地球と同じ強さ、重力1G、大気組成は地球と同じ、放射線は無視。");
     return out;
   }
 
@@ -63,6 +64,18 @@ export function createStagePanel(ctx) {
     const head = `${pos}　<span class="k">元データ値</span>${polar}`;
     const z = cell("bed", lng, lat);
     const tag = `モデル（${MODE_JA[state.mode]}）`;
+    if (!hasTeacher) {
+      const sl = state.seaLevel;
+      if (state.v === "bed" || state.v === "sea")
+        return `${head}<br><b class="m">地形</b> ${z.toFixed(0)} m${state.v === "sea" ? `・${z < sl ? "仮想海" : "陸"}` : ""}　<b class="t">教師</b> なし`;
+      if (state.v === "veg") {
+        const c = rawComposite("fit", lng, lat);
+        return `${head}<br><b class="m">モデル</b> ${vlab[c] || "推定なし"}　<b class="t">教師</b> なし`;
+      }
+      const key = vm().key, value = cell(`${key}_fit`, lng, lat);
+      const label = state.v === "ice" && value <= ICE_MIN_M ? "氷なし" : `${value.toFixed(vm().digits)} ${vm().unit}`;
+      return `${head}<br><b class="m">モデル</b> ${label}　<b class="t">教師</b> なし`;
+    }
     const warn = (drawn, raw) => drawn === raw ? "" :
       `<br><span class="w">※画面の塗りは「${drawn}」、元データのセルは「${raw}」（境界付近の補間・平均による差）</span>`;
     // the moved sea surface wins over the 0 m estimates

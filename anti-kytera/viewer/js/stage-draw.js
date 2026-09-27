@@ -62,7 +62,7 @@ export function createStageDraw(ctx) {
     T[k] = t;
   }
   T.normal = (() => {   // object-space relief normals, for the flat 2D map only
-    const f = D.bed.meta, a = D.bed, W = f.w, H = f.h, R = 6.371e6, RELIEF = 25;
+    const f = D.bed.meta, a = D.bed, W = f.w, H = f.h, R = S.bodyRadiusMetres || 6.371e6, RELIEF = 25;
     const out = new Uint8Array(W * H * 4), dy = Math.PI * R / H;
     for (let j = 0; j < H; j++) {
       const lat = (j + 0.5) / H * Math.PI - Math.PI / 2, cl = Math.cos(lat), sl = Math.sin(lat);

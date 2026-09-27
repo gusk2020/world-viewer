@@ -208,7 +208,7 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
   // is shaped by the Anti-KyTerra bedrock (sub-ice, 0.25 deg), and its
   // material is v1s's own Lambert material with the diffuse colour computed
   // per pixel from the data (stages.js). Nothing of the photo path changes.
-  const supportsStages = usesPhoto;
+  const supportsStages = usesPhoto || Boolean(worldConfig.antiKyTerraStages);
   let stageMesh = null;
   let stageApi = null;
   let showingStage = false;

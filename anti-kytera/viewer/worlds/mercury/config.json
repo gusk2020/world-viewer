@@ -1,0 +1,41 @@
+{
+  "id": "mercury",
+  "name": "水星",
+  "antiKyTerraStages": true,
+  "body": {
+    "radiusMetres": 2439400,
+    "axialTiltDegrees": 0.034,
+    "dayLengthHours": 1407.6,
+    "orbitPeriodDays": 87.969,
+    "rotationDirection": 1,
+    "datum": "Mercury MESSENGER MDIS DEM relative to 2439.4 km reference radius",
+    "assumedGravityMps2": 9.80665,
+    "assumedAtmosphere": "Earth composition",
+    "assumedSolarFlux": "Earth-equivalent at top of atmosphere",
+    "radiation": "ignored"
+  },
+  "display": {
+    "verticalExaggeration": 20,
+    "seaLevel": {
+      "label": "仮想海面",
+      "downToMetres": -8000,
+      "downStepMetres": 100,
+      "upToMetres": 12000,
+      "upStepMetres": 100
+    }
+  },
+  "terrain": {
+    "source": "https://planetarymaps.usgs.gov/mosaic/Mercury_Messenger_USGS_DEM_Global_665m.tif",
+    "encoding": {
+      "type": "rg16-metres",
+      "offsetMetres": 16000
+    },
+    "levels": [
+      {
+        "url": "./worlds/mercury/terrain/mercury_2048x1024.png",
+        "width": 2048,
+        "height": 1024
+      }
+    ]
+  }
+}
