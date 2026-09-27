@@ -2977,6 +2977,28 @@ balance. The self-forming-ice-sheet track is a separate branch run separately.
    frame earlier is stale** — re-measured at the stabilization commit and at
    its unmodified parent, both give `1e2a09adcdc7`.
 
+### Where the phone actually loads the app from
+
+**GitHub Pages serves `climate-v1-stable-ui`** (Settings -> Pages -> Deploy
+from a branch, `/ (root)`), changed by the user on 2026-09-27. It is *not* the
+repository's default branch: `claude/map-app-v0-1-az6aoa` is still the default
+and still carries the pre-Climate-v1 app. **So a Climate v1 change is not on
+the user's phone until it is on the branch Pages is pointed at** -- check that
+before concluding a control "did not come back".
+
+**And expect a cache wait after any Pages switch.** There is no build step and
+no service worker, so nothing in the file names changes between versions and
+Chrome on Android keeps the old `index.html` / `js/*.js` / `css/style.css` for
+about ten minutes. The user hit exactly this and reported "アプリが更新され
+ません" when the deploy was in fact already correct. The one-minute
+diagnosis is a private tab: if it shows the new UI, it is only the cache, and
+clearing the site's data (address bar lock icon -> Site settings -> delete
+data) fixes the normal tab. A home-screen shortcut keeps its own cache and has
+to be removed and re-added. Offered and not taken: adding version query
+strings to the asset URLs, which would only half work anyway -- `main.js`'s
+own relative imports would still be cached, and a real fix needs a build step
+this project does not have.
+
 ### The UI is fully exposed again (stable-UI pass)
 
 Every *display* control is reachable: 海面の高さ, 海の濃さ, 海底の色 (only
@@ -2991,6 +3013,9 @@ Panels at 412x892: **122 px top / 95 px bottom by default**, peaks of 210
 (陸地塗り分け) and 226 (Climate v1 + 季節 + 海氷) in modes that do not
 coincide. Row height 27 px, panel gap 1 px. Full table in
 `docs/climate-v1-status.md` section 9a.
+
+**Confirmed on the user's own Pixel 7a on 2026-09-27**, once Pages was pointed
+at this branch and the browser cache cleared.
 
 ### Known limitations, in one line each
 

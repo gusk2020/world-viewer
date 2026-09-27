@@ -256,6 +256,15 @@ puts more than about a quarter of the screen under one panel. Row height is
 No horizontal scroll, nothing clipped at 412 px, the planet-settings overlay
 fully on screen, and no console errors in any state.
 
+**Confirmed on the user's Pixel 7a, 2026-09-27.**
+
+Worth knowing for the next round: **GitHub Pages serves the
+`climate-v1-stable-ui` branch**, not the repository default
+(`claude/map-app-v0-1-az6aoa`, which still carries the pre-Climate-v1 app). A
+change is not on the phone until it is on the branch Pages points at, and
+after any Pages switch Chrome holds the old files for about ten minutes --
+there is no build step and no service worker, so no file name ever changes.
+
 ## 10. Next development, unordered
 
 Written down so that nothing half-lands in the code:
