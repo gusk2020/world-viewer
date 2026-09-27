@@ -5,6 +5,9 @@ const page = await browser.newPage({ viewport: { width: 393, height: 851 }, devi
   isMobile: true, hasTouch: true });
 const errors = [];
 page.on('pageerror', error => errors.push(error.message));
+page.on('console', message => {
+  if (message.type() === 'error') errors.push(message.text());
+});
 page.on('response', response => {
   if (response.status() >= 400) errors.push(`${response.status()} ${response.url()}`);
 });
