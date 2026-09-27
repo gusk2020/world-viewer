@@ -255,11 +255,14 @@ async function main() {
     let config, next, nextStages;
     try {
       config = await (await fetch(entry.config)).json();
+      // Download and prepare the model before allocating a second WebGL
+      // context. Switching bodies on a software-rendered phone can otherwise
+      // keep two large renderers alive throughout the data preparation.
+      nextStages = config.globeTexture || config.antiKyTerraStages
+        ? entry.id === "kasoku-sekai" ? await earthStagesPromise :
+          await loadStages(`./worlds/${entry.id}/`, true)
+        : null;
       next = await initGlobe3D("app", config, onFrame);
-      if (next.supportsStages)
-        nextStages = entry.id === "kasoku-sekai" ? await earthStagesPromise :
-          await loadStages(`./worlds/${entry.id}/`, true);
-      else nextStages = null;
     } catch (err) {
       if (next) next.dispose();
       console.error("Failed to switch world:", err);
