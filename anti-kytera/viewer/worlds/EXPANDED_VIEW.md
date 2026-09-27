@@ -11,12 +11,15 @@
 
 The four `photo.jpg` files are 2048×1024 or smaller copies of the [Solar System Scope planetary texture pack](https://www.solarsystemscope.com/textures/). Credit: Solar System Scope / INOVE, [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Original direct URLs are recorded in each world's `config.json`. No image pixels are used as terrain or model inputs.
 
+The distributed Venus map is turned 180 degrees against the IAU frame of the Magellan DEM (Maxwell Montes appears near 65 S 177 W in the file). The committed `venus/photo.jpg` is that copy turned 180 degrees losslessly (`jpegtran -perfect`), recorded in its `config.json` (`image.orientation`, with the evidence), and the on-screen credit says so. The other three images are placed as distributed and pass the same alignment test.
+
 These are *composite, colour-adjusted viewing images*, not untouched photographs. The Venus surface is radar-derived and artificially coloured; it is not a visible-light photo of the cloud-covered planet. The distributor notes that unmapped gaps can contain fictional terrain and that colours are enhanced. This caveat applies to the image layer only. Do not infer DEM detail from a viewing image. The other four data layers remain separate from it.
 
 ## Display choices
 
-- `標高色` colours Earth's existing input terrain (including the present ice surface) by measured height on the same 3D shape, independently of the Anti-KyTerra ice-free `岩盤` layer. The 2D map uses the identical rock colour ramp.
+- `標高色` colours the displayed surface by height: Earth's GEBCO surface including today's ice, the probe DEM elsewhere; this is not the Anti-KyTerra ice-free `岩盤` input. The 2D map uses the identical ramp. The ramp's two ends are each body's `display.reliefColourRangeMetres` (Earth keeps -8000..6000; Moon -9000..11000, Mars -9000..22000, Mercury -6000..5000, Venus -4000..11000), and the legend prints the same numbers the shader uses; `岩盤` and `海` use the same range.
 - `植生` retains the 15-class model and teacher bytes unchanged. `簡略5区分` groups the existing codes only when drawing: forests 11–18, savanna/grassland 19–20, shrubs 21–22, tundra 23, deserts/polar barrens 24–25. Every vegetated group is green. Ice and ocean still override vegetation. The centre readout on Earth also retains the original class name in parentheses. The simpler category's accuracy is not inferred from the old 15-class score.
+- 地球適合 is the adopted estimate: there is no 地球適合/地域保留 switch. 教師 and 差 exist on Earth only and are reset to モデル whenever the body changes.
 - A grouped direct selector replaces cycling through every body: planets Earth/Mars/Mercury/Venus, satellite Moon. It does not alter the simulation.
 
 The mean-temperature slider still does not recompute classification. Moving sea level changes the displayed water surface, with a visible warning that the 0 m prediction is fixed.

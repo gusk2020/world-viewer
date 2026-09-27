@@ -67,10 +67,10 @@ def image_alignment(body, z):
     L = np.asarray(Image.open(V / body / "photo.jpg").convert("L").resize((1024, 512), Image.BILINEAR), float)
     zz = np.asarray(Image.fromarray(z.astype(np.float32)).resize((1024, 512), Image.BILINEAR), float)
     rows = slice(40, 472)
-    ez = np.hypot(*np.gradient(gaussian_filter(zz, 3, mode="wrap")))[rows]
+    ez = np.hypot(*np.gradient(gaussian_filter(zz, 1, mode="wrap")))[rows]
     out = {}
     for name, img in (("placed", L), ("rot180", L[::-1, ::-1]), ("flipNS", L[::-1]), ("flipEW", L[:, ::-1])):
-        el = np.hypot(*np.gradient(gaussian_filter(img, 3, mode="wrap")))[rows]
+        el = np.hypot(*np.gradient(gaussian_filter(img, 1, mode="wrap")))[rows]
         r = [np.corrcoef(ez.ravel(), np.roll(el, k, 1).ravel())[0, 1] for k in range(0, 1024, 4)]
         k = int(np.argmax(r)) * 4
         out[name] = (max(r), (k if k < 512 else k - 1024) * 360 / 1024, r[0])
