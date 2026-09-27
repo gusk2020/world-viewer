@@ -22,6 +22,98 @@
       "downStepMetres": 100,
       "upToMetres": 12000,
       "upStepMetres": 100
+    },
+    "hypsometric": {
+      "stops": [
+        [
+          -8000,
+          [
+            10,
+            26,
+            66
+          ]
+        ],
+        [
+          -3000,
+          [
+            26,
+            74,
+            140
+          ]
+        ],
+        [
+          -800,
+          [
+            72,
+            140,
+            200
+          ]
+        ],
+        [
+          -50,
+          [
+            140,
+            195,
+            225
+          ]
+        ],
+        [
+          0,
+          [
+            206,
+            214,
+            160
+          ]
+        ],
+        [
+          300,
+          [
+            150,
+            178,
+            96
+          ]
+        ],
+        [
+          2000,
+          [
+            120,
+            152,
+            78
+          ]
+        ],
+        [
+          5000,
+          [
+            178,
+            152,
+            84
+          ]
+        ],
+        [
+          9000,
+          [
+            140,
+            104,
+            66
+          ]
+        ],
+        [
+          14000,
+          [
+            160,
+            158,
+            152
+          ]
+        ],
+        [
+          21500,
+          [
+            248,
+            248,
+            248
+          ]
+        ]
+      ]
     }
   },
   "terrain": {
@@ -56,7 +148,7 @@
       "sourceFirstLongitude": -7663601.1191669,
       "sourceCoordinateUnits": "projected metres",
       "sourceValueScale": 0.5,
-      "sourceValueOffsetMetres": 0.0,
+      "sourceValueOffsetMetres": 0,
       "sourceReferenceRadiusMetres": 2439400,
       "displayReferenceRadiusMetres": 2439400,
       "datumShiftMetres": 0,
@@ -66,7 +158,7 @@
         4434.5
       ],
       "missingCellsAfterResampling": 0,
-      "missingFractionAfterResampling": 0.0,
+      "missingFractionAfterResampling": 0,
       "missingLatitudeBoundsDegrees": null,
       "missingPolicy": "none"
     }

@@ -22,6 +22,98 @@
       "downStepMetres": 100,
       "upToMetres": 12000,
       "upStepMetres": 100
+    },
+    "hypsometric": {
+      "stops": [
+        [
+          -8000,
+          [
+            10,
+            26,
+            66
+          ]
+        ],
+        [
+          -3000,
+          [
+            26,
+            74,
+            140
+          ]
+        ],
+        [
+          -800,
+          [
+            72,
+            140,
+            200
+          ]
+        ],
+        [
+          -50,
+          [
+            140,
+            195,
+            225
+          ]
+        ],
+        [
+          0,
+          [
+            206,
+            214,
+            160
+          ]
+        ],
+        [
+          300,
+          [
+            150,
+            178,
+            96
+          ]
+        ],
+        [
+          2000,
+          [
+            120,
+            152,
+            78
+          ]
+        ],
+        [
+          5000,
+          [
+            178,
+            152,
+            84
+          ]
+        ],
+        [
+          9000,
+          [
+            140,
+            104,
+            66
+          ]
+        ],
+        [
+          14000,
+          [
+            160,
+            158,
+            152
+          ]
+        ],
+        [
+          21500,
+          [
+            248,
+            248,
+            248
+          ]
+        ]
+      ]
     }
   },
   "terrain": {
@@ -55,15 +147,15 @@
       ],
       "sourceFirstLongitude": -19009777.2544,
       "sourceCoordinateUnits": "projected metres",
-      "sourceValueScale": 1.0,
-      "sourceValueOffsetMetres": 0.0,
+      "sourceValueScale": 1,
+      "sourceValueOffsetMetres": 0,
       "sourceReferenceRadiusMetres": 6051000,
       "displayReferenceRadiusMetres": 6051800,
       "datumShiftMetres": -800,
       "resampling": "GDAL average to 2048x1024, then 2x2 area means for lower levels",
       "outputMinMaxMetres": [
-        -3685.0,
-        10567.0
+        -3685,
+        10567
       ],
       "missingCellsAfterResampling": 166494,
       "missingFractionAfterResampling": 0.0793905258178711,
