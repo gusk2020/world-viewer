@@ -52,6 +52,7 @@
     "kind": "Venus: radar-derived synthetic coloured surface",
     "warning": "Source notes some unmapped gaps use fictional fill; do not interpret image-only details as measured terrain.",
     "orientation": "rotate180",
-    "orientationEvidence": "The distributed 2k_venus_surface.jpg is turned 180 degrees against the IAU frame of the Magellan DEM: Maxwell Montes (65.2N 3.3E, highest point in the DEM) appears near 65S 177W in the file. Turned 180 degrees, the image edges correlate with the DEM edges at zero shift (r 0.28 vs <0.12 for any other orientation or shift); checked by tools/verify_planet_alignment.py."
+    "orientationEvidence": "The distributed 2k_venus_surface.jpg is turned 180 degrees against the IAU frame of the Magellan DEM: Maxwell Montes (65.2N 3.3E, highest point in the DEM) appears near 65S 177W in the file. Turned 180 degrees, the image edges correlate with the DEM edges at zero shift (r 0.28 vs <0.12 for any other orientation or shift); checked by tools/verify_planet_alignment.py.",
+    "orientationApplied": "The committed photo.jpg is the PR #18 copy turned 180 degrees with jpegtran -perfect (lossless); tools/prepare_world_photos.py applies the same turn to any fresh download."
   }
 }

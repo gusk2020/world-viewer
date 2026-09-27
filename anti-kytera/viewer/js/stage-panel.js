@@ -3,10 +3,24 @@
 // arrays (F) through cell(); the drawing copies are consulted only to say
 // when the screen and the raw cell disagree.
 import { ICE_MIN_M, POLAR_AVERAGE_LAT, MODE_JA } from "./stage-data.js";
-import { ramp, seaColour, AGREE, EXPOSED, BED_LO, BED_HI, SIMPLE_VEG, simpleVeg } from "./stage-draw.js";
+import { ramp, seaColour, AGREE, EXPOSED, SIMPLE_VEG, simpleVeg } from "./stage-draw.js";
+
+// The terrain's missing-data record (config.json terrain.processing), in the
+// same words wherever it is shown: the score line (always visible) carries
+// the short form, the 説明 note the long one. main.js uses the same two for
+// 標準 and 標高色, so the record and the screen cannot disagree.
+export function gapShort(p) {
+  return p?.missingCellsAfterResampling ? `地形の欠損${(100 * p.missingFractionAfterResampling).toFixed(2)}%を補完` : "";
+}
+export function gapNote(p) {
+  return p?.missingCellsAfterResampling
+    ? `地形の欠損 ${(100 * p.missingFractionAfterResampling).toFixed(2)}%（2048×1024格子の${p.missingCellsAfterResampling.toLocaleString()}セル）は、最も近い観測済みの高さで埋めた。埋めた所は平らな段状に見え、観測された細部はない。`
+    : "";
+}
 
 export function createStagePanel(ctx) {
-  const { S, V, vcol, vlab, state, cell, bilinear, drawnComposite, rawComposite, isClimate, vm, scale, hasTeacher } = ctx;
+  const { S, V, vcol, vlab, state, cell, bilinear, drawnComposite, rawComposite, isClimate, vm, scale, hasTeacher, bedRange } = ctx;
+  const [BED_LO, BED_HI] = bedRange;
   // ------------------------------------------------ legend and notes
   const pct = (x) => (x * 100).toFixed(0) + "%";
   function legend() {
@@ -39,19 +53,20 @@ export function createStagePanel(ctx) {
       if (!isClimate()) { rp = "rock"; lo = BED_LO; hi = BED_HI; unit = "m"; }
       else { const sc = scale(); rp = sc.ramp; lo = sc.lo; hi = sc.hi; unit = vm().unit; }
       const colours = [];
-      for (let i = 0; i < 256; i++) colours.push(state.v === "sea" && i < 146 ? seaColour(BED_LO + (i / 255) * (BED_HI - BED_LO)) : ramp(rp, i / 255));
+      for (let i = 0; i < 256; i++) colours.push(state.v === "sea" && BED_LO + (i / 255) * (BED_HI - BED_LO) < 0 ? seaColour(BED_LO + (i / 255) * (BED_HI - BED_LO)) : ramp(rp, i / 255));
       out.bar = { colours, lo, hi, unit: unit + (state.src === "diff" && isClimate() ? "（差）" : "") };
-      if (!isClimate()) { out.score = S.stages[state.v].score; out.note = S.stages[state.v].note; }
+      if (!isClimate()) {
+        out.score = hasTeacher ? S.stages[state.v].score : `地形の標高 ${BED_LO}〜${BED_HI} m を色分け・教師なし`;
+        out.note = S.stages[state.v].note;
+      }
       else {
         out.score = hasTeacher ? `${MODE_JA[state.mode]}：${vm().score[state.mode]}` : "地球で学習した規則による試験的な塗り分け・教師なし";
         out.note = (state.src === "teacher" ? vm().teacherNote : state.src === "model" ? vm().modelNote : "差 = モデル − 教師。") +
           " " + S.modeNote[state.mode];
       }
     }
-    if (hasTeacher && (isClimate() || veg)) out.note += " 地球適合＝見たことのある場所への当てはめ（ほぼ一致して当然）。実力の目安は地域保留。";
-    if (!hasTeacher) out.note = "探査機の地形に地球で学習した規則を当てた試験表示。実際の天体環境ではない。教師なし。" +
-      (S.terrainProcessing?.missingCellsAfterResampling ?
-        ` 地形の欠損${(100 * S.terrainProcessing.missingFractionAfterResampling).toFixed(2)}%は近隣の有効な高さで補完。補完域に観測された細部はない。` : "");
+    if (!hasTeacher) out.note = "探査機の地形に地球で学習した規則を当てた試験表示。実際の天体環境ではない。教師なし。" + (gapNote(ctx.processing) ? " " + gapNote(ctx.processing) : "");
+    if (gapNote(ctx.processing)) out.score += `・${gapShort(ctx.processing)}`;
     out.note += " 画面の色：緯度60°より極側は、極付近の細いセルの筋を抑えるため東西に平均した値で描く（描画だけ）。" +
       "海岸線・氷の縁は隣のセルとの間を補間した線。中央の数値は常に平均前の元データのセルの値。" +
       (hasTeacher ? " 形は Anti-KyTerra の岩盤（GEBCO_2026 氷床下地形）、光と海面は v1s と同じ。" : " 地形は探査機の地形図、海面は仮想。日射は地球と同じ強さ、重力1G、大気組成は地球と同じ、放射線は無視。");

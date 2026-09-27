@@ -56,7 +56,26 @@ jobs:
           echo "Venus terrain PNGs must be unchanged:"
           git diff --exit-code --stat -- anti-kytera/viewer/worlds/venus/terrain
       - name: Venus viewing image in the DEM frame
-        run: python3 tools/prepare_world_photos.py venus
+        # The texture host refuses runner downloads, so the committed copy is
+        # turned instead: jpegtran -perfect is lossless for a 2048x1024 JPEG.
+        # Turned only while the alignment test says it is still upside down,
+        # so a re-run can never turn it back.
+        run: |
+          set -euo pipefail
+          sudo apt-get install -y -qq libjpeg-turbo-progs >/dev/null
+          f=anti-kytera/viewer/worlds/venus/photo.jpg
+          if python3 -c "
+          import sys; sys.path.insert(0, 'tools')
+          import verify_planet_alignment as v
+          a = v.image_alignment('venus', v.terrain('venus'))
+          print({k: round(x[0], 3) for k, x in a.items()})
+          sys.exit(0 if a['rot180'][0] > a['placed'][0] + .05 else 1)"; then
+            jpegtran -perfect -rotate 180 -copy all -outfile venus.jpg "$f"
+            mv venus.jpg "$f"
+            echo "Venus image turned 180 degrees (lossless)"
+          else
+            echo "Venus image already in the DEM frame"
+          fi
       - name: Every layer at the same place
         run: python3 tools/verify_planet_alignment.py
       - name: Commit

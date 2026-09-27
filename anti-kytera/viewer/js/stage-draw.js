@@ -116,6 +116,7 @@ export function createStageDraw(ctx) {
     akRamp: { value: T.ramp }, akPal: { value: T.pal },
     akStage: { value: 0 }, akSrc: { value: 0 }, akRampRow: { value: 0 }, akNRamps: { value: RAMP_ROWS.length },
     akLo: { value: 0 }, akHi: { value: 1 }, akLog: { value: false }, akSeaLevel: { value: 0 }, akVegSimple: { value: false },
+    akBedLo: { value: ctx.bedRange[0] }, akBedHi: { value: ctx.bedRange[1] },
   };
 
   const GLSL = /* glsl */`
@@ -123,7 +124,8 @@ uniform sampler2D akBed, akNrm, akFM, akFT, akHM, akHT, akVM, akVT, akRamp, akPa
 uniform int akStage, akSrc, akRampRow, akNRamps;
 uniform float akLo, akHi, akSeaLevel;
 uniform bool akLog, akVegSimple;
-const float AK_BED_LO = ${BED_LO.toFixed(1)}, AK_BED_HI = ${BED_HI.toFixed(1)}, AK_ICE_MIN = ${ICE_MIN_M.toFixed(1)};
+uniform float akBedLo, akBedHi;   // the relief colour range: Earth -8000..6000, each other body its own
+const float AK_ICE_MIN = ${ICE_MIN_M.toFixed(1)};
 const int AK_ROCK = ${RAMP_ROWS.indexOf("rock")}, AK_SEA = ${RAMP_ROWS.indexOf("sea")};
 float akBil(sampler2D t, vec2 ll) {
   ivec2 sz = textureSize(t, 0);
@@ -153,7 +155,7 @@ int akVegGroup(int c) {
 vec3 akRampC(int row, float x) {
   return texture(akRamp, vec2((clamp(x, 0.0, 1.0) * 255.0 + 0.5) / 256.0, (float(row) + 0.5) / float(akNRamps))).rgb * 255.0;
 }
-vec3 akRock(float z) { return akRampC(AK_ROCK, (z - AK_BED_LO) / (AK_BED_HI - AK_BED_LO)); }
+vec3 akRock(float z) { return akRampC(AK_ROCK, (z - akBedLo) / (akBedHi - akBedLo)); }
 vec3 akSeaC(float depth) { return akRampC(AK_SEA, 1.0 - min(1.0, -depth / 6000.0)); }
 float akNorm(float x) {
   if (akLog) { float l0 = log(max(akLo, 1e-6)); return (log(max(x, akLo)) - l0) / (log(akHi) - l0); }
