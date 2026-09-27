@@ -1,10 +1,12 @@
 # Anti-KyTerra 地形入力（2026-09-27 改訂）
 
+このアプリは商用利用を想定していない。データは商用利用の可否で選ばず、出典と実際の利用条件だけを記録する。
+
 ## 1. 採用データ
 
-| 用途 | データ | 商用利用 / 再配布 | 出典表示 |
+| 用途 | データ | 利用条件（要約） | 出典表示 |
 | --- | --- | --- | --- |
-| **岩盤（陸・海底・氷床下）** 第一候補・採用 | GEBCO_2026 Grid **sub-ice topography/bathymetry** 版。南極（60°S以南）は MEaSUREs BedMachine Antarctica v3、グリーンランドは IceBridge BedMachine Greenland v6 を GEBCO が取り込んだもの | GEBCO Grid はパブリックドメインで無償。商用利用・製品への組み込み可。条件：出典の明記、GEBCO/IHO/IOC が公認しているように見せないこと、航海など海上安全の用途に使わないこと | 「GEBCO Compilation Group (2026) GEBCO 2026 Grid」（sub-ice 版） |
+| **岩盤（陸・海底・氷床下）** 第一候補・採用 | GEBCO_2026 Grid **sub-ice topography/bathymetry** 版。南極（60°S以南）は MEaSUREs BedMachine Antarctica v3、グリーンランドは IceBridge BedMachine Greenland v6 を GEBCO が取り込んだもの | パブリックドメイン・無償。条件：出典の明記、GEBCO/IHO/IOC が公認しているように見せないこと、航海など海上安全の用途に使わないこと | 「GEBCO Compilation Group (2026) GEBCO 2026 Grid」（sub-ice 版） |
 | 比較用（参考のみ） | GEBCO_2026 ice-surface 版（既存の地球儀が使っている地表） | 同上 | 同上 |
 
 - リポジトリ内のファイル：`anti-kytera/data/gebco2026_subice_2048x1024.png`（GitHub Actions `anti-kytera-bed.yml` で CEDA から取得し、面平均で 2048×1024 に縮小）。

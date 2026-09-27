@@ -3,8 +3,8 @@
 
 Source: ECMWF ERA5 (REANALYSIS, not observation), hourly 0.25 deg, via the
 NSF NCAR public mirror on AWS (s3://nsf-ncar-era5, dataset d633000).
-Licence: Copernicus licence (free, commercial use allowed, attribution
-"Contains modified Copernicus Climate Change Service information [2026]").
+Licence: Copernicus licence (attribution "Contains modified Copernicus
+Climate Change Service information [2026]").
 
 Sampling (the files are hourly, ~1 GB per month): four years spread over
 1991..2020 (1994, 2001, 2008, 2015), each month one 27-hour block (one HDF5 chunk in
