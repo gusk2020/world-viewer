@@ -5,13 +5,23 @@
 // layer (veg/results/veg_display.json + veg_fields.bin). No estimation here.
 // 地球適合 and 地域保留 are never mixed: every model value shown or read out is
 // the one for the selected mode.
+//
+// Drawing: the data grids are uploaded as textures and every screen pixel
+// computes its own longitude/latitude from its 3D direction on the sphere, then
+// looks the data up. There is no intermediate equirectangular picture, so
+// (a) nothing is interpolated in lng/lat across the mesh triangles (that is
+// what drew a star at each pole), (b) nothing is squeezed into the last rows
+// of a picture near the poles, and (c) the only resolution limit left is the
+// data grid itself. Relief shading uses an object-space normal per bed cell
+// (see buildNormals) lit from a direction tied to the camera, so its frame
+// does not spin around the poles.
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { buildCubeSphere } from "../../js/cubeSphere.js";
 import { directionToLngLat, lngLatToDirection } from "../../js/geoConvert.js";
 
-const TEX_W = 2048, TEX_H = 1024;
 const ICE_MIN_M = 10;          // same threshold as the hand-off ice mask
+const RELIEF = 25;             // vertical exaggeration of the relief shading (as before)
 const RAMPS = {
   rock: [[0, 58, 52, 50], [0.40, 104, 92, 80], [0.57, 150, 136, 108], [0.62, 128, 140, 96], [0.72, 150, 128, 88],
          [0.85, 120, 100, 84], [1, 236, 232, 226]],
@@ -24,11 +34,12 @@ const RAMPS = {
   ice: [[0, 235, 245, 255], [0.3, 150, 200, 240], [0.7, 50, 110, 200], [1, 20, 30, 110]],
   diff: [[0, 30, 60, 170], [0.5, 245, 245, 245], [1, 180, 30, 30]],
 };
+const RAMP_ROWS = Object.keys(RAMPS);
 const BED_LO = -8000, BED_HI = 6000;
 const AGREE = { same: [70, 170, 90], veg: [215, 70, 60], ice: [120, 150, 220], none: [90, 90, 90], sea: [20, 40, 70] };
 
 const state = { v: "bed", src: "model", mode: "fit" };
-let S, V, F = {}, shade, ready = false;
+let S, V, F = {}, ready = false;
 const vcol = {}, vlab = {};
 
 async function loadBin(path) { return (await fetch(path)).arrayBuffer(); }
@@ -50,10 +61,40 @@ async function load() {
   view(V, vb, ["veg_fit", "veg_holdout", "veg_teacher"]);
   for (const c of V.classes) { vcol[c.code] = c.rgb; vlab[c.code] = c.ja; }
   for (const [k, s2] of Object.entries(V.special)) { vcol[k] = s2.rgb; vlab[k] = s2.ja; }
-  buildShade();
+  for (const k of Object.keys(S.fields)) { const m = F[k].meta; F[k] = polarFootprint(F[k], m.w, m.h); F[k].meta = m; }
 }
 
-// ---------------------------------------------------------------- sampling
+// A latitude/longitude grid keeps the same number of cells in every row, so
+// near a pole a cell is many times narrower east-west than it is tall (at
+// 89.9 degrees on the 0.25-degree grid, ~450 times). Each such sliver is a
+// separate average, and drawn side by side they fan out from the pole as
+// radial streaks: the streaks are the grid's cell shape, not the terrain.
+// Each row of every continuous field is therefore averaged over an odd window
+// of about 1/cos(lat) cells, i.e. over a footprint as wide as it is tall. It is
+// the same rule for every row of every field (below ~70 degrees the window is
+// one cell and nothing changes); vegetation classes are never averaged.
+function polarFootprint(a, w, h) {
+  const out = new Float32Array(w * h), pre = new Float64Array(w + 1);
+  for (let j = 0; j < h; j++) {
+    const lat = ((j + 0.5) / h - 0.5) * Math.PI;
+    const half = Math.min((w >> 1) - 1, Math.max(0, Math.round((1 / Math.max(Math.cos(lat), 1e-6) - 1) / 2)));
+    const row = j * w;
+    if (half === 0) { for (let i = 0; i < w; i++) out[row + i] = a[row + i]; continue; }
+    for (let i = 0; i < w; i++) pre[i + 1] = pre[i] + a[row + i];
+    const n = 2 * half + 1, total = pre[w];
+    for (let i = 0; i < w; i++) {
+      const lo = i - half, hi = i + half + 1;         // [lo, hi), wrapping in longitude
+      let sum;
+      if (lo < 0) sum = pre[hi] + total - pre[w + lo];
+      else if (hi > w) sum = pre[w] - pre[lo] + pre[hi - w];
+      else sum = pre[hi] - pre[lo];
+      out[row + i] = sum / n;
+    }
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------- sampling (CPU twin of the shader, for the readout)
 function cell(name, lng, lat) {
   const f = F[name].meta;
   const y = Math.min(f.h - 1, Math.max(0, Math.floor((lat + 90) / 180 * f.h)));
@@ -70,36 +111,16 @@ function bilinear(name, lng, lat) {
   return (a[y0 * f.w + x0] * (1 - wx) + a[y0 * f.w + x1] * wx) * (1 - wy) +
          (a[y1 * f.w + x0] * (1 - wx) + a[y1 * f.w + x1] * wx) * wy;
 }
-const bed = (lng, lat) => cell("bed", lng, lat);
-
-// Vegetation stage: ice > sea > vegetation (codes: 1 ice, 0 sea, 11-25 veg, 255 no teacher class)
+// Continuous fields (bed, climate, ice thickness) are interpolated between cell
+// centres; the land/sea line is the 0 m contour and the ice edge the 10 m
+// contour of that interpolation. Vegetation is a class per 0.5-degree cell and
+// is never interpolated. Order: ice > sea > vegetation.
+const bed = (lng, lat) => bilinear("bed", lng, lat);
 function vegComposite(which, lng, lat) {
-  if (cell(`H_${which}`, lng, lat) > ICE_MIN_M) return 1;
+  if (bilinear(`H_${which}`, lng, lat) > ICE_MIN_M) return 1;
   if (bed(lng, lat) < 0) return 0;
   return cell(`veg_${which}`, lng, lat) || 255;
 }
-
-function buildShade() {
-  const f = F.bed.meta, a = F.bed, W = f.w, H = f.h;
-  shade = new Float32Array(W * H);
-  const R = 6.371e6, dy = Math.PI * R / H;
-  for (let j = 0; j < H; j++) {
-    const lat = (j + 0.5) / H * Math.PI - Math.PI / 2;
-    const dx = Math.max(Math.cos(lat), 0.02) * 2 * Math.PI * R / W;
-    for (let i = 0; i < W; i++) {
-      const gx = (a[j * W + (i + 1) % W] - a[j * W + (i - 1 + W) % W]) / (2 * dx) * 25;
-      const gy = (a[Math.min(H - 1, j + 1) * W + i] - a[Math.max(0, j - 1) * W + i]) / (2 * dy) * 25;
-      const nz = 1 / Math.sqrt(1 + gx * gx + gy * gy);
-      shade[j * W + i] = Math.max(0.35, Math.min(1.25, (0.5 * gx - 0.5 * gy + 0.707) * nz / 0.707));
-    }
-  }
-}
-const shadeAt = (lng, lat) => {
-  const f = F.bed.meta;
-  const y = Math.min(f.h - 1, Math.max(0, Math.floor((lat + 90) / 180 * f.h)));
-  const x = ((Math.floor((lng + 180) / 360 * f.w) % f.w) + f.w) % f.w;
-  return shade[y * f.w + x];
-};
 
 function ramp(name, x) {
   const r = RAMPS[name];
@@ -117,68 +138,180 @@ function scale() {
   if (state.src === "diff") return { ramp: "diff", lo: -m.diffRange, hi: m.diffRange, log: false };
   return { ramp: m.ramp, lo: m.lo, hi: m.hi, log: !!m.log };
 }
-function norm(sc, x) {
-  if (sc.log) { const l = (v) => Math.log10(Math.max(v, sc.lo)); return (l(x) - l(sc.lo)) / (l(sc.hi) - l(sc.lo)); }
-  return (x - sc.lo) / (sc.hi - sc.lo);
-}
-const rockColour = (z) => ramp("rock", (z - BED_LO) / (BED_HI - BED_LO));
 const seaColour = (z) => ramp("sea", 1 - Math.min(1, -z / 6000));
 
-// ---------------------------------------------------------------- painting
-const canvas = document.createElement("canvas");
-canvas.width = TEX_W; canvas.height = TEX_H;
-const ctx = canvas.getContext("2d");
-
-function pixel(lng, lat) {
-  const z = bed(lng, lat), sh = shadeAt(lng, lat), sea = z < 0;
-  const v = state.v;
-  if (v === "bed") return rockColour(z).map((c) => c * sh);
-  if (v === "sea") return sea ? seaColour(z) : rockColour(z).map((c) => c * sh);
-  if (v === "veg") {
-    if (state.src === "diff") {
-      const m = vegComposite(state.mode, lng, lat), t = vegComposite("teacher", lng, lat);
-      if (m === 0 && t === 0) return AGREE.sea;
-      if (t === 255) return AGREE.none;
-      const c = m === t ? AGREE.same : (m === 1 || t === 1) ? AGREE.ice : AGREE.veg;
-      return sea ? c : c.map((x) => x * (0.85 + 0.15 * sh));
+// ---------------------------------------------------------------- relief normals
+// One object-space unit normal per bed cell. The east-west slope is taken over
+// a physical distance close to the north-south cell spacing: near a pole the
+// neighbouring longitude cell is only a few hundred metres away, and dividing a
+// cell-to-cell difference by that tiny distance is what drew the radial
+// streaks. Normals in object space stay meaningful across the pole.
+function buildNormals() {
+  const f = F.bed.meta, a = F.bed, W = f.w, H = f.h, R = 6.371e6;
+  const out = new Uint8Array(W * H * 4), dy = Math.PI * R / H;
+  for (let j = 0; j < H; j++) {
+    const lat = (j + 0.5) / H * Math.PI - Math.PI / 2, cl = Math.cos(lat), sl = Math.sin(lat);
+    const k = Math.min(W >> 2, Math.max(1, Math.round(1 / Math.max(cl, 1e-6))));
+    const dx = cl * 2 * Math.PI * R / W * k;
+    const jn = Math.min(H - 1, j + 1), js = Math.max(0, j - 1);
+    for (let i = 0; i < W; i++) {
+      const gx = (a[j * W + (i + k) % W] - a[j * W + (i - k + W) % W]) / (2 * dx) * RELIEF;
+      const gy = (a[jn * W + i] - a[js * W + i]) / ((jn - js) * dy) * RELIEF;
+      const phi = ((i + 0.5) / W) * 2 * Math.PI;           // lng + 180 deg
+      const cp = Math.cos(phi), sp = Math.sin(phi);
+      // position, east and north unit vectors (same convention as geoConvert)
+      const px = -cp * cl, py = sl, pz = sp * cl;
+      const ex = sp, ez = cp;
+      const nx = cp * sl, ny = cl, nz = -sp * sl;
+      let x = px - gx * ex - gy * nx, y = py - gy * ny, z = pz - gx * ez - gy * nz;
+      const l = Math.hypot(x, y, z); x /= l; y /= l; z /= l;
+      const o = (j * W + i) * 4;
+      out[o] = Math.round((x * 0.5 + 0.5) * 255); out[o + 1] = Math.round((y * 0.5 + 0.5) * 255);
+      out[o + 2] = Math.round((z * 0.5 + 0.5) * 255); out[o + 3] = 255;
     }
-    const k = vegComposite(state.src === "teacher" ? "teacher" : state.mode, lng, lat);
-    if (k === 0) return seaColour(z);
-    return vcol[k].map((x) => x * (0.8 + 0.2 * sh));
   }
-  const key = vm().key, sc = scale();
-  const mod = bilinear(`${key}_${state.mode}`, lng, lat), tea = bilinear(`${key}_teacher`, lng, lat);
-  const x = state.src === "diff" ? mod - tea : state.src === "model" ? mod : tea;
-  if (v === "ice") {
-    const show = state.src === "diff" ? Math.abs(x) >= 1 : x > 1;
-    if (show) return ramp(sc.ramp, norm(sc, x)).map((c) => c * (0.85 + 0.15 * sh));
-    return sea ? seaColour(z).map((c) => c * 0.8) : rockColour(z).map((c) => c * sh * 0.85);
-  }
-  const c = ramp(sc.ramp, norm(sc, x));
-  return sea ? c : c.map((q) => q * (0.8 + 0.2 * sh));
+  return out;
 }
 
-function paint() {
-  const img = ctx.createImageData(TEX_W, TEX_H), d = img.data;
-  for (let py = 0; py < TEX_H; py++) {
-    const lat = 90 - (py + 0.5) / TEX_H * 180;
-    for (let px = 0; px < TEX_W; px++) {
-      const lng = (px + 0.5) / TEX_W * 360 - 180;
-      let c = pixel(lng, lat);
-      if (state.v !== "bed") {       // coastline at the fixed 0 m boundary
-        const sea = bed(lng, lat) < 0;
-        if ((bed(lng + 0.2, lat) < 0) !== sea || (bed(lng, lat + 0.2) < 0) !== sea) c = c.map((q) => q * 0.35);
+// ---------------------------------------------------------------- textures and shader
+const T = {};
+function floatTex(arr, w, h) {
+  const t = new THREE.DataTexture(arr instanceof Float32Array ? arr : Float32Array.from(arr), w, h,
+    THREE.RedFormat, THREE.FloatType);
+  t.minFilter = t.magFilter = THREE.NearestFilter; t.generateMipmaps = false; t.needsUpdate = true;
+  return t;
+}
+function buildTextures() {
+  for (const k of Object.keys(S.fields)) T[k] = floatTex(F[k], F[k].meta.w, F[k].meta.h);
+  for (const k of ["veg_fit", "veg_holdout", "veg_teacher"]) {
+    const t = new THREE.DataTexture(F[k], F[k].meta.w, F[k].meta.h, THREE.RedFormat, THREE.UnsignedByteType);
+    t.minFilter = t.magFilter = THREE.NearestFilter; t.generateMipmaps = false; t.unpackAlignment = 1; t.needsUpdate = true;
+    T[k] = t;
+  }
+  const nb = F.bed.meta;
+  const n = new THREE.DataTexture(buildNormals(), nb.w, nb.h, THREE.RGBAFormat, THREE.UnsignedByteType);
+  n.minFilter = n.magFilter = THREE.LinearFilter; n.generateMipmaps = false;
+  n.wrapS = THREE.RepeatWrapping; n.wrapT = THREE.ClampToEdgeWrapping; n.needsUpdate = true;
+  T.normal = n;
+  const rp = new Uint8Array(256 * RAMP_ROWS.length * 4);
+  RAMP_ROWS.forEach((name, r) => {
+    for (let i = 0; i < 256; i++) {
+      const c = ramp(name, i / 255), o = (r * 256 + i) * 4;
+      rp[o] = Math.round(c[0]); rp[o + 1] = Math.round(c[1]); rp[o + 2] = Math.round(c[2]); rp[o + 3] = 255;
+    }
+  });
+  const rt = new THREE.DataTexture(rp, 256, RAMP_ROWS.length, THREE.RGBAFormat, THREE.UnsignedByteType);
+  rt.minFilter = rt.magFilter = THREE.LinearFilter; rt.generateMipmaps = false; rt.needsUpdate = true;
+  T.ramp = rt;
+  const pal = new Uint8Array(256 * 4);
+  for (const [code, rgb] of Object.entries(vcol)) pal.set([...rgb, 255], Number(code) * 4);
+  const pt = new THREE.DataTexture(pal, 256, 1, THREE.RGBAFormat, THREE.UnsignedByteType);
+  pt.minFilter = pt.magFilter = THREE.NearestFilter; pt.generateMipmaps = false; pt.needsUpdate = true;
+  T.pal = pt;
+}
+
+const VERT = /* glsl */`
+out vec3 vPos;
+void main() {
+  vPos = position;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}`;
+const FRAG = /* glsl */`
+precision highp float;
+precision highp int;
+in vec3 vPos;
+uniform sampler2D bedT, nrmT, fM, fT, hM, hT, vM, vT, rampT, palT;
+uniform int stage, src, rampRow, nRamps;
+uniform float lo, hi;
+uniform bool logScale;
+uniform vec3 lightDir;
+const float PI = 3.141592653589793;
+const float BED_LO = ${BED_LO.toFixed(1)}, BED_HI = ${BED_HI.toFixed(1)}, ICE_MIN = ${ICE_MIN_M.toFixed(1)};
+const int R_ROCK = ${RAMP_ROWS.indexOf("rock")}, R_SEA = ${RAMP_ROWS.indexOf("sea")}, R_ICE = ${RAMP_ROWS.indexOf("ice")}, R_DIFF = ${RAMP_ROWS.indexOf("diff")};
+
+// bilinear between cell centres, longitude wraps, latitude clamps (same as the JS readout)
+float bil(sampler2D t, vec2 ll) {
+  ivec2 sz = textureSize(t, 0);
+  float fx = (ll.x + 180.0) / 360.0 * float(sz.x) - 0.5, fy = (ll.y + 90.0) / 180.0 * float(sz.y) - 0.5;
+  int y0 = clamp(int(floor(fy)), 0, sz.y - 1), y1 = min(y0 + 1, sz.y - 1);
+  float wy = clamp(fy - float(y0), 0.0, 1.0);
+  float fx0 = floor(fx), wx = fx - fx0;
+  int x0 = int(mod(fx0, float(sz.x))), x1 = (x0 + 1) % sz.x;
+  float a = mix(texelFetch(t, ivec2(x0, y0), 0).r, texelFetch(t, ivec2(x1, y0), 0).r, wx);
+  float b = mix(texelFetch(t, ivec2(x0, y1), 0).r, texelFetch(t, ivec2(x1, y1), 0).r, wx);
+  return mix(a, b, wy);
+}
+int cls(sampler2D t, vec2 ll) {
+  ivec2 sz = textureSize(t, 0);
+  int x = int(mod(floor((ll.x + 180.0) / 360.0 * float(sz.x)), float(sz.x)));
+  int y = clamp(int(floor((ll.y + 90.0) / 180.0 * float(sz.y))), 0, sz.y - 1);
+  return int(texelFetch(t, ivec2(x, y), 0).r * 255.0 + 0.5);
+}
+vec3 ramp(int row, float x) {
+  return texture(rampT, vec2((clamp(x, 0.0, 1.0) * 255.0 + 0.5) / 256.0, (float(row) + 0.5) / float(nRamps))).rgb * 255.0;
+}
+vec3 rock(float z) { return ramp(R_ROCK, (z - BED_LO) / (BED_HI - BED_LO)); }
+vec3 seaC(float z) { return ramp(R_SEA, 1.0 - min(1.0, -z / 6000.0)); }
+float nrm(float x) {
+  if (logScale) { float l0 = log(max(lo, 1e-6)); return (log(max(x, lo)) - l0) / (log(hi) - l0); }
+  return (x - lo) / (hi - lo);
+}
+int vegComp(sampler2D h, sampler2D v, vec2 ll, float z) {
+  if (bil(h, ll) > ICE_MIN) return 1;
+  if (z < 0.0) return 0;
+  int c = cls(v, ll);
+  return c == 0 ? 255 : c;
+}
+void main() {
+  vec3 d = normalize(vPos);
+  float lat = degrees(asin(clamp(d.y, -1.0, 1.0)));
+  float phi = atan(d.z, -d.x);
+  if (phi < 0.0) phi += 2.0 * PI;
+  vec2 ll = vec2(degrees(phi) - 180.0, lat);
+
+  float z = bil(bedT, ll);
+  bool sea = z < 0.0;
+  vec3 N = normalize(texture(nrmT, vec2((ll.x + 180.0) / 360.0, (ll.y + 90.0) / 180.0)).xyz * 2.0 - 1.0);
+  // relief only: a flat surface stays at 1 wherever it is on the disc (no day/night)
+  float sh = clamp(1.0 + (dot(N, lightDir) - dot(d, lightDir)) / 0.707, 0.35, 1.25);
+
+  vec3 c;
+  if (stage == 0) {
+    c = rock(z) * sh;
+  } else if (stage == 1) {
+    c = sea ? seaC(z) : rock(z) * sh;
+  } else if (stage == 4) {
+    if (src == 2) {
+      int m = vegComp(hM, vM, ll, z), t = vegComp(hT, vT, ll, z);
+      if (m == 0 && t == 0) c = vec3(${AGREE.sea.join(",")});
+      else if (t == 255) c = vec3(${AGREE.none.join(",")});
+      else {
+        c = m == t ? vec3(${AGREE.same.join(",")}) : (m == 1 || t == 1) ? vec3(${AGREE.ice.join(",")}) : vec3(${AGREE.veg.join(",")});
+        if (!sea) c *= 0.85 + 0.15 * sh;
       }
-      const o = (py * TEX_W + px) * 4;
-      d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; d[o + 3] = 255;
+    } else {
+      int k = src == 1 ? vegComp(hT, vT, ll, z) : vegComp(hM, vM, ll, z);
+      c = k == 0 ? seaC(z) : texelFetch(palT, ivec2(k, 0), 0).rgb * 255.0 * (0.8 + 0.2 * sh);
+    }
+  } else {
+    float m = bil(fM, ll), t = bil(fT, ll);
+    float x = src == 2 ? m - t : src == 0 ? m : t;
+    if (stage == 3) {
+      bool show = src == 2 ? abs(x) >= 1.0 : x > ICE_MIN;
+      if (show) c = ramp(rampRow, nrm(x)) * (0.85 + 0.15 * sh);
+      else c = sea ? seaC(z) * 0.8 : rock(z) * sh * 0.85;
+    } else {
+      c = ramp(rampRow, nrm(x));
+      if (!sea) c *= 0.8 + 0.2 * sh;
     }
   }
-  ctx.putImageData(img, 0, 0);
-  texture.needsUpdate = true;
-  legend();
-  paints++;
-}
-
+  // coastline: the 0 m contour, drawn about one screen pixel wide at any zoom
+  if (stage != 0) {
+    float w = max(fwidth(z), 1e-3);
+    c *= mix(0.35, 1.0, smoothstep(0.6, 1.4, abs(z) / w));
+  }
+  gl_FragColor = vec4(clamp(c, 0.0, 255.0) / 255.0, 1.0);
+}`;
 // ---------------------------------------------------------------- legend, score, note
 const MODE_JA = { fit: "地球適合", holdout: "地域保留" };
 const pct = (x) => (x * 100).toFixed(0) + "%";
@@ -275,19 +408,35 @@ const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerH
 }
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enablePan = false; controls.minDistance = 1.2; controls.maxDistance = 9; controls.rotateSpeed = 0.5;
-const texture = new THREE.CanvasTexture(canvas);
-texture.wrapS = THREE.RepeatWrapping;
-texture.colorSpace = THREE.SRGBColorSpace;
-texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
-const geom = buildCubeSphere(127, {
-  metresAt: () => 0, radiusForMetres: () => 1,
-  uAt: (lng) => (lng + 180) / 360, vAt: (lng, lat) => (lat + 90) / 180, splitSeam: true,
-});
-scene.add(new THREE.Mesh(geom, new THREE.MeshBasicMaterial({ map: texture })));
+// geometry only: every pixel derives lng/lat from its own direction, so the
+// mesh carries no UVs and needs no antimeridian split
+const geom = buildCubeSphere(127, { metresAt: () => 0, radiusForMetres: () => 1 });
+const uniforms = {
+  bedT: { value: null }, nrmT: { value: null }, fM: { value: null }, fT: { value: null },
+  hM: { value: null }, hT: { value: null }, vM: { value: null }, vT: { value: null },
+  rampT: { value: null }, palT: { value: null },
+  stage: { value: 0 }, src: { value: 0 }, rampRow: { value: 0 }, nRamps: { value: RAMP_ROWS.length },
+  lo: { value: 0 }, hi: { value: 1 }, logScale: { value: false }, lightDir: { value: new THREE.Vector3(0, 0, 1) },
+};
+const material = new THREE.ShaderMaterial({ vertexShader: VERT, fragmentShader: FRAG, uniforms });
+const globe = new THREE.Mesh(geom, material);
+globe.visible = false;
+scene.add(globe);
 addEventListener("resize", () => {
   camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
 });
+
+// light from the upper left of the view, 38 degrees off the line of sight
+// (the main app's choice): relief reads the same way wherever you look
+const LIGHT_OFF = THREE.MathUtils.degToRad(38);
+const _v = new THREE.Vector3(), _r = new THREE.Vector3(), _u = new THREE.Vector3();
+function updateLight() {
+  _v.copy(camera.position).normalize();
+  _r.setFromMatrixColumn(camera.matrixWorld, 0); _u.setFromMatrixColumn(camera.matrixWorld, 1);
+  uniforms.lightDir.value.copy(_v).multiplyScalar(Math.cos(LIGHT_OFF))
+    .addScaledVector(_u.sub(_r).normalize(), Math.sin(LIGHT_OFF)).normalize();
+}
 
 const ray = new THREE.Raycaster();
 function centre() {
@@ -305,15 +454,34 @@ function updateReadout() {
   if (html !== lastReadout) { document.getElementById("readout").innerHTML = html; lastReadout = html; }
 }
 
-let frame = 0;
+let frame = 0, applied = 0, pending = false;
 renderer.setAnimationLoop(() => {
   controls.update();
+  camera.updateMatrixWorld();
+  updateLight();
   renderer.render(scene, camera);
+  if (pending) { pending = false; applied++; }
   if (ready && (frame++ % 6 === 0)) updateReadout();
 });
 
 // ---------------------------------------------------------------- controls
-let painting = 0, paints = 0;
+const STAGE = { bed: 0, sea: 1, t2m: 2, hum: 2, precip: 2, ice: 3, veg: 4 };
+function apply() {
+  const u = uniforms;
+  u.stage.value = STAGE[state.v];
+  u.src.value = { model: 0, teacher: 1, diff: 2 }[state.src];
+  if (isClimate()) {
+    const key = vm().key, sc = scale();
+    u.fM.value = T[`${key}_${state.mode}`]; u.fT.value = T[`${key}_teacher`];
+    u.rampRow.value = RAMP_ROWS.indexOf(sc.ramp); u.lo.value = sc.lo; u.hi.value = sc.hi; u.logScale.value = sc.log;
+  } else {
+    u.fM.value = u.fT.value = T.T_fit;          // unused, but every sampler must be bound
+  }
+  u.hM.value = T[`H_${state.mode}`]; u.hT.value = T.H_teacher;
+  u.vM.value = T[`veg_${state.mode}`]; u.vT.value = T.veg_teacher;
+  legend();
+  pending = true;
+}
 function sync() {
   for (const b of document.querySelectorAll("button[data-v]")) b.classList.toggle("on", b.dataset.v === state.v);
   for (const b of document.querySelectorAll("button[data-src]")) b.classList.toggle("on", b.dataset.src === state.src);
@@ -322,9 +490,8 @@ function sync() {
   document.getElementById("srcRow").classList.toggle("off", input);
   document.getElementById("modeRow").classList.toggle("off", input);
   lastReadout = "";
-  const token = ++painting;
-  // let the pressed button paint before the full repaint blocks the thread
-  requestAnimationFrame(() => requestAnimationFrame(() => { if (token === painting) { paint(); updateReadout(); } }));
+  apply();
+  updateReadout();
 }
 for (const b of document.querySelectorAll("button[data-v]")) b.onclick = () => { state.v = b.dataset.v; sync(); };
 for (const b of document.querySelectorAll("button[data-src]")) b.onclick = () => { state.src = b.dataset.src; sync(); };
@@ -334,14 +501,18 @@ document.getElementById("noteBtn").onclick = (e) => {
 };
 
 load().then(() => {
+  buildTextures();
+  uniforms.bedT.value = T.bed; uniforms.nrmT.value = T.normal;
+  uniforms.rampT.value = T.ramp; uniforms.palT.value = T.pal;
+  globe.visible = true;
   ready = true;
   sync();
   document.getElementById("loading").remove();
   window.__akReady = true;
-  window.__akPaints = () => paints;
-  // test hook: look at (lng, lat) from the current distance
-  window.__look = (lng, lat) => {
-    const d = lngLatToDirection(lng, lat), r = camera.position.length();
+  window.__akPaints = () => applied;
+  // test hook: look at (lng, lat) from distance r (default: the current one)
+  window.__look = (lng, lat, dist) => {
+    const d = lngLatToDirection(lng, lat), r = dist || camera.position.length();
     camera.position.set(d.x * r, d.y * r, d.z * r); controls.update();
   };
 }).catch((e) => { document.getElementById("loading").textContent = "読み込み失敗: " + e; });
