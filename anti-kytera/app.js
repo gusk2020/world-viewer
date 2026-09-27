@@ -64,9 +64,11 @@ function nearest(name, lng, lat) {
   return fields[name][y * f.w + x];
 }
 
+function tName(vm) { return vm.teacherPerRun ? vm.teacher + state.run : vm.teacher; }
+
 function valueAt(lng, lat) {
   const vm = meta.vars[state.v];
-  const m = sample(vm.model + state.run, lng, lat), t = sample(vm.teacher, lng, lat);
+  const m = sample(vm.model + state.run, lng, lat), t = sample(tName(vm), lng, lat);
   return { m, t, d: m - t };
 }
 
@@ -92,7 +94,7 @@ function paint() {
   const vm = meta.vars[state.v];
   const sc = currentScale();
   const img = ctx.createImageData(TEX_W, TEX_H);
-  const name = state.src === "model" ? vm.model + state.run : vm.teacher;
+  const name = state.src === "model" ? vm.model + state.run : tName(vm);
   const isIce = state.v === "ice";
   for (let py = 0; py < TEX_H; py++) {
     const lat = 90 - (py + 0.5) / TEX_H * 180;
@@ -101,7 +103,7 @@ function paint() {
       const land = nearest("land", lng, lat) > 0.5;
       let x;
       if (state.src === "diff") {
-        const a = sample(vm.model + state.run, lng, lat), b = sample(vm.teacher, lng, lat);
+        const a = sample(vm.model + state.run, lng, lat), b = sample(tName(vm), lng, lat);
         x = a - b;
       } else {
         x = sample(name, lng, lat);

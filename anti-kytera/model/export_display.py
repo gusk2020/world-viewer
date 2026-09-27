@@ -36,10 +36,10 @@ def main(runs):
         arrays["t2m_model_" + key] = diag_climate.annual(f["Ts_model"])
         arrays["precip_model_" + key] = diag_climate.annual(f["P_model"]) * 365.25
         arrays["ice_model_" + key] = f["H_model"]
-        arrays["ice_teacher"] = f["H_obs"]
+        arrays["ice_teacher_" + key] = f["H_obs"]
         meta["runs"].append({"key": key, "experiment": name, "label": label})
     keys = [r[0] for r in runs]
-    meta["default"] = "E2" if "E2" in keys else keys[-1]
+    meta["default"] = keys[0]
     os.makedirs(RES, exist_ok=True)
     off = 0
     with open(os.path.join(RES, "fields.bin"), "wb") as fh:
@@ -51,24 +51,25 @@ def main(runs):
     meta["vars"] = {
         "t2m": {"model": "t2m_model_", "teacher": "t2m_teacher", "unit": "°C", "ramp": "temp",
                 "lo": -40, "hi": 32, "diffRange": 15, "digits": 1,
-                "modelNote": "モデル: 年平均地表気温（2°格子、モデル自身の最終地表高度）。",
+                "modelNote": "モデル: 年平均地表気温（2°格子）。統計版は、その経度帯を学習から外して予測した値。",
                 "teacherNote": "教師: Berkeley Earth 観測解析 1991–2020 年平均（同じ2°格子）。"},
         "precip": {"model": "precip_model_", "teacher": "precip_teacher", "unit": "mm/年", "ramp": "precip",
                    "lo": 50, "hi": 4000, "log": True, "diffRange": 1500, "digits": 0,
-                   "modelNote": "モデル: 年降水量（2°格子）。",
+                   "modelNote": "モデル: 年降水量（2°格子）。統計版は経度帯を外した予測。",
                    "teacherNote": "教師: GPCP v2.3 観測解析（衛星＋雨量計）1991–2020（同じ2°格子）。"},
-        "ice": {"model": "ice_model_", "teacher": "ice_teacher", "unit": "m", "ramp": "ice",
+        "ice": {"model": "ice_model_", "teacher": "ice_teacher_", "teacherPerRun": True, "unit": "m", "ramp": "ice",
                 "lo": 0, "hi": 4000, "diffRange": 2500, "digits": 0,
-                "modelNote": "モデル: 氷なしから形成した陸氷の厚さ（60 km格子）。",
-                "teacherNote": "教師: GEBCO_2026 氷表面−氷床下岩盤の接地氷厚（同じ60 km格子）。山岳氷河・小氷帽は含まない。"},
+                "modelNote": "モデル: 陸氷の厚さ。統計版は無氷の岩盤地形から経度帯を外して予測（0.5°）、物理版は氷ゼロから形成（60 km）。",
+                "teacherNote": "教師: GEBCO_2026 氷表面−氷床下岩盤の接地氷厚（モデルと同じ格子）。山岳氷河・小氷帽は含まない。"},
     }
-    meta["caveat"] = ("教師は現在の観測地球、モデルは無氷の岩盤から固定条件で計算した地球。条件が違うので、"
-                      "差をそのままモデル誤差とは断定できない。")
+    meta["caveat"] = ("統計版は地形・海陸・日射から教師に合わせた色分けで、物理計算ではない。"
+                      "物理版は無氷から計算した参考。")
     json.dump(meta, open(os.path.join(RES, "display.json"), "w"), ensure_ascii=False, indent=1)
     for key, name, label in runs:
         a = dict(arrays)
         for v in ("t2m", "precip", "ice"):
             a[v + "_model"] = arrays[f"{v}_model_{key}"]
+        a["ice_teacher"] = arrays["ice_teacher_" + key]
         figure(a, os.path.join(RES, f"comparison_{name}.png"), json.load(open(os.path.join(HERE, "..", "runs", name, "summary.json"))))
     print("wrote", RES)
 
@@ -95,8 +96,9 @@ def figure(a, path, summ):
             ax[r, c].set_title(f"{title}: {lab}", fontsize=10)
             ax[r, c].set_xticks([]); ax[r, c].set_yticks([])
             fig.colorbar(im, ax=ax[r, c], shrink=0.8)
-    fig.suptitle(f"Anti-KyTerra {summ['experiment']}: ice-free start, fixed present-Earth conditions "
-                 f"(teacher = observed present Earth; conditions differ)", fontsize=11)
+    kind = ("statistical colouring from terrain features, longitude-sector hold-out predictions"
+            if "method" in summ else "physical model: ice-free start, fixed present-Earth conditions")
+    fig.suptitle(f"Anti-KyTerra {summ['experiment']}: {kind} (teacher = observed present Earth)", fontsize=11)
     fig.tight_layout()
     fig.savefig(path, dpi=80)
 

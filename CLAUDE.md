@@ -227,6 +227,15 @@ teachers (Berkeley Earth, GPCP) are fetched from public S3, reachable from the
 sandbox. Stop after the audit point; do not integrate into the main app until
 the user decides.
 
+**Policy change (same day): physics diagnosis stopped.** The current Anti-KyTerra
+deliverable is the statistical colouring in `anti-kytera/stat/` (see
+`anti-kytera/STAT.md`): gradient boosting on body-agnostic terrain features
+(insolation from obliquity, elevation, land fraction at several scales,
+upwind/downwind ocean and barriers along the prevailing wind). No place names,
+no longitude. The globe shows longitude-sector HOLD-OUT predictions only, so
+no region is coloured by a model that saw it. The physical run E2 stays as a
+reference button.
+
 ## Architecture (Three.js for 3D, OpenLayers for 2D, one page, toggle button)
 
 **Three.js** for the 3D globe, **OpenLayers** for the 2D map, both mounted

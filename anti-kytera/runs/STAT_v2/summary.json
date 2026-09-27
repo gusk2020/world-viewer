@@ -1,0 +1,93 @@
+{
+ "experiment": "STAT_v2",
+ "method": "HistGradientBoosting on body-agnostic terrain features, 6-sector longitude hold-out",
+ "features_TP": [
+  "Q_annual",
+  "Q_season",
+  "elev_land",
+  "elev_rough",
+  "land_frac",
+  "land_300km",
+  "elev_300km",
+  "land_1000km",
+  "elev_1000km",
+  "land_3000km",
+  "elev_3000km",
+  "ocean_upwind_500km",
+  "barrier_upwind_500km",
+  "ocean_upwind_2000km",
+  "barrier_upwind_2000km",
+  "ocean_upwind_6000km",
+  "barrier_upwind_6000km",
+  "ocean_downwind_1000km",
+  "ocean_downwind_4000km"
+ ],
+ "features_ice": [
+  "Q_annual",
+  "Q_season",
+  "elev_land",
+  "elev_rough",
+  "land_frac",
+  "land_300km",
+  "elev_300km",
+  "land_1000km",
+  "elev_1000km",
+  "land_3000km",
+  "elev_3000km",
+  "ocean_upwind_500km",
+  "barrier_upwind_500km",
+  "ocean_upwind_2000km",
+  "barrier_upwind_2000km",
+  "ocean_upwind_6000km",
+  "barrier_upwind_6000km",
+  "ocean_downwind_1000km",
+  "ocean_downwind_4000km"
+ ],
+ "temperature": {
+  "rmse_K": 2.2728058648610854,
+  "rmse_land_K": 3.041082993267249,
+  "bias_K": 0.07638946049573514,
+  "corr": 0.9867370823912924,
+  "global_model": 14.964397384639865,
+  "global_teacher": 14.888007924144127
+ },
+ "precipitation": {
+  "global_model": 897.3873011533989,
+  "global_teacher": 983.0143153523221,
+  "corr_log": 0.7576008251860493,
+  "corr_log_land": 0.6742313701678436,
+  "desert_hit_lt400": 0.7125665827545741,
+  "rainforest_hit_gt1500": 0.7373496286375716
+ },
+ "ice": {
+  "iou_H_gt_10m": 0.7034200028884964,
+  "regions_model": {
+   "Antarctica": {
+    "area_Mkm2": 10.460607897450856,
+    "volume_Mkm3": 22.207561269740985
+   },
+   "Greenland": {
+    "area_Mkm2": 0.2797219340477021,
+    "volume_Mkm3": 0.335340031519754
+   },
+   "other land": {
+    "area_Mkm2": 0.018156965174991005,
+    "volume_Mkm3": 0.007459249612748748
+   }
+  },
+  "regions_obs": {
+   "Antarctica": {
+    "area_Mkm2": 13.04211316016061,
+    "volume_Mkm3": 25.922472533485656
+   },
+   "Greenland": {
+    "area_Mkm2": 2.0723126504239486,
+    "volume_Mkm3": 2.973191297035845
+   },
+   "other land": {
+    "area_Mkm2": 0.0,
+    "volume_Mkm3": 0.0
+   }
+  }
+ }
+}
