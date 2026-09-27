@@ -115,76 +115,9 @@
  },
  "terrain": {
   "source": "Mars MGS MOLA DEM global mosaic, 463 m/px (USGS Astrogeology)",
-  "build": {
-   "url": "https://planetarymaps.usgs.gov/mosaic/Mars_MGS_MOLA_DEM_mosaic_global_463m.tif",
-   "filePrefix": "mola463_areoid",
-   "unscale": false,
-   "baseWidth": 4096,
-   "baseHeight": 2048
-  },
   "encoding": {
    "type": "rg16-metres",
    "offsetMetres": 12000
-  },
-  "verify": {
-   "checkWidth": 2048,
-   "landmarks": [
-    {
-     "lon": -133.8,
-     "lat": 18.65,
-     "label": "Olympus Mons summit",
-     "minMetres": 14000,
-     "maxMetres": 23000
-    },
-    {
-     "lon": 70.5,
-     "lat": -42.4,
-     "label": "Hellas Planitia floor",
-     "minMetres": -8500,
-     "maxMetres": -4500
-    },
-    {
-     "lon": -113.0,
-     "lat": 0.0,
-     "label": "Tharsis rise",
-     "minMetres": 2000,
-     "maxMetres": 15000
-    },
-    {
-     "lon": 88.0,
-     "lat": 13.0,
-     "label": "Isidis Planitia",
-     "minMetres": -5000,
-     "maxMetres": -1000
-    },
-    {
-     "lon": 30.0,
-     "lat": 55.0,
-     "label": "Vastitas Borealis (northern lowlands)",
-     "minMetres": -6000,
-     "maxMetres": -2000
-    },
-    {
-     "lon": 0.0,
-     "lat": -89.5,
-     "label": "South polar layered deposits",
-     "minMetres": 500,
-     "maxMetres": 6000
-    },
-    {
-     "lon": 0.0,
-     "lat": 89.5,
-     "label": "North polar cap",
-     "minMetres": -6000,
-     "maxMetres": 0
-    }
-   ],
-   "lowestMetres": -6000,
-   "highestMetres": 15000,
-   "belowDatumFraction": [
-    0.4,
-    0.8
-   ]
   },
   "levels": [
    {

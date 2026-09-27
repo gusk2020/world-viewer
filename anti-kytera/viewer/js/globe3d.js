@@ -1,12 +1,12 @@
-// The 3D globe: scene, camera, lighting, touch controls, the terrain mesh
-// and the sea surface. The pieces that are really about *data* rather than
-// about drawing live next door -- elevation.js reads the height raster,
-// cubeSphere.js builds the mesh, surface.js prepares and repaints the
-// colour texture -- so this file stays about the view.
+// v2 3D view (from v1s's js/globe3d.js): scene, camera, the light that
+// follows the camera, touch controls, the photo terrain mesh (GEBCO ice
+// surface, 標準) or the stage mesh (Anti-KyTerra bedrock, the seven stages),
+// the sea sphere, axis tilt and graticule. It draws; it does not decide any
+// colour of a stage -- that is stage-draw.js -- and it holds no stage data.
 //
 // Everything specific to the body being drawn (its radius, how much the
-// relief is exaggerated, the photo's gamma, how deep the seabed ramp runs)
-// comes from the world's config.json, not from constants here.
+// relief is exaggerated, the photo's gamma) comes from the world's
+// config.json, not from constants here.
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import {
@@ -17,15 +17,9 @@ import {
 } from "./geoConvert.js";
 import { decodeElevationGrid, pickElevationLevel, sampleMetres } from "./elevation.js";
 import { buildCubeSphere } from "./cubeSphere.js";
-import { buildHypsometricRamp, buildHypsometricLookup} from "./hypsometric.js";
+import { buildHypsometricRamp } from "./hypsometric.js";
 import { buildGraticule } from "./graticule.js";
-import {
-  SEABED_RAMPS,
-  buildSeabedPlan,
-  paintSeabed,
-  prepareSurfaceTexture,
-  rampLut,
-} from "./surface.js";
+import { prepareSurfaceTexture } from "./surface.js";
 
 const MIN_DISTANCE = 1.3;
 const MAX_DISTANCE = 8;
@@ -41,8 +35,8 @@ const FACE_SEGMENTS = 255;
 // express, so downloading them would be wasted bytes on a phone.
 const USEFUL_GRID_WIDTH = 4 * (FACE_SEGMENTS + 1) * 2;
 
-// Exports getView()/setView() for the 3D/2D toggle, plus the three controls
-// on screen: sea level, water opacity and seabed colour.
+// Exports getView()/setView() for the 3D/2D toggle, plus the controls on
+// screen: sea level, water opacity, stage mesh, axis and graticule.
 export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
   const body = worldConfig.body;
   const display = worldConfig.display;
@@ -98,31 +92,23 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(window.innerWidth, window.innerHeight);
-  document.getElementById(containerId).appendChild(renderer.domElement);
+  const containerEl = document.getElementById(containerId);
+  containerEl.appendChild(renderer.domElement);
   const elevation = decodeElevationGrid(elevationImage, terrain.encoding);
   const metresAt = (lng, lat) => sampleMetres(elevation, lng, lat);
 
   let texture;
   let ramp = null;
   let surface = null;
-  let surfaceContext = null;
-  let photoPixels = null;
-  let seabedPixels = null;
-  // Which pixel gets which seabed colour depends only on the elevation grid
-  // and the photo, never on the chosen style, so it is worked out once and
-  // reused -- switching styles after that is a lookup per pixel.
-  let seabedPlan = null;
   let meshOptions;
 
   if (usesPhoto) {
-    // The prepared photo is kept as pixels, not just uploaded and forgotten,
-    // because setSeabedStyle below repaints the seabed from it on demand.
+    // The seabed is always the photograph itself (v2 fixes the seabed colour
+    // to v1s's default, 写真), so no repaint machinery is carried.
     surface = prepareSurfaceTexture(
       colorImage,
       requireNumber(display.surfaceGamma, "display.surfaceGamma")
     );
-    surfaceContext = surface.getContext("2d", { willReadFrequently: true });
-    photoPixels = surfaceContext.getImageData(0, 0, surface.width, surface.height);
 
     texture = new THREE.CanvasTexture(surface);
     texture.colorSpace = THREE.SRGBColorSpace;
@@ -214,40 +200,6 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
 
   function setWaterOpacity(fraction) {
     seaSphere.material.opacity = fraction;
-  }
-
-  // Styles are rebuilt on demand rather than pre-baked and held: three
-  // ready-made copies of a 4096x2048 texture would be over 100 MB of image
-  // data on a phone, whereas rebuilding costs a fraction of a second and
-  // one spare buffer. Independent of sea level, so moving that slider never
-  // triggers a repaint -- the sea sphere covers whatever is submerged, over
-  // a seabed already coloured by its own depth.
-  function setSeabedStyle(styleId) {
-    // Only meaningful where the seabed's colour came from a photograph.
-    // A height-tinted world is already coloured by depth.
-    if (!usesPhoto) return;
-    const stops = SEABED_RAMPS[styleId];
-    if (!stops) {
-      surfaceContext.putImageData(photoPixels, 0, 0);
-      texture.needsUpdate = true;
-      return;
-    }
-    if (!seabedPixels) {
-      seabedPixels = surfaceContext.createImageData(surface.width, surface.height);
-    }
-    if (!seabedPlan) {
-      seabedPlan = buildSeabedPlan(
-        photoPixels.data,
-        surface.width,
-        surface.height,
-        elevation,
-        requireNumber(display.seabedDeepestMetres, "display.seabedDeepestMetres")
-      );
-    }
-    seabedPixels.data.set(photoPixels.data);
-    paintSeabed(seabedPixels.data, seabedPlan, rampLut(stops));
-    surfaceContext.putImageData(seabedPixels, 0, 0);
-    texture.needsUpdate = true;
   }
 
   // --- Anti-KyTerra stage seam ------------------------------------------
@@ -442,7 +394,10 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
     controls.update();
     updateSunLight();
     if (graticule && graticuleMode !== "off") graticule.update(camera.position.length());
-    renderer.render(scene, camera);
+    // Not drawn while the 2D map is showing: nothing would see it, and on a
+    // hidden canvas the frames are never presented, so they pile up on the
+    // GPU and the 2D map's own read-back has to wait for all of them.
+    if (!containerEl.hidden) renderer.render(scene, camera);
     if (onFrame) onFrame();
   });
 
@@ -510,8 +465,6 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
     setSeaLevel,
     getSeaLevel: () => seaLevelMetres,
     setWaterOpacity,
-    getWaterOpacity: () => seaSphere.material.opacity,
-    setSeabedStyle,
     setAxisTilt,
     getAxisAngle,
     supportsStages,

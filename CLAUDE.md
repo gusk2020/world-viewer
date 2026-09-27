@@ -266,6 +266,13 @@ a physical distance, and continuous fields are averaged over ~1/cos(lat) cells
 per row so polar cells have an equal footprint. That is what removed the polar
 streaks; do not go back to a painted texture.
 
+**Anti-KyTerra v2 baseline (branch `claude/anti-kytera-v2-baseline`, Draft PR on
+top of #15).** `anti-kytera/viewer/` is the v2 reference: read its README.
+Stage code is split into `stage-data.js` (load/judge), `stage-draw.js` (the one
+GLSL colour function shared by 3D and 2D) and `stage-panel.js` (legend and
+centre readout), assembled by `stages.js`. The 3D globe is not drawn while 2D
+is showing (hidden-canvas frames piled up on the GPU and stalled 2D redraws).
+
 ## Architecture (Three.js for 3D, OpenLayers for 2D, one page, toggle button)
 
 **Three.js** for the 3D globe, **OpenLayers** for the 2D map, both mounted

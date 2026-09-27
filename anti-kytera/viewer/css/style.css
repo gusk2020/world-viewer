@@ -43,10 +43,8 @@ html, body {
   display: none;
 }
 
-/* The 天体 and 軸/線 rows moved down here at the user's request -- the top
-   panel had grown too tall again, and these two are the ones you reach for
-   least often while looking at the globe. The 2D/3D button leads the group,
-   so the rows sit under it exactly as asked. */
+/* The bottom group: the stage panel (centre readout, legend) above the
+   天体 / 2D-3D / 軸 / 線 rows, as in v1s. */
 #bottom-controls {
   position: fixed;
   left: 50%;
@@ -58,7 +56,6 @@ html, body {
   gap: 6px;
   width: min(368px, 92vw);
   z-index: 5;
-  bottom: calc(env(safe-area-inset-bottom, 0) + 12px);
 }
 
 #bottom-panel {
@@ -75,10 +72,6 @@ html, body {
 .panel {
   display: flex;
   flex-direction: column;
-  /* Compact on purpose. Every display control is on screen now, so the two
-     panels have to stay close in height in every state rather than only in
-     the default one -- see the measured table in
-     docs/climate-v1-status.md. */
   gap: 1px;
   padding: 4px 11px 5px;
   border-radius: 18px;
@@ -89,17 +82,14 @@ html, body {
   font-weight: 600;
 }
 
-/* V0.5: only shown in 3D mode (the 2D map has no sea-level concept yet) --
-   js/main.js toggles [hidden] on this alongside #app. */
+/* The top panel: sea level, water opacity, 地表, stage switches, mean
+   temperature. Shown in both 3D and 2D (2D draws the same conditions). */
 #sea-level-control {
   position: fixed;
   left: 50%;
   top: calc(env(safe-area-inset-top, 0) + 16px);
   transform: translateX(-50%);
   z-index: 5;
-  /* Wider and shorter than it was. The panel had grown to six rows and a
-     third of the screen height; folding the axis and graticule controls onto
-     one row needs the extra width to fit, and buys back the height. */
   width: min(368px, 92vw);
 }
 
@@ -166,17 +156,6 @@ html, body {
   background: #2f7ee0;
 }
 
-/* The 地表 row carries one long label (陸地塗り分け) beside three short ones.
-   Equal widths make it wrap to two lines, which grows the whole panel -- and
-   the user has twice said the panel is too tall. Sizing these to their own
-   text keeps the row one line high. */
-#surface-mode button {
-  /* basis auto, so each starts at its own text width and the slack is shared
-     from there, instead of every button being forced to the same width. */
-  flex: 1 1 auto;
-  white-space: nowrap;
-}
-
 /* The virtual-sea caption on Mars and the Moon. Small, but it has to be
    readable on a phone in sunlight, so it stays at the panel's own contrast
    rather than being greyed out. */
@@ -188,35 +167,7 @@ html, body {
   color: #c8d6ea;
 }
 
-/* How well the painted surface matches the teacher data. One line, same
-   quiet weight as the caption above -- it is there to be glanced at while
-   the temperature slider moves, not to compete with the controls. */
-#climate-score {
-  margin: 0 2px 1px;
-  font-size: 0.68rem;
-  font-weight: 400;
-  line-height: 1.25;
-  color: #c8d6ea;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* The comparison feature's own precomputed A/B numbers -- same quiet weight
-   as the score line above, since it answers the same kind of question. */
-#climate-compare-score {
-  margin: 0 2px 1px;
-  font-size: 0.68rem;
-  font-weight: 400;
-  line-height: 1.25;
-  color: #c8d6ea;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* The axial-tilt and graticule buttons. Same visual family as the segmented
-   controls, but each is a single button that cycles through its states. */
+/* Single buttons that cycle through their states (天体, 2D/3D, 軸, 線, 線色). */
 .pill {
   flex: 1;
   min-height: 28px;
@@ -247,8 +198,7 @@ html, body {
 #scale-bar {
   position: fixed;
   left: 14px;
-  /* Clears the bottom group: the 2D/3D button plus the two-row panel under
-     it. Measured rather than guessed -- see the note in CLAUDE.md. */
+  /* Initial value; main.js lifts it above the bottom group every frame. */
   bottom: calc(env(safe-area-inset-bottom, 0) + 152px);
   display: flex;
   flex-direction: column;
@@ -274,124 +224,11 @@ html, body {
   border-top: 0;
 }
 
-/* Climate v1 preview. Experimental, and it says so: the readout is the same
-   quiet weight as the agreement line, and the rows only exist while the
-   preview is on, so the panel is unchanged the rest of the time. */
-#climatev1-readout {
-  margin: 0 2px 1px;
-  font-size: 0.68rem;
-  font-weight: 400;
-  line-height: 1.3;
-  color: #c8d6ea;
-  white-space: pre-line;
-}
-#climatev1-options .segmented { flex: 1 1 auto; }
-#climatev1-options button { font-size: 0.66rem; }
-/* Five buttons on one row at phone width: they have to shrink to fit, and
-   shrinking them is cheaper than a second row on a panel the user has asked
-   three times to keep short. */
-#climatev1-mode { gap: 2px; }
-#climatev1-mode button {
-  flex: 1 1 0;
-  min-width: 0;
-  padding: 0 2px;
-  font-size: 0.6rem;
-  white-space: nowrap;
-}
-
-/* The season row packs a two-button segment, three small controls and a
-   slider onto one line at 412 px. `.pill` and `.segmented` both default to
-   flex: 1, which would give the arrows as much width as the slider, so the
-   small controls size to their own glyph and the slider takes the rest. */
-#season-mode {
-  flex: 0 0 92px;
-}
-
-#season-row .pill {
-  flex: 0 0 auto;
-  min-width: 32px;
-  padding: 0 6px;
-}
-
-#season-row input[type="range"] {
-  flex: 1;
-  min-width: 72px;
-}
-
-/* The sea-ice row: a two-button segment and a short warning that has to stay
-   on one line at 412 px. The note is the label, not decoration -- the area
-   this overlay draws is overstated and the screen has to say so. */
-#seaice-mode {
-  flex: 0 0 128px;
-}
-
-#seaice-note {
-  font-size: 11px;
-  color: #ffd9a0;
-  white-space: nowrap;
-}
-
-/* Planet settings: an overlay, not another three rows on the main screen.
-   Centred rather than docked, because it is opened, used and closed rather
-   than watched alongside the globe -- and because docking it would push the
-   season row it was opened from off the bottom of a Pixel 7a. */
-#planet-settings {
-  position: fixed;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  width: min(368px, calc(100vw - 32px));
-  max-height: calc(100vh - 32px);
-  overflow-y: auto;
-  z-index: 40;
-  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.55);
-}
-
-#planet-settings .panel-title {
-  flex: 1;
-  font-size: 0.95rem;
-}
-
-#planet-settings label {
-  flex: 0 0 52px;
-}
-
-.orbit-value {
-  flex: 0 0 56px;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  font-weight: 700;
-}
-
-/* The hint says what the periapsis angle means in plain words; the warning is
-   a real limitation of the model and has to stay legible, not decorative. */
-#orbit-hint,
-#orbit-warning {
-  margin: 2px 0 0;
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 1.35;
-}
-
-#orbit-hint {
-  color: #b9c9e2;
-}
-
-#orbit-warning {
-  color: #ffd9a0;
-}
-
-#orbit-status {
-  flex: 1;
-  text-align: right;
-  font-size: 11px;
-  font-weight: 500;
-  color: #b9c9e2;
-}
-
-/* ---- Anti-KyTerra viewer additions (everything above is v1s's) ---- */
+/* ---- Anti-KyTerra v2 additions (everything above is v1s's css/style.css,
+   with the rules for Climate v1 rows that v2 does not have removed) ---- */
 #surface-mode { gap: 2px; }
-#surface-mode button { flex: 1 1 0; padding: 0 1px; font-size: 0.74rem; }
+/* 地表: 標準 + the seven stages, eight equal buttons on one line */
+#surface-mode button { flex: 1 1 0; white-space: nowrap; padding: 0 1px; font-size: 0.74rem; }
 #stage-src-row .segmented button { font-size: 0.78rem; padding: 0 2px; }
 #stage-src { flex: 3; }
 #stage-mode { flex: 2; }
@@ -421,3 +258,5 @@ html, body {
 #cross:before { left: 7px; top: 0; width: 2px; height: 16px; }
 #cross:after { top: 7px; left: 0; height: 2px; width: 16px; }
 #cross[hidden] { display: none; }
+#version-badge { position: fixed; right: 10px; top: calc(env(safe-area-inset-top, 0) + 150px); z-index: 4; padding: 2px 7px; border-radius: 9px;
+  background: rgba(15, 23, 35, 0.72); color: #cfe3ff; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 0.66rem; font-weight: 600; pointer-events: none; }

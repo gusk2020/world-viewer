@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <title>Anti-KyTerra v1s表示</title>
+  <title>Anti-KyTerra v2</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <script type="importmap">
   {
@@ -17,13 +17,14 @@
   <link rel="stylesheet" href="./css/style.css" />
 </head>
 <body>
-  <!-- Anti-KyTerra's seven stages (PR #14) on v1s's globe and map. The layout
-       and controls are v1s's (climate-v1-stable-ui); the 地表 row carries the
-       stages, and the rows that belonged to Climate v1 are not here. -->
+  <!-- Anti-KyTerra v2: the seven stages (PR #14) on v1s's globe and map. The
+       layout and controls are v1s's (climate-v1-stable-ui); the 地表 row
+       carries the stages. See README.md for the entry, data and conditions. -->
   <div id="app"></div>
   <div id="map2d" hidden></div>
   <div id="cross"></div>
-  <div id="loading">読み込み中…</div>
+  <div id="loading">Anti-KyTerra v2 読み込み中…</div>
+  <div id="version-badge">Anti-KyTerra v2</div>
   <div id="sea-level-control" class="panel">
     <div class="control-row" id="sea-level-row">
       <label for="sea-level-slider" id="sea-level-label">海面の高さ</label>
