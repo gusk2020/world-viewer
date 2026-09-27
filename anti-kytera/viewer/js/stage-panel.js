@@ -3,7 +3,7 @@
 // arrays (F) through cell(); the drawing copies are consulted only to say
 // when the screen and the raw cell disagree.
 import { ICE_MIN_M, POLAR_AVERAGE_LAT, MODE_JA } from "./stage-data.js";
-import { ramp, seaColour, AGREE, EXPOSED, BED_LO, BED_HI } from "./stage-draw.js";
+import { ramp, seaColour, AGREE, EXPOSED, BED_LO, BED_HI, SIMPLE_VEG, simpleVeg } from "./stage-draw.js";
 
 export function createStagePanel(ctx) {
   const { S, V, vcol, vlab, state, cell, bilinear, drawnComposite, rawComposite, isClimate, vm, scale, hasTeacher } = ctx;
@@ -19,7 +19,7 @@ export function createStagePanel(ctx) {
         items.push([AGREE.same, "一致"], [AGREE.veg, "植生が不一致"], [AGREE.ice, "氷の有無が不一致"],
           [AGREE.none, "教師なし"], [AGREE.sea, "海"]);
       } else {
-        for (const c of V.classes) {
+        for (const c of state.vegStyle === "simple" ? SIMPLE_VEG : V.classes) {
           const iou = hasTeacher ? sc.iou[String(c.code)] : null;
           items.push([c.rgb, c.ja, state.src === "model" && iou != null ? Math.round(iou * 100) : null]);
         }
@@ -28,7 +28,7 @@ export function createStagePanel(ctx) {
       }
       if (state.seaLevel < 0) items.push([EXPOSED, "干上がった海底（推定なし）"]);
       out.classes = items;
-      out.score = hasTeacher ? `${MODE_JA[state.mode]}：15区分 一致 ${pct(sc.accuracy)}・κ ${sc.kappa.toFixed(2)}・大区分 ${pct(sc.group)}` : "地球で学習した規則による試験的な塗り分け・教師なし";
+      out.score = hasTeacher ? state.vegStyle === "simple" ? `${MODE_JA[state.mode]}：簡略5区分（表示用に統合・一致率未集計）` : `${MODE_JA[state.mode]}：15区分 一致 ${pct(sc.accuracy)}・κ ${sc.kappa.toFixed(2)}・大区分 ${pct(sc.group)}` : "地球で学習した規則による試験的な塗り分け・教師なし";
       out.note = {
         model: "モデル：年平均の気温・降水・水蒸気圧（3〜5段階と同じ推定値）と岩盤地形から分類した、通年の代表的な自然植生。数字は種類ごとの一致度（%）。",
         teacher: "教師：Ramankutty & Foley (1999) 潜在自然植生（人の土地利用が無い場合）。南極は教師に区分が無い。",
@@ -72,7 +72,7 @@ export function createStagePanel(ctx) {
         return `${head}<br><b class="m">地形</b> ${z.toFixed(0)} m${state.v === "sea" ? `・${z < sl ? "仮想海" : "陸"}` : ""}　<b class="t">教師</b> なし`;
       if (state.v === "veg") {
         const c = rawComposite("fit", lng, lat);
-        return `${head}<br><b class="m">モデル</b> ${vlab[c] || "推定なし"}　<b class="t">教師</b> なし`;
+        return `${head}<br><b class="m">モデル</b> ${state.vegStyle === "simple" ? simpleVeg(c)?.ja || vlab[c] : vlab[c] || "推定なし"}　<b class="t">教師</b> なし`;
       }
       const key = vm().key, value = cell(`${key}_fit`, lng, lat);
       const label = state.v === "ice" && value <= ICE_MIN_M ? "氷なし" : `${value.toFixed(vm().digits)} ${vm().unit}`;
@@ -101,7 +101,8 @@ export function createStagePanel(ctx) {
             ? `<br><span class="w">※この地点の画面の塗りは、境界付近の補間・平均で元データのセルと異なる</span>` : "")
           : warn(dc(drawnComposite(shown, lng, lat)), vlab[shown === "teacher" ? t : m]);
       }
-      return `${head}<br><b class="m">${tag}</b> ${vlab[m]}　<b class="t">教師</b> ${vlab[t]}${w}${seaNote}`;
+      const label = (c) => state.vegStyle === "simple" && simpleVeg(c) ? `${simpleVeg(c).ja}（元: ${vlab[c]}）` : vlab[c];
+      return `${head}<br><b class="m">${tag}</b> ${label(m)}　<b class="t">教師</b> ${label(t)}${w}${seaNote}`;
     }
     const m0 = vm(), key = m0.key;
     const mod = cell(`${key}_${state.mode}`, lng, lat), tea = cell(`${key}_teacher`, lng, lat);

@@ -227,8 +227,12 @@ html, body {
 /* ---- Anti-KyTerra v2 additions (everything above is v1s's css/style.css,
    with the rules for Climate v1 rows that v2 does not have removed) ---- */
 #surface-mode { gap: 2px; }
-/* 地表: 標準 + the seven stages, eight equal buttons on one line */
-#surface-mode button { flex: 1 1 0; white-space: nowrap; padding: 0 1px; font-size: 0.74rem; }
+/* Nine choices in two rows remain large enough to tap on a phone. */
+#surface-mode { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); }
+#surface-mode button { white-space: nowrap; padding: 0 1px; font-size: 0.74rem; }
+#world-select { max-width: 142px; flex: 1 1 auto; color: #eaf2ff; background: #273c58; }
+#world-select option, #world-select optgroup { background: #273c58; color: #fff; }
+#veg-style-row { font-size: .76rem; }
 #stage-src-row .segmented button { font-size: 0.78rem; padding: 0 2px; }
 #stage-src { flex: 3; }
 #stage-mode { flex: 2; }

@@ -23,98 +23,7 @@
       "upToMetres": 12000,
       "upStepMetres": 100
     },
-    "hypsometric": {
-      "stops": [
-        [
-          -8000,
-          [
-            10,
-            26,
-            66
-          ]
-        ],
-        [
-          -3000,
-          [
-            26,
-            74,
-            140
-          ]
-        ],
-        [
-          -800,
-          [
-            72,
-            140,
-            200
-          ]
-        ],
-        [
-          -50,
-          [
-            140,
-            195,
-            225
-          ]
-        ],
-        [
-          0,
-          [
-            206,
-            214,
-            160
-          ]
-        ],
-        [
-          300,
-          [
-            150,
-            178,
-            96
-          ]
-        ],
-        [
-          2000,
-          [
-            120,
-            152,
-            78
-          ]
-        ],
-        [
-          5000,
-          [
-            178,
-            152,
-            84
-          ]
-        ],
-        [
-          9000,
-          [
-            140,
-            104,
-            66
-          ]
-        ],
-        [
-          14000,
-          [
-            160,
-            158,
-            152
-          ]
-        ],
-        [
-          21500,
-          [
-            248,
-            248,
-            248
-          ]
-        ]
-      ]
-    }
+    "surfaceGamma": 1.0
   },
   "terrain": {
     "sourceReferenceRadiusMetres": 6051000,
@@ -125,45 +34,17 @@
     },
     "levels": [
       {
-        "url": "./worlds/venus/terrain/venus_512x256.png",
-        "width": 512,
-        "height": 256
-      },
-      {
-        "url": "./worlds/venus/terrain/venus_1024x512.png",
-        "width": 1024,
-        "height": 512
-      },
-      {
         "url": "./worlds/venus/terrain/venus_2048x1024.png",
         "width": 2048,
         "height": 1024
       }
-    ],
-    "processing": {
-      "sourceDimensions": [
-        8192,
-        4096
-      ],
-      "sourceFirstLongitude": -19009777.2544,
-      "sourceCoordinateUnits": "projected metres",
-      "sourceValueScale": 1.0,
-      "sourceValueOffsetMetres": 0.0,
-      "sourceReferenceRadiusMetres": 6051000,
-      "displayReferenceRadiusMetres": 6051800,
-      "datumShiftMetres": -800,
-      "resampling": "GDAL average to 2048x1024, then 2x2 area means for lower levels",
-      "outputMinMaxMetres": [
-        -3685.0,
-        10567.0
-      ],
-      "missingCellsAfterResampling": 166494,
-      "missingFractionAfterResampling": 0.0793905258178711,
-      "missingLatitudeBoundsDegrees": [
-        -89.91,
-        89.91
-      ],
-      "missingPolicy": "nearest valid elevation on 2048x1024 grid; no new fine detail"
-    }
+    ]
+  },
+  "globeTexture": "./worlds/venus/photo.jpg",
+  "image": {
+    "source": "https://www.solarsystemscope.com/textures/download/2k_venus_surface.jpg",
+    "credit": "Solar System Scope (INOVE), CC BY 4.0",
+    "kind": "Venus: radar-derived synthetic coloured surface",
+    "warning": "Source notes some unmapped gaps use fictional fill; do not interpret image-only details as measured terrain."
   }
 }

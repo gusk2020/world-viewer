@@ -7,6 +7,7 @@
 import { initGlobe3D } from "./globe3d.js";
 import { initMap2D } from "./map2d.js";
 import { loadStages } from "./stages.js";
+import { ramp, BED_LO, BED_HI } from "./stage-draw.js";
 
 const WORLD_INDEX_URL = "./worlds/index.json";
 const AK_BASE = "../";                 // anti-kytera/, where results/ and veg/results/ live
@@ -25,7 +26,7 @@ async function main() {
   let stages = null;
 
   const appEl = $("app"), map2dEl = $("map2d"), loading = $("loading");
-  const toggleButton = $("view-toggle"), worldCycleButton = $("world-cycle");
+  const toggleButton = $("view-toggle"), worldSelect = $("world-select");
   const seaLevelSlider = $("sea-level-slider"), seaLevelReadout = $("sea-level-readout"), seaLevelLabel = $("sea-level-label");
   const waterOpacitySlider = $("water-opacity-slider"), waterOpacityReadout = $("water-opacity-readout");
   const surfaceRow = $("surface-row"), srcRow = $("stage-src-row");
@@ -39,12 +40,17 @@ async function main() {
   let mode = "3d";
   let globe3d = null, map2d = null, world = null;
   let axisUpright = true, graticuleIndex = 0, lineWhite = false;
-  let surface = "standard", src = "model", vmode = "fit";
+  let surface = "standard", src = "model", vmode = "fit", vegStyle = "detailed";
   let legendOpen = true;
 
   const isEarth = () => world?.entry.id === "kasoku-sekai";
   const hasStages = () => Boolean(world && globe3d && globe3d.supportsStages && stages);
-  const inStage = () => surface !== "standard";
+  const inStage = () => surface !== "standard" && surface !== "elevation";
+  for (const [name, entries] of [["惑星", index.worlds.filter(e => e.id !== "moon")], ["衛星", index.worlds.filter(e => e.id === "moon")]]) {
+    const group = document.createElement("optgroup"); group.label = name;
+    for (const entry of entries) { const option = document.createElement("option"); option.value = entry.id; option.textContent = entry.label; group.appendChild(option); }
+    worldSelect.appendChild(group);
+  }
 
   // ------------------------------------------------ 3D / 2D
   function applyMode() {
@@ -57,7 +63,8 @@ async function main() {
   }
   function draw2d(extent, w, h) {
     return stages.renderMercator(globe3d.renderer, extent, w, h, {
-      photo: !inStage() && Boolean(globe3d.photoTexture), photoTexture: globe3d.photoTexture, elevation: globe3d.getElevation(),
+      photo: surface === "standard" && Boolean(globe3d.photoTexture), elevationColor: surface === "elevation",
+      photoTexture: globe3d.photoTexture, elevation: globe3d.getElevation(),
     });
   }
   let refreshQueued = false;
@@ -100,7 +107,7 @@ async function main() {
     condition.textContent = inStage()
       ? `${isEarth() ? "塗り分けは現在の条件" : "地球由来の試験的な塗り分けは基準条件"}（平均気温${PRESENT_MEAN_C}℃・海面0 m）の推定のままで、条件に追従しません。` +
         (sea !== 0 ? "海面は操作どおりに表示し、塗り分けと食い違う所は海面を優先。" : "")
-      : `標準（衛星写真）は条件に追従しません。${sea !== 0 ? "海面だけが動きます。" : ""}`;
+      : `地形・画像は条件に追従しません。${sea !== 0 ? "海面だけが動きます。" : ""}`;
   }
 
   // ------------------------------------------------ surface: 標準 or a stage
@@ -111,15 +118,18 @@ async function main() {
     selectButtons("#surface-mode button", "surface", surface);
     selectButtons("#stage-src button", "src", src);
     selectButtons("#stage-mode button", "mode", vmode);
+    selectButtons("#veg-style button", "vegStyle", vegStyle);
+    $("veg-style-row").hidden = surface !== "veg";
     srcRow.hidden = !isEarth() || !inStage() || surface === "bed" || surface === "sea";
     $("stage-mode").parentElement.hidden = !isEarth();
     document.getElementById("cross").hidden = !hasStages();
     if (!hasStages()) { globe3d.setStage(null); info.hidden = true; return; }
     info.hidden = false;
     if (stages) {
-      Object.assign(stages.state, { v: inStage() ? surface : "bed", src, mode: vmode });
+      Object.assign(stages.state, { v: inStage() ? surface : "bed", src, mode: vmode, vegStyle });
       stages.apply();
     }
+    globe3d.setElevationMode(stages, surface === "elevation");
     if (inStage()) globe3d.setStage(stages, surface === "bed");
     else globe3d.setStage(null);
     renderLegend();
@@ -130,9 +140,14 @@ async function main() {
   function renderLegend() {
     const bar = $("ak-bar-wrap"), cls = $("ak-classes");
     if (!inStage() || !stages) {
-      bar.hidden = true; cls.hidden = true;
-      $("ak-score").textContent = "標準：v1s と同じ衛星写真（推定値ではない）";
-      $("ak-note").textContent = "7段階の塗り分けは地表の段のボタンで選ぶ。塗り分けは Anti-KyTerra の推定（現在の条件・海面0 m）。";
+      bar.hidden = surface !== "elevation"; cls.hidden = true;
+      if (surface === "elevation") {
+        const bc = $("ak-bar").getContext("2d");
+        for (let i = 0; i < 256; i++) { bc.fillStyle = `rgb(${ramp("rock", i / 255).map(Math.round).join(",")})`; bc.fillRect(i, 0, 1, 1); }
+        $("ak-lo").textContent = BED_LO; $("ak-hi").textContent = BED_HI; $("ak-unit").textContent = "m";
+      }
+      $("ak-score").textContent = surface === "elevation" ? "標高色：入力地形の高さだけ（推定値ではない）" : "標準：探査画像・地球写真（推定値ではない）";
+      $("ak-note").textContent = surface === "elevation" ? "標高色は探査機・地球の標高を着色。海面を変えても高さ自体は変わらない。" : "標準の画像は探査データ由来の合成・彩色画像を含む。金星は雲の下のレーダー画像由来で可視光写真ではない。";
       return;
     }
     const L = stages.legend();
@@ -159,6 +174,7 @@ async function main() {
   }));
   document.querySelectorAll("#stage-src button").forEach((b) => b.addEventListener("click", () => { src = b.dataset.src; applySurface(); }));
   document.querySelectorAll("#stage-mode button").forEach((b) => b.addEventListener("click", () => { vmode = b.dataset.mode; applySurface(); }));
+  document.querySelectorAll("#veg-style button").forEach((b) => b.addEventListener("click", () => { vegStyle = b.dataset.vegStyle; applySurface(); }));
   $("legend-toggle").addEventListener("click", (e) => { legendOpen = !legendOpen; e.target.classList.toggle("active", legendOpen); renderLegend(); });
   $("note-toggle").addEventListener("click", (e) => { const n = $("ak-note"); n.hidden = !n.hidden; e.target.classList.toggle("active", !n.hidden); });
 
@@ -175,7 +191,7 @@ async function main() {
     if (!c) html = "中央: 地球の外";
     else if (!inStage()) {
       const pos = `中央 ${Math.abs(c.lat).toFixed(1)}°${c.lat >= 0 ? "N" : "S"} ${Math.abs(c.lng).toFixed(1)}°${c.lng >= 0 ? "E" : "W"}`;
-      html = `${pos}　<span class="k">標準（衛星写真）</span><br><b class="m">入力</b> 岩盤 ${stages.rawBed(c.lng, c.lat).toFixed(0)} m（Anti-KyTerra 元データ値）`;
+      html = `${pos}　<span class="k">${surface === "elevation" ? "標高色" : "標準画像"}</span><br><b class="m">入力</b> 標高 ${globe3d.sampleElevation(c.lng, c.lat).toFixed(0)} m　<b class="t">教師</b> なし`;
     } else html = stages.readout(c.lng, c.lat);
     if (html !== lastReadout) { $("ak-readout").innerHTML = html; lastReadout = html; }
   }
@@ -269,7 +285,7 @@ async function main() {
     toggleButton.hidden = !enabled;
     virtualNote.hidden = isEarth();
     surface = "standard";
-    worldCycleButton.textContent = `天体 ${entry.label}`;
+    worldSelect.value = entry.id;
     applySeaLevel();
     applyWaterOpacity();
     applyAxis({ recentre: false });
@@ -280,11 +296,9 @@ async function main() {
     loading.classList.add("hidden");
     window.__akReady = true;
   }
-  worldCycleButton.addEventListener("click", () => {
-    if (!world) return;
-    const at = index.worlds.findIndex((e) => e.id === world.entry.id);
-    const next = index.worlds[(at + 1) % index.worlds.length];
-    if (next && next.id !== world.entry.id) requestAnimationFrame(() => loadWorld(next));
+  worldSelect.addEventListener("change", () => {
+    const next = index.worlds.find(e => e.id === worldSelect.value);
+    if (next && next.id !== world?.entry.id) requestAnimationFrame(() => loadWorld(next));
   });
   toggleButton.addEventListener("click", () => {
     if (mode === "3d") {
