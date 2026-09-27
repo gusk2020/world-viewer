@@ -1,0 +1,31 @@
+{
+  "_note": "Earth -> Moon -> Mars -> Mercury -> Venus",
+  "default": "kasoku-sekai",
+  "worlds": [
+    {
+      "id": "kasoku-sekai",
+      "label": "地球",
+      "config": "./worlds/kasoku-sekai/config.json"
+    },
+    {
+      "id": "moon",
+      "label": "月",
+      "config": "./worlds/moon/config.json"
+    },
+    {
+      "id": "mars",
+      "label": "火星",
+      "config": "./worlds/mars/config.json"
+    },
+    {
+      "id": "mercury",
+      "label": "水星",
+      "config": "./worlds/mercury/config.json"
+    },
+    {
+      "id": "venus",
+      "label": "金星",
+      "config": "./worlds/venus/config.json"
+    }
+  ]
+}

@@ -1,0 +1,439 @@
+{
+ "_note": "Snow/ice year-budget experiment -- see docs/snow-ice-balance-experiment.md. NOT applied to this world: the shipped climate keeps snowBalanceWeight and itczLandPullDeg at their defaults of 0, which reproduces the purely zonal, threshold-snow model bit for bit. The first three entries are controlled comparisons; the rest are ends of the Pareto front from a 1600-trial search that optimised neither teacher alone. Teacher A and Teacher B are reported separately and never combined. The teacher-b end is listed because the front contains it, not because it is a candidate -- it reaches its score by abandoning land ice entirely.",
+ "entries": [
+  {
+   "id": "shipped",
+   "why": "現行の出荷設定。両機構とも既定で切ってあり、従来を1bit違わず再現する",
+   "params": {},
+   "teacherA": {
+    "total": 63.37,
+    "vegetation": 57.6,
+    "arid": 62.9,
+    "landIce": 79.4,
+    "landIceRecall": 87.4,
+    "landIcePrecision": 89.6,
+    "landIceAreaPct": 3.24,
+    "seaIce": 53.7,
+    "region": 39.1
+   },
+   "teacherB": {
+    "total": 10.22,
+    "seasonalClassSum": 0
+   },
+   "longitudinalSharePct": 19,
+   "places": {
+    "インドシナ": {
+     "modelVegetatedPct": 28.3,
+     "teacherVegetatedPct": 74.4
+    },
+    "華中・華南": {
+     "modelVegetatedPct": 1.1,
+     "teacherVegetatedPct": 98.2
+    },
+    "インド": {
+     "modelVegetatedPct": 4.5,
+     "teacherVegetatedPct": 4.9
+    },
+    "米中西部": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 64.6
+    },
+    "パタゴニア風下": {
+     "modelVegetatedPct": 60.7,
+     "teacherVegetatedPct": 4.2
+    },
+    "サハラ": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 0
+    },
+    "ヒマラヤ・チベット": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 7.2
+    },
+    "サヘル": {
+     "modelVegetatedPct": 15.4,
+     "teacherVegetatedPct": 6
+    }
+   }
+  },
+  {
+   "id": "real-season-itcz-old-snow",
+   "why": "対照: 季節25・ITCZ ON・旧雪氷。雪氷が崩壊する基準ケース",
+   "params": {
+    "seasonalSensitivityC": 25,
+    "itczLandPullDeg": 25
+   },
+   "teacherA": {
+    "total": 28.07,
+    "vegetation": 50.9,
+    "arid": 52.6,
+    "landIce": 8.8,
+    "landIceRecall": 8.8,
+    "landIcePrecision": 100,
+    "landIceAreaPct": 0.29,
+    "seaIce": 0,
+    "region": 28.3
+   },
+   "teacherB": {
+    "total": 18.03,
+    "seasonalClassSum": 5.1
+   },
+   "longitudinalSharePct": 24.5,
+   "places": {
+    "インドシナ": {
+     "modelVegetatedPct": 65.9,
+     "teacherVegetatedPct": 74.4
+    },
+    "華中・華南": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 98.2
+    },
+    "インド": {
+     "modelVegetatedPct": 10.7,
+     "teacherVegetatedPct": 4.9
+    },
+    "米中西部": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 64.6
+    },
+    "パタゴニア風下": {
+     "modelVegetatedPct": 60.7,
+     "teacherVegetatedPct": 4.2
+    },
+    "サハラ": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 0
+    },
+    "ヒマラヤ・チベット": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 7.2
+    },
+    "サヘル": {
+     "modelVegetatedPct": 52.2,
+     "teacherVegetatedPct": 6
+    }
+   }
+  },
+  {
+   "id": "real-season-itcz-new-snow",
+   "why": "対照: 季節25・ITCZ ON・新雪氷 (手で置いた設定)。今回の本命",
+   "params": {
+    "seasonalSensitivityC": 25,
+    "itczLandPullDeg": 25,
+    "snowBalanceWeight": 1,
+    "snowMeltDegreeDay": 0.45,
+    "snowBalanceRequiredM": 0.05
+   },
+   "teacherA": {
+    "total": 42.72,
+    "vegetation": 51.2,
+    "arid": 56.6,
+    "landIce": 63,
+    "landIceRecall": 74,
+    "landIcePrecision": 80.9,
+    "landIceAreaPct": 3.04,
+    "seaIce": 0,
+    "region": 33
+   },
+   "teacherB": {
+    "total": 18.03,
+    "seasonalClassSum": 5.1
+   },
+   "longitudinalSharePct": 24.5,
+   "places": {
+    "インドシナ": {
+     "modelVegetatedPct": 65.9,
+     "teacherVegetatedPct": 74.4
+    },
+    "華中・華南": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 98.2
+    },
+    "インド": {
+     "modelVegetatedPct": 10.7,
+     "teacherVegetatedPct": 4.9
+    },
+    "米中西部": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 64.6
+    },
+    "パタゴニア風下": {
+     "modelVegetatedPct": 60.7,
+     "teacherVegetatedPct": 4.2
+    },
+    "サハラ": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 0
+    },
+    "ヒマラヤ・チベット": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 7.2
+    },
+    "サヘル": {
+     "modelVegetatedPct": 52.2,
+     "teacherVegetatedPct": 6
+    }
+   }
+  },
+  {
+   "id": "pareto-teacher-a",
+   "why": "Pareto前線の Teacher A 端。ほぼ出荷の季節強度で、雪氷収支が少しだけ入る",
+   "params": {
+    "seasonalSensitivityC": 3.559,
+    "itczLandPullDeg": 18.478,
+    "itczPullRangeDeg": 45.375,
+    "itczSmoothDeg": 6.098,
+    "itczElevationPullM": 23341,
+    "snowBalanceWeight": 0.147,
+    "snowMeltDegreeDay": 0.495,
+    "snowBalanceRequiredM": -0.222,
+    "snowSummerMeltC": -13.04
+   },
+   "teacherA": {
+    "total": 63.21,
+    "vegetation": 57,
+    "arid": 62.6,
+    "landIce": 79.6,
+    "landIceRecall": 86.9,
+    "landIcePrecision": 90.4,
+    "landIceAreaPct": 3.2,
+    "seaIce": 53.6,
+    "region": 38
+   },
+   "teacherB": {
+    "total": 10.14,
+    "seasonalClassSum": 0
+   },
+   "longitudinalSharePct": 19.1,
+   "places": {
+    "インドシナ": {
+     "modelVegetatedPct": 33.8,
+     "teacherVegetatedPct": 74.4
+    },
+    "華中・華南": {
+     "modelVegetatedPct": 1.1,
+     "teacherVegetatedPct": 98.2
+    },
+    "インド": {
+     "modelVegetatedPct": 4.8,
+     "teacherVegetatedPct": 4.9
+    },
+    "米中西部": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 64.6
+    },
+    "パタゴニア風下": {
+     "modelVegetatedPct": 60.7,
+     "teacherVegetatedPct": 4.2
+    },
+    "サハラ": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 0
+    },
+    "ヒマラヤ・チベット": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 7.2
+    },
+    "サヘル": {
+     "modelVegetatedPct": 20.6,
+     "teacherVegetatedPct": 6
+    }
+   }
+  },
+  {
+   "id": "pareto-balanced",
+   "why": "探索が見つけた本命。現実的な季節・強いITCZ・新雪氷が全部同時に立つ唯一の帯",
+   "params": {
+    "seasonalSensitivityC": 24.196,
+    "itczLandPullDeg": 30,
+    "itczPullRangeDeg": 8.434,
+    "itczSmoothDeg": 14.96,
+    "itczElevationPullM": 20138,
+    "snowBalanceWeight": 0.504,
+    "snowMeltDegreeDay": 0.556,
+    "snowBalanceRequiredM": 0.049,
+    "snowSummerMeltC": -23.234
+   },
+   "teacherA": {
+    "total": 41.1,
+    "vegetation": 46.6,
+    "arid": 55.1,
+    "landIce": 62.7,
+    "landIceRecall": 70.4,
+    "landIcePrecision": 85.3,
+    "landIceAreaPct": 2.74,
+    "seaIce": 0,
+    "region": 31.2
+   },
+   "teacherB": {
+    "total": 19.32,
+    "seasonalClassSum": 17
+   },
+   "longitudinalSharePct": 27.4,
+   "places": {
+    "インドシナ": {
+     "modelVegetatedPct": 40.8,
+     "teacherVegetatedPct": 74.4
+    },
+    "華中・華南": {
+     "modelVegetatedPct": 1.2,
+     "teacherVegetatedPct": 98.2
+    },
+    "インド": {
+     "modelVegetatedPct": 4.8,
+     "teacherVegetatedPct": 4.9
+    },
+    "米中西部": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 64.6
+    },
+    "パタゴニア風下": {
+     "modelVegetatedPct": 60.7,
+     "teacherVegetatedPct": 4.2
+    },
+    "サハラ": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 0
+    },
+    "ヒマラヤ・チベット": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 7.2
+    },
+    "サヘル": {
+     "modelVegetatedPct": 61.2,
+     "teacherVegetatedPct": 6
+    }
+   }
+  },
+  {
+   "id": "pareto-region",
+   "why": "地域一致が最良",
+   "params": {
+    "seasonalSensitivityC": 3.559,
+    "itczLandPullDeg": 11.419,
+    "itczPullRangeDeg": 42.631,
+    "itczSmoothDeg": 7.398,
+    "itczElevationPullM": 20540,
+    "snowBalanceWeight": 0.102,
+    "snowMeltDegreeDay": 0.473,
+    "snowBalanceRequiredM": -0.219,
+    "snowSummerMeltC": -13.04
+   },
+   "teacherA": {
+    "total": 63.14,
+    "vegetation": 57.2,
+    "arid": 62.6,
+    "landIce": 79.1,
+    "landIceRecall": 85.4,
+    "landIcePrecision": 91.5,
+    "landIceAreaPct": 3.11,
+    "seaIce": 53.6,
+    "region": 38
+   },
+   "teacherB": {
+    "total": 10.16,
+    "seasonalClassSum": 0
+   },
+   "longitudinalSharePct": 19,
+   "places": {
+    "インドシナ": {
+     "modelVegetatedPct": 32.2,
+     "teacherVegetatedPct": 74.4
+    },
+    "華中・華南": {
+     "modelVegetatedPct": 1.1,
+     "teacherVegetatedPct": 98.2
+    },
+    "インド": {
+     "modelVegetatedPct": 4.6,
+     "teacherVegetatedPct": 4.9
+    },
+    "米中西部": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 64.6
+    },
+    "パタゴニア風下": {
+     "modelVegetatedPct": 60.7,
+     "teacherVegetatedPct": 4.2
+    },
+    "サハラ": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 0
+    },
+    "ヒマラヤ・チベット": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 7.2
+    },
+    "サヘル": {
+     "modelVegetatedPct": 18.7,
+     "teacherVegetatedPct": 6
+    }
+   }
+  },
+  {
+   "id": "pareto-teacher-b",
+   "why": "Teacher B 端。**氷を捨てて構造だけを取る退化解**で、採用候補ではない",
+   "params": {
+    "seasonalSensitivityC": 24.196,
+    "itczLandPullDeg": 30,
+    "itczPullRangeDeg": 10.588,
+    "itczSmoothDeg": 14.96,
+    "itczElevationPullM": 19181,
+    "snowBalanceWeight": 0.435,
+    "snowMeltDegreeDay": 0.544,
+    "snowBalanceRequiredM": 0.174,
+    "snowSummerMeltC": -23.234
+   },
+   "teacherA": {
+    "total": 24.31,
+    "vegetation": 46.6,
+    "arid": 50.7,
+    "landIce": 0,
+    "landIceRecall": 0,
+    "landIcePrecision": 0,
+    "landIceAreaPct": 0,
+    "seaIce": 0,
+    "region": 25.9
+   },
+   "teacherB": {
+    "total": 19.4,
+    "seasonalClassSum": 16.1
+   },
+   "longitudinalSharePct": 27.2,
+   "places": {
+    "インドシナ": {
+     "modelVegetatedPct": 41.4,
+     "teacherVegetatedPct": 74.4
+    },
+    "華中・華南": {
+     "modelVegetatedPct": 1.2,
+     "teacherVegetatedPct": 98.2
+    },
+    "インド": {
+     "modelVegetatedPct": 5,
+     "teacherVegetatedPct": 4.9
+    },
+    "米中西部": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 64.6
+    },
+    "パタゴニア風下": {
+     "modelVegetatedPct": 60.7,
+     "teacherVegetatedPct": 4.2
+    },
+    "サハラ": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 0
+    },
+    "ヒマラヤ・チベット": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 7.2
+    },
+    "サヘル": {
+     "modelVegetatedPct": 62.8,
+     "teacherVegetatedPct": 6
+    }
+   }
+  }
+ ]
+}

@@ -1,0 +1,513 @@
+{
+ "_note": "Longitude-dependent ITCZ experiment -- see docs/itcz-longitude-experiment.md. NOT applied to this world: the shipped climate keeps itczLandPullDeg at its default of 0, which reproduces the purely zonal model bit for bit. The first four entries are controlled comparisons (the mechanism and the season strength switched independently); the last three are ends of the Pareto front from a 1200-trial search. Teacher A and Teacher B are reported separately and never combined into one number.",
+ "entries": [
+  {
+   "id": "off",
+   "why": "現行の出荷設定。この機構は既定で 0 = 完全に切ってあり、純粋な帯状モデルを 1bit 違わず再現する",
+   "params": {},
+   "teacherA": {
+    "total": 63.37,
+    "vegetation": 57.6,
+    "arid": 62.9,
+    "landIce": 79.4,
+    "seaIce": 53.7,
+    "region": 39.1
+   },
+   "teacherB": {
+    "total": 10.22,
+    "seasonalClassSum": 0
+   },
+   "longitudinalSharePct": 19,
+   "places": {
+    "インドシナ": {
+     "modelVegetatedPct": 28.3,
+     "teacherVegetatedPct": 74.4,
+     "warmMoisture": 0.53,
+     "coldMoisture": 0.528,
+     "seasonalSwing": 0.002
+    },
+    "華中・華南": {
+     "modelVegetatedPct": 1.1,
+     "teacherVegetatedPct": 98.2,
+     "warmMoisture": 0.274,
+     "coldMoisture": 0.273,
+     "seasonalSwing": 0
+    },
+    "インド": {
+     "modelVegetatedPct": 4.5,
+     "teacherVegetatedPct": 4.9,
+     "warmMoisture": 0.3,
+     "coldMoisture": 0.3,
+     "seasonalSwing": 0
+    },
+    "米中西部": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 64.6,
+     "warmMoisture": 0.264,
+     "coldMoisture": 0.265,
+     "seasonalSwing": -0.001
+    },
+    "パタゴニア風下": {
+     "modelVegetatedPct": 60.7,
+     "teacherVegetatedPct": 4.2,
+     "warmMoisture": 0.66,
+     "coldMoisture": 0.663,
+     "seasonalSwing": -0.003
+    },
+    "サハラ": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 0,
+     "warmMoisture": 0.275,
+     "coldMoisture": 0.275,
+     "seasonalSwing": 0
+    },
+    "ヒマラヤ・チベット": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 7.2,
+     "warmMoisture": 0.247,
+     "coldMoisture": 0.247,
+     "seasonalSwing": 0
+    }
+   }
+  },
+  {
+   "id": "on-shipped-season",
+   "why": "季節はそのまま、この機構だけを強く入れた対照",
+   "params": {
+    "itczLandPullDeg": 25
+   },
+   "teacherA": {
+    "total": 63.19,
+    "vegetation": 57.1,
+    "arid": 62.5,
+    "landIce": 79.4,
+    "seaIce": 53.7,
+    "region": 39
+   },
+   "teacherB": {
+    "total": 10.17,
+    "seasonalClassSum": 0
+   },
+   "longitudinalSharePct": 19.1,
+   "places": {
+    "インドシナ": {
+     "modelVegetatedPct": 35.5,
+     "teacherVegetatedPct": 74.4,
+     "warmMoisture": 0.587,
+     "coldMoisture": 0.481,
+     "seasonalSwing": 0.106
+    },
+    "華中・華南": {
+     "modelVegetatedPct": 1.1,
+     "teacherVegetatedPct": 98.2,
+     "warmMoisture": 0.274,
+     "coldMoisture": 0.273,
+     "seasonalSwing": 0.001
+    },
+    "インド": {
+     "modelVegetatedPct": 5,
+     "teacherVegetatedPct": 4.9,
+     "warmMoisture": 0.306,
+     "coldMoisture": 0.295,
+     "seasonalSwing": 0.011
+    },
+    "米中西部": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 64.6,
+     "warmMoisture": 0.264,
+     "coldMoisture": 0.265,
+     "seasonalSwing": -0.001
+    },
+    "パタゴニア風下": {
+     "modelVegetatedPct": 60.7,
+     "teacherVegetatedPct": 4.2,
+     "warmMoisture": 0.66,
+     "coldMoisture": 0.663,
+     "seasonalSwing": -0.003
+    },
+    "サハラ": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 0,
+     "warmMoisture": 0.278,
+     "coldMoisture": 0.272,
+     "seasonalSwing": 0.006
+    },
+    "ヒマラヤ・チベット": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 7.2,
+     "warmMoisture": 0.247,
+     "coldMoisture": 0.247,
+     "seasonalSwing": 0
+    }
+   }
+  },
+  {
+   "id": "off-real-season",
+   "why": "季節だけを地球実値にした対照 (この機構は切ったまま)",
+   "params": {
+    "seasonalSensitivityC": 25
+   },
+   "teacherA": {
+    "total": 30.26,
+    "vegetation": 57.1,
+    "arid": 55.1,
+    "landIce": 8.8,
+    "seaIce": 0,
+    "region": 29.6
+   },
+   "teacherB": {
+    "total": 17.63,
+    "seasonalClassSum": 0
+   },
+   "longitudinalSharePct": 19.2,
+   "places": {
+    "インドシナ": {
+     "modelVegetatedPct": 28.3,
+     "teacherVegetatedPct": 74.4,
+     "warmMoisture": 0.53,
+     "coldMoisture": 0.528,
+     "seasonalSwing": 0.002
+    },
+    "華中・華南": {
+     "modelVegetatedPct": 1.1,
+     "teacherVegetatedPct": 98.2,
+     "warmMoisture": 0.274,
+     "coldMoisture": 0.273,
+     "seasonalSwing": 0
+    },
+    "インド": {
+     "modelVegetatedPct": 4.5,
+     "teacherVegetatedPct": 4.9,
+     "warmMoisture": 0.3,
+     "coldMoisture": 0.3,
+     "seasonalSwing": 0
+    },
+    "米中西部": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 64.6,
+     "warmMoisture": 0.264,
+     "coldMoisture": 0.265,
+     "seasonalSwing": -0.001
+    },
+    "パタゴニア風下": {
+     "modelVegetatedPct": 60.7,
+     "teacherVegetatedPct": 4.2,
+     "warmMoisture": 0.66,
+     "coldMoisture": 0.663,
+     "seasonalSwing": -0.003
+    },
+    "サハラ": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 0,
+     "warmMoisture": 0.275,
+     "coldMoisture": 0.275,
+     "seasonalSwing": 0
+    },
+    "ヒマラヤ・チベット": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 7.2,
+     "warmMoisture": 0.247,
+     "coldMoisture": 0.247,
+     "seasonalSwing": 0
+    }
+   }
+  },
+  {
+   "id": "on-real-season",
+   "why": "季節を地球実値にし、この機構も入れた対照。両方が揃って初めて季節性クラスが出る",
+   "params": {
+    "seasonalSensitivityC": 25,
+    "itczLandPullDeg": 25
+   },
+   "teacherA": {
+    "total": 28.07,
+    "vegetation": 50.9,
+    "arid": 52.6,
+    "landIce": 8.8,
+    "seaIce": 0,
+    "region": 28.3
+   },
+   "teacherB": {
+    "total": 18.03,
+    "seasonalClassSum": 5.1
+   },
+   "longitudinalSharePct": 24.5,
+   "places": {
+    "インドシナ": {
+     "modelVegetatedPct": 65.9,
+     "teacherVegetatedPct": 74.4,
+     "warmMoisture": 0.735,
+     "coldMoisture": 0.422,
+     "seasonalSwing": 0.314
+    },
+    "華中・華南": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 98.2,
+     "warmMoisture": 0.276,
+     "coldMoisture": 0.272,
+     "seasonalSwing": 0.004
+    },
+    "インド": {
+     "modelVegetatedPct": 10.7,
+     "teacherVegetatedPct": 4.9,
+     "warmMoisture": 0.336,
+     "coldMoisture": 0.283,
+     "seasonalSwing": 0.053
+    },
+    "米中西部": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 64.6,
+     "warmMoisture": 0.264,
+     "coldMoisture": 0.265,
+     "seasonalSwing": -0.001
+    },
+    "パタゴニア風下": {
+     "modelVegetatedPct": 60.7,
+     "teacherVegetatedPct": 4.2,
+     "warmMoisture": 0.66,
+     "coldMoisture": 0.663,
+     "seasonalSwing": -0.003
+    },
+    "サハラ": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 0,
+     "warmMoisture": 0.287,
+     "coldMoisture": 0.266,
+     "seasonalSwing": 0.021
+    },
+    "ヒマラヤ・チベット": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 7.2,
+     "warmMoisture": 0.247,
+     "coldMoisture": 0.247,
+     "seasonalSwing": 0
+    }
+   }
+  },
+  {
+   "id": "pareto-teacher-a",
+   "why": "Pareto前線の Teacher A 端。実質この機構を切った状態",
+   "params": {
+    "itczLandPullDeg": 0.787,
+    "itczPullRangeDeg": 15.96,
+    "itczSmoothDeg": 12.151,
+    "itczElevationPullM": 10884,
+    "seasonalSensitivityC": 3.868
+   },
+   "teacherA": {
+    "total": 63.38,
+    "vegetation": 57.5,
+    "arid": 62.9,
+    "landIce": 79.4,
+    "seaIce": 53.7,
+    "region": 38.8
+   },
+   "teacherB": {
+    "total": 10.21,
+    "seasonalClassSum": 0
+   },
+   "longitudinalSharePct": 19,
+   "places": {
+    "インドシナ": {
+     "modelVegetatedPct": 28.4,
+     "teacherVegetatedPct": 74.4,
+     "warmMoisture": 0.531,
+     "coldMoisture": 0.528,
+     "seasonalSwing": 0.004
+    },
+    "華中・華南": {
+     "modelVegetatedPct": 1.1,
+     "teacherVegetatedPct": 98.2,
+     "warmMoisture": 0.274,
+     "coldMoisture": 0.273,
+     "seasonalSwing": 0
+    },
+    "インド": {
+     "modelVegetatedPct": 4.5,
+     "teacherVegetatedPct": 4.9,
+     "warmMoisture": 0.301,
+     "coldMoisture": 0.3,
+     "seasonalSwing": 0.001
+    },
+    "米中西部": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 64.6,
+     "warmMoisture": 0.264,
+     "coldMoisture": 0.265,
+     "seasonalSwing": -0.001
+    },
+    "パタゴニア風下": {
+     "modelVegetatedPct": 60.7,
+     "teacherVegetatedPct": 4.2,
+     "warmMoisture": 0.66,
+     "coldMoisture": 0.663,
+     "seasonalSwing": -0.003
+    },
+    "サハラ": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 0,
+     "warmMoisture": 0.275,
+     "coldMoisture": 0.275,
+     "seasonalSwing": 0
+    },
+    "ヒマラヤ・チベット": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 7.2,
+     "warmMoisture": 0.247,
+     "coldMoisture": 0.247,
+     "seasonalSwing": 0
+    }
+   }
+  },
+  {
+   "id": "pareto-middle",
+   "why": "Teacher A を 40% 以上に保ったまま Teacher B が最良",
+   "params": {
+    "itczLandPullDeg": 2.368,
+    "itczPullRangeDeg": 31.514,
+    "itczSmoothDeg": 26.013,
+    "itczElevationPullM": 13895,
+    "seasonalSensitivityC": 17.044
+   },
+   "teacherA": {
+    "total": 40.01,
+    "vegetation": 57.4,
+    "arid": 58.3,
+    "landIce": 44.3,
+    "seaIce": 0,
+    "region": 32.1
+   },
+   "teacherB": {
+    "total": 14.39,
+    "seasonalClassSum": 0
+   },
+   "longitudinalSharePct": 19.3,
+   "places": {
+    "インドシナ": {
+     "modelVegetatedPct": 30.6,
+     "teacherVegetatedPct": 74.4,
+     "warmMoisture": 0.545,
+     "coldMoisture": 0.514,
+     "seasonalSwing": 0.031
+    },
+    "華中・華南": {
+     "modelVegetatedPct": 1.1,
+     "teacherVegetatedPct": 98.2,
+     "warmMoisture": 0.274,
+     "coldMoisture": 0.273,
+     "seasonalSwing": 0
+    },
+    "インド": {
+     "modelVegetatedPct": 4.6,
+     "teacherVegetatedPct": 4.9,
+     "warmMoisture": 0.302,
+     "coldMoisture": 0.299,
+     "seasonalSwing": 0.003
+    },
+    "米中西部": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 64.6,
+     "warmMoisture": 0.264,
+     "coldMoisture": 0.265,
+     "seasonalSwing": -0.001
+    },
+    "パタゴニア風下": {
+     "modelVegetatedPct": 60.7,
+     "teacherVegetatedPct": 4.2,
+     "warmMoisture": 0.66,
+     "coldMoisture": 0.663,
+     "seasonalSwing": -0.003
+    },
+    "サハラ": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 0,
+     "warmMoisture": 0.276,
+     "coldMoisture": 0.274,
+     "seasonalSwing": 0.002
+    },
+    "ヒマラヤ・チベット": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 7.2,
+     "warmMoisture": 0.247,
+     "coldMoisture": 0.247,
+     "seasonalSwing": 0
+    }
+   }
+  },
+  {
+   "id": "pareto-teacher-b",
+   "why": "Pareto前線の Teacher B 端。季節性3クラスの合計も最大",
+   "params": {
+    "itczLandPullDeg": 28.143,
+    "itczPullRangeDeg": 15.61,
+    "itczSmoothDeg": 8.244,
+    "itczElevationPullM": 13996,
+    "seasonalSensitivityC": 26.7
+   },
+   "teacherA": {
+    "total": 25.28,
+    "vegetation": 46.9,
+    "arid": 51,
+    "landIce": 3.2,
+    "seaIce": 0,
+    "region": 27.2
+   },
+   "teacherB": {
+    "total": 19.01,
+    "seasonalClassSum": 16.5
+   },
+   "longitudinalSharePct": 27.1,
+   "places": {
+    "インドシナ": {
+     "modelVegetatedPct": 55.4,
+     "teacherVegetatedPct": 74.4,
+     "warmMoisture": 0.678,
+     "coldMoisture": 0.441,
+     "seasonalSwing": 0.237
+    },
+    "華中・華南": {
+     "modelVegetatedPct": 1.2,
+     "teacherVegetatedPct": 98.2,
+     "warmMoisture": 0.275,
+     "coldMoisture": 0.272,
+     "seasonalSwing": 0.003
+    },
+    "インド": {
+     "modelVegetatedPct": 5.7,
+     "teacherVegetatedPct": 4.9,
+     "warmMoisture": 0.312,
+     "coldMoisture": 0.292,
+     "seasonalSwing": 0.021
+    },
+    "米中西部": {
+     "modelVegetatedPct": 1.3,
+     "teacherVegetatedPct": 64.6,
+     "warmMoisture": 0.264,
+     "coldMoisture": 0.265,
+     "seasonalSwing": -0.001
+    },
+    "パタゴニア風下": {
+     "modelVegetatedPct": 60.7,
+     "teacherVegetatedPct": 4.2,
+     "warmMoisture": 0.66,
+     "coldMoisture": 0.663,
+     "seasonalSwing": -0.003
+    },
+    "サハラ": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 0,
+     "warmMoisture": 0.294,
+     "coldMoisture": 0.264,
+     "seasonalSwing": 0.03
+    },
+    "ヒマラヤ・チベット": {
+     "modelVegetatedPct": 0,
+     "teacherVegetatedPct": 7.2,
+     "warmMoisture": 0.247,
+     "coldMoisture": 0.247,
+     "seasonalSwing": 0
+    }
+   }
+  }
+ ]
+}

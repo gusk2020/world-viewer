@@ -1,0 +1,560 @@
+{
+ "classes": [
+  {
+   "code": 11,
+   "rf": 1,
+   "ja": "熱帯常緑林",
+   "en": "Tropical evergreen forest",
+   "rgb": [
+    22,
+    100,
+    40
+   ]
+  },
+  {
+   "code": 12,
+   "rf": 2,
+   "ja": "熱帯落葉林",
+   "en": "Tropical deciduous forest",
+   "rgb": [
+    120,
+    160,
+    40
+   ]
+  },
+  {
+   "code": 13,
+   "rf": 3,
+   "ja": "温帯常緑広葉樹林",
+   "en": "Temperate broadleaf evergreen",
+   "rgb": [
+    60,
+    150,
+    90
+   ]
+  },
+  {
+   "code": 14,
+   "rf": 4,
+   "ja": "温帯常緑針葉樹林",
+   "en": "Temperate needleleaf evergreen",
+   "rgb": [
+    30,
+    110,
+    100
+   ]
+  },
+  {
+   "code": 15,
+   "rf": 5,
+   "ja": "温帯落葉樹林",
+   "en": "Temperate deciduous forest",
+   "rgb": [
+    140,
+    190,
+    70
+   ]
+  },
+  {
+   "code": 16,
+   "rf": 6,
+   "ja": "北方常緑林",
+   "en": "Boreal evergreen forest",
+   "rgb": [
+    40,
+    80,
+    70
+   ]
+  },
+  {
+   "code": 17,
+   "rf": 7,
+   "ja": "北方落葉林",
+   "en": "Boreal deciduous forest",
+   "rgb": [
+    110,
+    130,
+    80
+   ]
+  },
+  {
+   "code": 18,
+   "rf": 8,
+   "ja": "混交林",
+   "en": "Mixed forest",
+   "rgb": [
+    80,
+    140,
+    60
+   ]
+  },
+  {
+   "code": 19,
+   "rf": 9,
+   "ja": "サバンナ",
+   "en": "Savanna",
+   "rgb": [
+    205,
+    190,
+    80
+   ]
+  },
+  {
+   "code": 20,
+   "rf": 10,
+   "ja": "草原・ステップ",
+   "en": "Grassland / steppe",
+   "rgb": [
+    225,
+    215,
+    130
+   ]
+  },
+  {
+   "code": 21,
+   "rf": 11,
+   "ja": "密な低木地",
+   "en": "Dense shrubland",
+   "rgb": [
+    170,
+    120,
+    70
+   ]
+  },
+  {
+   "code": 22,
+   "rf": 12,
+   "ja": "疎な低木地",
+   "en": "Open shrubland",
+   "rgb": [
+    210,
+    170,
+    120
+   ]
+  },
+  {
+   "code": 23,
+   "rf": 13,
+   "ja": "ツンドラ",
+   "en": "Tundra",
+   "rgb": [
+    150,
+    160,
+    150
+   ]
+  },
+  {
+   "code": 24,
+   "rf": 14,
+   "ja": "砂漠",
+   "en": "Desert",
+   "rgb": [
+    240,
+    225,
+    185
+   ]
+  },
+  {
+   "code": 25,
+   "rf": 15,
+   "ja": "極地荒原・岩",
+   "en": "Polar desert / rock",
+   "rgb": [
+    175,
+    170,
+    175
+   ]
+  }
+ ],
+ "special": {
+  "0": {
+   "ja": "海",
+   "en": "sea",
+   "rgb": [
+    20,
+    60,
+    130
+   ]
+  },
+  "1": {
+   "ja": "陸氷",
+   "en": "land ice",
+   "rgb": [
+    235,
+    245,
+    255
+   ]
+  },
+  "255": {
+   "ja": "教師なし",
+   "en": "no teacher class",
+   "rgb": [
+    90,
+    90,
+    90
+   ]
+  }
+ },
+ "reserved": {
+  "30": "川・湖 (inland water)",
+  "40": "農地 (cropland)",
+  "41": "灌漑地 (irrigated cropland)",
+  "50": "街 (urban)"
+ },
+ "draw_order": [
+  "sea(0)",
+  "vegetation(11-25)",
+  "cropland(40-41)",
+  "inland water(30)",
+  "urban(50)",
+  "land ice(1)"
+ ],
+ "groups": {
+  "森林": [
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8
+  ],
+  "サバンナ・草原": [
+   9,
+   10
+  ],
+  "低木・砂漠": [
+   11,
+   12,
+   14
+  ],
+  "ツンドラ・極地": [
+   13,
+   15
+  ]
+ },
+ "scores": {
+  "fit": {
+   "accuracy": 0.9744868544193922,
+   "kappa": 0.9717356569286767,
+   "group_accuracy": 0.9846778589731331,
+   "per_class": {
+    "1": {
+     "iou": 0.9817953842070111,
+     "teach_share": 0.13041236808502643,
+     "model_share": 0.1307525725162884
+    },
+    "2": {
+     "iou": 0.9488858256092253,
+     "teach_share": 0.044954855892094366,
+     "model_share": 0.04510868421571539
+    },
+    "3": {
+     "iou": 0.9362765862092781,
+     "teach_share": 0.009336404185523652,
+     "model_share": 0.009212230555309115
+    },
+    "4": {
+     "iou": 0.9487514717880404,
+     "teach_share": 0.02712142471153324,
+     "model_share": 0.027149839108811774
+    },
+    "5": {
+     "iou": 0.9566162630032944,
+     "teach_share": 0.03834940572122738,
+     "model_share": 0.038524205985565496
+    },
+    "6": {
+     "iou": 0.9570770466386385,
+     "teach_share": 0.04791381220976937,
+     "model_share": 0.04803789237717749
+    },
+    "7": {
+     "iou": 0.9681017803653561,
+     "teach_share": 0.01653190903837495,
+     "model_share": 0.016509010688313768
+    },
+    "8": {
+     "iou": 0.9312847349430527,
+     "teach_share": 0.11777394945438859,
+     "model_share": 0.11947166032616811
+    },
+    "9": {
+     "iou": 0.9300916512709319,
+     "teach_share": 0.14587562966702425,
+     "model_share": 0.14447001000362727
+    },
+    "10": {
+     "iou": 0.9336784196662704,
+     "teach_share": 0.10660040901625595,
+     "model_share": 0.10639878216346095
+    },
+    "11": {
+     "iou": 0.9357798669547874,
+     "teach_share": 0.045204930767068274,
+     "model_share": 0.04515251156479953
+    },
+    "12": {
+     "iou": 0.9361910168553085,
+     "teach_share": 0.09081042152177872,
+     "model_share": 0.09097610482583428
+    },
+    "13": {
+     "iou": 0.9505716366715012,
+     "teach_share": 0.05466077047068367,
+     "model_share": 0.05379847103036317
+    },
+    "14": {
+     "iou": 0.9862883564536319,
+     "teach_share": 0.11658994287549072,
+     "model_share": 0.11657532922161032
+    },
+    "15": {
+     "iou": 0.9658302711541382,
+     "teach_share": 0.007863766383760533,
+     "model_share": 0.00786269541695501
+    }
+   },
+   "confusions": [
+    {
+     "teacher": 9,
+     "model": 10,
+     "mkm2": 0.2
+    },
+    {
+     "teacher": 13,
+     "model": 8,
+     "mkm2": 0.18
+    },
+    {
+     "teacher": 10,
+     "model": 9,
+     "mkm2": 0.16
+    },
+    {
+     "teacher": 9,
+     "model": 8,
+     "mkm2": 0.16
+    },
+    {
+     "teacher": 10,
+     "model": 12,
+     "mkm2": 0.15
+    },
+    {
+     "teacher": 12,
+     "model": 10,
+     "mkm2": 0.13
+    },
+    {
+     "teacher": 8,
+     "model": 6,
+     "mkm2": 0.12
+    },
+    {
+     "teacher": 6,
+     "model": 8,
+     "mkm2": 0.11
+    }
+   ],
+   "features": [
+    "Q_annual",
+    "Q_season",
+    "elev_land",
+    "elev_rough",
+    "land_frac",
+    "land_300km",
+    "elev_300km",
+    "land_1000km",
+    "elev_1000km",
+    "land_3000km",
+    "elev_3000km",
+    "ocean_upwind_500km",
+    "barrier_upwind_500km",
+    "ocean_upwind_2000km",
+    "barrier_upwind_2000km",
+    "ocean_upwind_6000km",
+    "barrier_upwind_6000km",
+    "ocean_downwind_1000km",
+    "ocean_downwind_4000km",
+    "T_local",
+    "logP",
+    "logE",
+    "RH",
+    "VPD",
+    "biotemp",
+    "log_P_over_PET"
+   ],
+   "by_sector": [
+    0.9683253528826589,
+    0.9779541790605298,
+    0.980509978559572,
+    0.9769864137413361,
+    0.9714074156846559,
+    0.9638752598214547
+   ]
+  },
+  "holdout": {
+   "accuracy": 0.33380801333476207,
+   "kappa": 0.2523734159484374,
+   "group_accuracy": 0.54635237573875,
+   "per_class": {
+    "1": {
+     "iou": 0.38515482488498737,
+     "teach_share": 0.13041236808502643,
+     "model_share": 0.20629163361345423
+    },
+    "2": {
+     "iou": 0.015415944725016024,
+     "teach_share": 0.044954855892094366,
+     "model_share": 0.009168854137064827
+    },
+    "3": {
+     "iou": 0.0,
+     "teach_share": 0.009336404185523652,
+     "model_share": 9.894413577766197e-05
+    },
+    "4": {
+     "iou": 0.03904090165714026,
+     "teach_share": 0.02712142471153324,
+     "model_share": 0.00912988670565951
+    },
+    "5": {
+     "iou": 0.10435970845586638,
+     "teach_share": 0.03834940572122738,
+     "model_share": 0.014410459716726153
+    },
+    "6": {
+     "iou": 0.14672170033017756,
+     "teach_share": 0.04791381220976937,
+     "model_share": 0.03364584032954706
+    },
+    "7": {
+     "iou": 0.2962207430730145,
+     "teach_share": 0.01653190903837495,
+     "model_share": 0.014756818745661428
+    },
+    "8": {
+     "iou": 0.2570529066400643,
+     "teach_share": 0.11777394945438859,
+     "model_share": 0.15383721425860675
+    },
+    "9": {
+     "iou": 0.09676662131594618,
+     "teach_share": 0.14587562966702425,
+     "model_share": 0.1583810613292011
+    },
+    "10": {
+     "iou": 0.3383323527240875,
+     "teach_share": 0.10660040901625595,
+     "model_share": 0.11453946462017946
+    },
+    "11": {
+     "iou": 0.08850210681976113,
+     "teach_share": 0.045204930767068274,
+     "model_share": 0.03638447556779707
+    },
+    "12": {
+     "iou": 0.1468678346988879,
+     "teach_share": 0.09081042152177872,
+     "model_share": 0.11440391648926063
+    },
+    "13": {
+     "iou": 0.1983409306575716,
+     "teach_share": 0.05466077047068367,
+     "model_share": 0.03424877511660095
+    },
+    "14": {
+     "iou": 0.154223835628244,
+     "teach_share": 0.11658994287549072,
+     "model_share": 0.09953504274005454
+    },
+    "15": {
+     "iou": 0.07523493937855442,
+     "teach_share": 0.007863766383760533,
+     "model_share": 0.0011676124944086956
+    }
+   },
+   "confusions": [
+    {
+     "teacher": 9,
+     "model": 1,
+     "mkm2": 9.14
+    },
+    {
+     "teacher": 14,
+     "model": 12,
+     "mkm2": 4.74
+    },
+    {
+     "teacher": 6,
+     "model": 8,
+     "mkm2": 4.23
+    },
+    {
+     "teacher": 14,
+     "model": 9,
+     "mkm2": 4.11
+    },
+    {
+     "teacher": 1,
+     "model": 9,
+     "mkm2": 2.67
+    },
+    {
+     "teacher": 10,
+     "model": 9,
+     "mkm2": 2.47
+    },
+    {
+     "teacher": 13,
+     "model": 8,
+     "mkm2": 2.32
+    },
+    {
+     "teacher": 2,
+     "model": 14,
+     "mkm2": 2.25
+    }
+   ],
+   "features": [
+    "Q_annual",
+    "Q_season",
+    "elev_land",
+    "elev_rough",
+    "land_frac",
+    "land_300km",
+    "elev_300km",
+    "land_1000km",
+    "elev_1000km",
+    "land_3000km",
+    "elev_3000km",
+    "ocean_upwind_500km",
+    "barrier_upwind_500km",
+    "ocean_upwind_2000km",
+    "barrier_upwind_2000km",
+    "ocean_upwind_6000km",
+    "barrier_upwind_6000km",
+    "ocean_downwind_1000km",
+    "ocean_downwind_4000km",
+    "T_local",
+    "logP",
+    "logE",
+    "RH",
+    "VPD",
+    "biotemp",
+    "log_P_over_PET"
+   ],
+   "by_sector": [
+    0.3199859281405246,
+    0.38289023553053914,
+    0.37669590497969113,
+    0.2588221856443723,
+    0.35632770152670024,
+    0.36405706565682633
+   ]
+  }
+ },
+ "labelled_land_cells": 58087
+}

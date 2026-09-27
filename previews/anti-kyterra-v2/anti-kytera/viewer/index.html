@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>Anti-KyTerra v2</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.185.1/examples/jsm/"
+    }
+  }
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/ol@10.10.0/dist/ol.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@10.10.0/ol.css" />
+  <link rel="stylesheet" href="./css/style.css" />
+</head>
+<body>
+  <!-- Anti-KyTerra v2: the seven stages (PR #14) on v1s's globe and map. The
+       layout and controls are v1s's (climate-v1-stable-ui); the 地表 row
+       carries the stages. See README.md for the entry, data and conditions. -->
+  <div id="app"></div>
+  <div id="map2d" hidden></div>
+  <div id="cross"></div>
+  <div id="loading">Anti-KyTerra v2 読み込み中…</div>
+  <div id="version-badge">Anti-KyTerra v2</div>
+  <div id="sea-level-control" class="panel">
+    <div class="control-row" id="sea-level-row">
+      <label for="sea-level-slider" id="sea-level-label">海面の高さ</label>
+      <input type="range" id="sea-level-slider" min="-300" max="100" step="1" value="0" />
+      <span id="sea-level-readout">±0m</span>
+    </div>
+    <p id="virtual-sea-note" hidden>※実際には海はありません。「ここまで水があったら
+      どこが海になるか」を見るための仮想の海面です。</p>
+    <div class="control-row" id="water-opacity-row">
+      <label for="water-opacity-slider">海の濃さ</label>
+      <input type="range" id="water-opacity-slider" min="0" max="100" step="5" value="40" />
+      <span id="water-opacity-readout">40%</span>
+    </div>
+    <div class="control-row" id="surface-row">
+      <div id="surface-mode" class="segmented">
+        <button type="button" data-surface="standard" class="selected">標準</button>
+        <button type="button" data-surface="bed">岩盤</button>
+        <button type="button" data-surface="sea">海</button>
+        <button type="button" data-surface="t2m">気温</button>
+        <button type="button" data-surface="hum">湿度</button>
+        <button type="button" data-surface="precip">降水</button>
+        <button type="button" data-surface="ice">陸氷</button>
+        <button type="button" data-surface="veg">植生</button>
+      </div>
+    </div>
+    <div class="control-row" id="stage-src-row" hidden>
+      <div id="stage-src" class="segmented">
+        <button type="button" data-src="model" class="selected">モデル</button>
+        <button type="button" data-src="teacher">教師</button>
+        <button type="button" data-src="diff">差</button>
+      </div>
+      <div id="stage-mode" class="segmented">
+        <button type="button" data-mode="fit" class="selected">地球適合</button>
+        <button type="button" data-mode="holdout">地域保留</button>
+      </div>
+    </div>
+    <div class="control-row" id="climate-temp-row" hidden>
+      <label for="climate-temp-slider">平均気温</label>
+      <input type="range" id="climate-temp-slider" min="5" max="25" step="1" value="14" />
+      <span id="climate-temp-readout">14℃</span>
+    </div>
+    <p id="ak-condition" hidden></p>
+  </div>
+  <div id="bottom-controls">
+    <div id="ak-info" class="panel" hidden>
+      <div id="ak-readout">中央: –</div>
+      <div id="ak-score"></div>
+      <div id="ak-bar-wrap"><span id="ak-lo"></span><canvas id="ak-bar" width="256" height="1"></canvas><span id="ak-hi"></span><span id="ak-unit"></span></div>
+      <div id="ak-classes" hidden></div>
+      <div class="control-row">
+        <button type="button" id="legend-toggle" class="pill active">凡例</button>
+        <button type="button" id="note-toggle" class="pill">説明</button>
+      </div>
+      <p id="ak-note" hidden></p>
+    </div>
+    <div id="bottom-panel" class="panel">
+      <div class="control-row" id="nav-row">
+        <button type="button" id="world-cycle" class="pill">天体 地球</button>
+        <button type="button" id="view-toggle" class="pill">2Dに切替</button>
+      </div>
+      <div class="control-row" id="axis-row">
+        <button type="button" id="axis-toggle" class="pill">軸 垂直</button>
+        <span id="axis-readout">0°</span>
+        <button type="button" id="graticule-toggle" class="pill">線 なし</button>
+        <button type="button" id="graticule-color" class="pill">線色 黒</button>
+      </div>
+    </div>
+  </div>
+  <div id="scale-bar" hidden>
+    <div id="scale-bar-line"></div>
+    <span id="scale-bar-label"></span>
+  </div>
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>

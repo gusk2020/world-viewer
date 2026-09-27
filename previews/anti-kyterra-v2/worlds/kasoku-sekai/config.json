@@ -1,0 +1,255 @@
+{
+  "id": "kasoku-sekai",
+  "name": "過速世界",
+  "globeTexture": "./worlds/kasoku-sekai/textures/globe.jpg",
+  "body": {
+    "radiusMetres": 6371000,
+    "axialTiltDegrees": 23.44,
+    "axialTiltNote": "Earth's obliquity to its orbital plane (the ecliptic).",
+    "datum": "GEBCO: 0 m is mean sea level.",
+    "dayLengthHours": 23.9345,
+    "dayLengthNote": "Earth's sidereal day. The solar day is 24 h; the sidereal one is what the Coriolis deflection actually depends on.",
+    "rotationDirection": 1,
+    "rotationDirectionNote": "Prograde: seen from above the north pole, Earth turns anticlockwise."
+  },
+  "display": {
+    "verticalExaggeration": 30,
+    "surfaceGamma": 0.6,
+    "seabedDeepestMetres": 8000,
+    "seaLevel": {
+      "label": "海面の高さ",
+      "downToMetres": -6000,
+      "downStepMetres": 20,
+      "upToMetres": 200,
+      "upStepMetres": 2
+    }
+  },
+  "climate": {
+    "_note": "Overrides for js/climate.js, which holds the schema (default, physical/empirical, range, meaning). Missing entries take the default; unknown ones are ignored. Fitted by a program, never by hand, against this world's own satellite photograph: the photo is classified pixel by pixel into vegetation, bare ground and snow, and the model is scored against that -- globally, per region (so one continent's excess cannot pay for another's shortfall), and at twenty named places.",
+    "insolationSensitivityC": 84.924,
+    "polarExtraC": 10.763,
+    "oceanModeration": 0.568,
+    "coastalMoisture": 0.892,
+    "moistureDecayKm": 3232.679,
+    "stillAirMoisture": 0.564,
+    "evaporationHalfC": -3,
+    "evaporationWidthC": 3.083,
+    "circulationCellEdgeDeg": 28.557,
+    "advectionRangeKm": 6494.654,
+    "orographicRiseM": 180.397,
+    "subtropicalDryStrength": 0.282,
+    "convergenceWetBonus": 1.577,
+    "vegetationWarmthC": -12,
+    "vegetationWarmthWidthC": 5.902,
+    "vegetationMoistureHalf": 0.611,
+    "vegetationMoistureWidth": 0.568,
+    "permanentSnowOffsetC": -13.539,
+    "snowBlendC": 6.448,
+    "seaIceBlendC": 1.948,
+    "_paletteNote": "Measured from this world's own photograph, not chosen: each swatch is the mean of the pixels at one end of a class's real range -- the greenest vegetated ground, the brightest hot bare ground, the darkest cold bare ground, the veg/bare transition, and snow.",
+    "palette": {
+      "rock": [
+        127,
+        124,
+        100
+      ],
+      "sand": [
+        235,
+        220,
+        202
+      ],
+      "dryGrass": [
+        145,
+        149,
+        123
+      ],
+      "vegetation": [
+        100,
+        128,
+        81
+      ],
+      "snow": [
+        230,
+        230,
+        233
+      ]
+    },
+    "seasonalSensitivityC": 3.989,
+    "seaSeasonalDamping": 0.222,
+    "itczFollowFraction": 0.001,
+    "monsoonStrength": 0.029,
+    "growingSeasonWeight": 0.847,
+    "orographicLiftM": 1146.915,
+    "rainShadowM": 3443.136,
+    "snowSummerMeltC": -11.78
+  },
+  "climateSets": {
+    "_note": "Named climate sets. Each one lists only what it changes from the `climate` block above, which in turn lists only what it changes from the schema defaults in js/climate.js -- so the twenty fitted numbers are written down exactly once and a set that moves one number is one line. Resolved separately, so a set naming a retired parameter is reported and skipped without spoiling the others. Only one set today: the 寒冷/温暖 sets it shipped with were nothing but a different meanTemperatureC, and that is now a slider, so keeping them would have been the same control twice on a panel the user has already said is too tall. The mechanism stays for the stage that keeps a spread of genuinely different candidates.",
+    "default": "current",
+    "list": [
+      {
+        "id": "current",
+        "label": "現在",
+        "note": "いまの地球。この設定で写真と見比べて調整しました。",
+        "params": {}
+      }
+    ]
+  },
+  "teacher": {
+    "_note": "What this world's surface really looks like, for the climate model to be scored against. Built by tools/build_teacher.py; see that file for what each class is sourced from and how far to trust it. One byte per cell: 0 sea, 1 sea ice, 2 vegetation, 3 arid, 4 land ice. Adding a past or future era means adding an entry here and a builder in that tool -- nothing else in the project knows how many eras there are.",
+    "classes": [
+      "sea",
+      "seaIce",
+      "vegetation",
+      "arid",
+      "landIce"
+    ],
+    "labels": [
+      "海",
+      "海氷",
+      "植生",
+      "乾燥地",
+      "雪氷"
+    ],
+    "colours": [
+      "#183e6e",
+      "#b0d0e2",
+      "#608448",
+      "#ccb68a",
+      "#eef0f4"
+    ],
+    "default": "present",
+    "eras": [
+      {
+        "id": "present",
+        "label": "現在",
+        "map": "./worlds/kasoku-sekai/teacher/present-classes.png",
+        "width": 2048,
+        "height": 1024,
+        "summary": "./worlds/kasoku-sekai/teacher/present-summary.json",
+        "sources": {
+          "landSea": "GEBCO_2026 ice-surface grid (the same committed raster the globe's shape uses)",
+          "landIce": "Natural Earth 1:10m glaciated areas + Antarctic ice shelves (public domain)",
+          "vegetation": "Blue Marble surface photograph, by colour (G > R)",
+          "arid": "Blue Marble surface photograph, by colour (G <= R)",
+          "seaIce": "Blue Marble surface photograph: bright, colour-neutral water. The weakest layer -- a composite image, not a measured extent."
+        }
+      }
+    ]
+  },
+  "terrain": {
+    "source": "GEBCO_2026 Grid (ice surface elevation), 15 arc-second, via CEDA",
+    "build": {
+      "url": "https://dap.ceda.ac.uk/bodc/gebco/global/gebco_2026/ice_surface_elevation/netcdf/GEBCO_2026.nc",
+      "filePrefix": "gebco2026_ice",
+      "unscale": false,
+      "baseWidth": 4096,
+      "baseHeight": 2048
+    },
+    "encoding": {
+      "type": "rg16-metres",
+      "offsetMetres": 12000
+    },
+    "verify": {
+      "checkWidth": 2048,
+      "landmarks": [
+        {
+          "lon": 86.925,
+          "lat": 27.988,
+          "label": "Himalaya (Everest area)",
+          "minMetres": 2500,
+          "maxMetres": 9000
+        },
+        {
+          "lon": 142.2,
+          "lat": 11.35,
+          "label": "Mariana Trench",
+          "minMetres": -11500,
+          "maxMetres": -4000
+        },
+        {
+          "lon": -160,
+          "lat": 0,
+          "label": "mid-Pacific abyssal plain",
+          "minMetres": -6500,
+          "maxMetres": -3000
+        },
+        {
+          "lon": 10,
+          "lat": 23,
+          "label": "Sahara",
+          "minMetres": 100,
+          "maxMetres": 1200
+        },
+        {
+          "lon": 0,
+          "lat": -89.5,
+          "label": "South Pole (ice surface)",
+          "minMetres": 1500,
+          "maxMetres": 4500
+        },
+        {
+          "lon": 0,
+          "lat": 89.5,
+          "label": "North Pole (Arctic Ocean)",
+          "minMetres": -5000,
+          "maxMetres": 0
+        }
+      ],
+      "lowestMetres": -8000,
+      "highestMetres": 4000,
+      "belowDatumFraction": [
+        0.55,
+        0.8
+      ]
+    },
+    "levels": [
+      {
+        "url": "./worlds/kasoku-sekai/terrain/gebco2026_ice_512x256.png",
+        "width": 512,
+        "height": 256
+      },
+      {
+        "url": "./worlds/kasoku-sekai/terrain/gebco2026_ice_1024x512.png",
+        "width": 1024,
+        "height": 512
+      },
+      {
+        "url": "./worlds/kasoku-sekai/terrain/gebco2026_ice_2048x1024.png",
+        "width": 2048,
+        "height": 1024
+      },
+      {
+        "url": "./worlds/kasoku-sekai/terrain/gebco2026_ice_4096x2048.png",
+        "width": 4096,
+        "height": 2048
+      }
+    ]
+  },
+  "teacherStructure": {
+    "_note": "Teacher B: the real Earth's climate structure (season / monsoon / wet-dry cycle), reduced to eight classes. Scored separately from 'teacher' (Teacher A, the annual vegetation/arid/ice map) and never combined into one number with it -- see docs/climate-model-diagnosis-after-stage7_5.md, section 10. Built by tools/build_koppen_teacher.py from Beck et al. (2018); see that file and worlds/kasoku-sekai/teacher/koppen-structure-summary.json for full provenance.",
+    "classes": [
+      "tropicalHumid",
+      "tropicalSeasonal",
+      "arid",
+      "temperateHumid",
+      "temperateSeasonal",
+      "coldHumid",
+      "coldSeasonal",
+      "polar"
+    ],
+    "labels": [
+      "熱帯湿潤",
+      "熱帯季節性",
+      "乾燥",
+      "温帯湿潤",
+      "温帯季節性",
+      "寒冷湿潤",
+      "寒冷季節性",
+      "極域"
+    ],
+    "map": "./worlds/kasoku-sekai/teacher/koppen-structure.png",
+    "summary": "./worlds/kasoku-sekai/teacher/koppen-structure-summary.json",
+    "source": "Beck et al. (2018) Koppen-Geiger climate classification, present-day, 0.5 degree"
+  }
+}

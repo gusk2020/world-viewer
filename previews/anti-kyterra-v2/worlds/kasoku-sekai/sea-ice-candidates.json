@@ -1,0 +1,389 @@
+{
+  "_note": "海氷を季節の一瞬の暖かさで判定するのをやめ、年間の凍結・融解収支(seaIceYearBudget, js/climate.js)で判定するようにした実験の候補集。既定では seaIceBalanceWeight=0 で無効 (出荷モデルとビット同一)。詳細は docs/sea-ice-seasonal-balance-experiment.md。seaice-pareto-* の3件は tools 相当の小規模探索(4シャード x 500試行、seaIceBalanceWeight>=0.2 など退化解を除く制約下)の前線から選んだ代表点。",
+  "entries": [
+    {
+      "id": "shipped",
+      "why": "出荷時の既定値。季節が弱く(s=4)、ITCZ・雪氷年間収支・海氷年間収支はすべてOFF。",
+      "params": {},
+      "teacherA": {
+        "total": 63.37,
+        "vegetation": 57.6,
+        "arid": 62.9,
+        "landIce": 79.4,
+        "landIceRecall": 87.4,
+        "landIcePrecision": 89.6,
+        "landIceAreaPct": 3.24,
+        "seaIce": 53.7,
+        "seaIceRecall": 69,
+        "seaIcePrecision": 70.8,
+        "seaIceAreaPct": 0.98,
+        "region": 39.1
+      },
+      "teacherB": {
+        "total": 10.22,
+        "seasonalClassSum": 0
+      },
+      "longitudinalSharePct": 19,
+      "places": {
+        "インドシナ": {
+          "modelVegetatedPct": 28.3,
+          "teacherVegetatedPct": 74.4
+        },
+        "華中・華南": {
+          "modelVegetatedPct": 1.1,
+          "teacherVegetatedPct": 98.2
+        },
+        "インド": {
+          "modelVegetatedPct": 4.5,
+          "teacherVegetatedPct": 4.9
+        },
+        "米中西部": {
+          "modelVegetatedPct": 1.3,
+          "teacherVegetatedPct": 64.6
+        },
+        "パタゴニア風下": {
+          "modelVegetatedPct": 60.7,
+          "teacherVegetatedPct": 4.2
+        },
+        "サハラ": {
+          "modelVegetatedPct": 0,
+          "teacherVegetatedPct": 0
+        },
+        "ヒマラヤ・チベット": {
+          "modelVegetatedPct": 0,
+          "teacherVegetatedPct": 7.2
+        }
+      }
+    },
+    {
+      "id": "real-season-itcz-snow-old-seaice",
+      "why": "現実的な季節(s≈24.2)・ITCZ ON・雪氷年間収支ONだが、海氷は旧方式(暖季閾値のみ)のまま。海氷が0%に崩壊する、この改善の出発点となったベースライン。",
+      "params": {
+        "seasonalSensitivityC": 24.196,
+        "itczLandPullDeg": 30,
+        "itczPullRangeDeg": 8.434,
+        "itczSmoothDeg": 14.96,
+        "itczElevationPullM": 20138,
+        "snowBalanceWeight": 0.504,
+        "snowMeltDegreeDay": 0.556,
+        "snowBalanceRequiredM": 0.049,
+        "snowSummerMeltC": -23.234
+      },
+      "teacherA": {
+        "total": 41.1,
+        "vegetation": 46.6,
+        "arid": 55.1,
+        "landIce": 62.7,
+        "landIceRecall": 70.4,
+        "landIcePrecision": 85.3,
+        "landIceAreaPct": 2.74,
+        "seaIce": 0,
+        "seaIceRecall": 0,
+        "seaIcePrecision": 0,
+        "seaIceAreaPct": 0,
+        "region": 31.2
+      },
+      "teacherB": {
+        "total": 19.32,
+        "seasonalClassSum": 17
+      },
+      "longitudinalSharePct": 27.4,
+      "places": {
+        "インドシナ": {
+          "modelVegetatedPct": 40.8,
+          "teacherVegetatedPct": 74.4
+        },
+        "華中・華南": {
+          "modelVegetatedPct": 1.2,
+          "teacherVegetatedPct": 98.2
+        },
+        "インド": {
+          "modelVegetatedPct": 4.8,
+          "teacherVegetatedPct": 4.9
+        },
+        "米中西部": {
+          "modelVegetatedPct": 1.3,
+          "teacherVegetatedPct": 64.6
+        },
+        "パタゴニア風下": {
+          "modelVegetatedPct": 60.7,
+          "teacherVegetatedPct": 4.2
+        },
+        "サハラ": {
+          "modelVegetatedPct": 0,
+          "teacherVegetatedPct": 0
+        },
+        "ヒマラヤ・チベット": {
+          "modelVegetatedPct": 0,
+          "teacherVegetatedPct": 7.2
+        }
+      }
+    },
+    {
+      "id": "real-season-itcz-snow-new-seaice",
+      "why": "同上に加えて海氷年間収支をON(既定パラメータ)。海氷が0%から回復し、Teacher B・ITCZの地域改善・陸雪氷レベルはすべて変化しない。",
+      "params": {
+        "seasonalSensitivityC": 24.196,
+        "itczLandPullDeg": 30,
+        "itczPullRangeDeg": 8.434,
+        "itczSmoothDeg": 14.96,
+        "itczElevationPullM": 20138,
+        "snowBalanceWeight": 0.504,
+        "snowMeltDegreeDay": 0.556,
+        "snowBalanceRequiredM": 0.049,
+        "snowSummerMeltC": -23.234,
+        "seaIceBalanceWeight": 1
+      },
+      "teacherA": {
+        "total": 54.43,
+        "vegetation": 46.6,
+        "arid": 55.1,
+        "landIce": 62.7,
+        "landIceRecall": 70.4,
+        "landIcePrecision": 85.3,
+        "landIceAreaPct": 2.74,
+        "seaIce": 53.3,
+        "seaIceRecall": 75.4,
+        "seaIcePrecision": 64.5,
+        "seaIceAreaPct": 1.18,
+        "region": 31.8
+      },
+      "teacherB": {
+        "total": 19.32,
+        "seasonalClassSum": 17
+      },
+      "longitudinalSharePct": 27.4,
+      "places": {
+        "インドシナ": {
+          "modelVegetatedPct": 40.8,
+          "teacherVegetatedPct": 74.4
+        },
+        "華中・華南": {
+          "modelVegetatedPct": 1.2,
+          "teacherVegetatedPct": 98.2
+        },
+        "インド": {
+          "modelVegetatedPct": 4.8,
+          "teacherVegetatedPct": 4.9
+        },
+        "米中西部": {
+          "modelVegetatedPct": 1.3,
+          "teacherVegetatedPct": 64.6
+        },
+        "パタゴニア風下": {
+          "modelVegetatedPct": 60.7,
+          "teacherVegetatedPct": 4.2
+        },
+        "サハラ": {
+          "modelVegetatedPct": 0,
+          "teacherVegetatedPct": 0
+        },
+        "ヒマラヤ・チベット": {
+          "modelVegetatedPct": 0,
+          "teacherVegetatedPct": 7.2
+        }
+      }
+    },
+    {
+      "id": "seaice-pareto-teacher-a",
+      "why": "小規模探索の前線でTeacher Aが最も高い点。季節は弱め(s=15、探索下限)で、ITCZ・雪氷・海氷はすべて意味のある強さでON。",
+      "params": {
+        "seasonalSensitivityC": 15,
+        "itczLandPullDeg": 18.346943268785253,
+        "itczPullRangeDeg": 52.504464901285246,
+        "itczSmoothDeg": 19.42750744204968,
+        "itczElevationPullM": 16083.527250541374,
+        "snowBalanceWeight": 0.2619331091269851,
+        "snowMeltDegreeDay": 0.09384647198021412,
+        "snowBalanceRequiredM": 0.1674921362660825,
+        "snowSummerMeltC": -3.9339818581938744,
+        "seaIceBalanceWeight": 0.9721530001983045,
+        "seaIceMeltDegreeDay": 0.3543893692083657,
+        "seaIceBalanceRequired": 0.22447772803716362
+      },
+      "teacherA": {
+        "total": 60.38,
+        "vegetation": 56.4,
+        "arid": 60.2,
+        "landIce": 71.2,
+        "landIceRecall": 81,
+        "landIcePrecision": 85.5,
+        "landIceAreaPct": 3.15,
+        "seaIce": 53.7,
+        "seaIceRecall": 71.2,
+        "seaIcePrecision": 68.7,
+        "seaIceAreaPct": 1.04,
+        "region": 34.5
+      },
+      "teacherB": {
+        "total": 13.38,
+        "seasonalClassSum": 0
+      },
+      "longitudinalSharePct": 20.6,
+      "places": {
+        "インドシナ": {
+          "modelVegetatedPct": 54.3,
+          "teacherVegetatedPct": 74.4
+        },
+        "華中・華南": {
+          "modelVegetatedPct": 1.2,
+          "teacherVegetatedPct": 98.2
+        },
+        "インド": {
+          "modelVegetatedPct": 7.5,
+          "teacherVegetatedPct": 4.9
+        },
+        "米中西部": {
+          "modelVegetatedPct": 1.3,
+          "teacherVegetatedPct": 64.6
+        },
+        "パタゴニア風下": {
+          "modelVegetatedPct": 60.7,
+          "teacherVegetatedPct": 4.2
+        },
+        "サハラ": {
+          "modelVegetatedPct": 0,
+          "teacherVegetatedPct": 0
+        },
+        "ヒマラヤ・チベット": {
+          "modelVegetatedPct": 0,
+          "teacherVegetatedPct": 7.2
+        }
+      }
+    },
+    {
+      "id": "seaice-pareto-mid",
+      "why": "前線の中間点。季節をやや強く(s≈25.4)しつつTeacher Aをある程度保つ。",
+      "params": {
+        "seasonalSensitivityC": 25.375768250785768,
+        "itczLandPullDeg": 15,
+        "itczPullRangeDeg": 45.08833949430846,
+        "itczSmoothDeg": 34.99465726530178,
+        "itczElevationPullM": 30338.753724936396,
+        "snowBalanceWeight": 0.2319230446964502,
+        "snowMeltDegreeDay": 0,
+        "snowBalanceRequiredM": 1,
+        "snowSummerMeltC": 7.831809984287247,
+        "seaIceBalanceWeight": 0.7282088955491782,
+        "seaIceMeltDegreeDay": 0.43316702074371277,
+        "seaIceBalanceRequired": -0.30444053963292383
+      },
+      "teacherA": {
+        "total": 58.73,
+        "vegetation": 56.7,
+        "arid": 59,
+        "landIce": 65.6,
+        "landIceRecall": 79.5,
+        "landIcePrecision": 79,
+        "landIceAreaPct": 3.35,
+        "seaIce": 53.6,
+        "seaIceRecall": 73.4,
+        "seaIcePrecision": 66.6,
+        "seaIceAreaPct": 1.11,
+        "region": 32.6
+      },
+      "teacherB": {
+        "total": 17.41,
+        "seasonalClassSum": 0
+      },
+      "longitudinalSharePct": 19.9,
+      "places": {
+        "インドシナ": {
+          "modelVegetatedPct": 47.5,
+          "teacherVegetatedPct": 74.4
+        },
+        "華中・華南": {
+          "modelVegetatedPct": 1.2,
+          "teacherVegetatedPct": 98.2
+        },
+        "インド": {
+          "modelVegetatedPct": 7.2,
+          "teacherVegetatedPct": 4.9
+        },
+        "米中西部": {
+          "modelVegetatedPct": 1.3,
+          "teacherVegetatedPct": 64.6
+        },
+        "パタゴニア風下": {
+          "modelVegetatedPct": 60.7,
+          "teacherVegetatedPct": 4.2
+        },
+        "サハラ": {
+          "modelVegetatedPct": 0,
+          "teacherVegetatedPct": 0
+        },
+        "ヒマラヤ・チベット": {
+          "modelVegetatedPct": 0,
+          "teacherVegetatedPct": 7.2
+        }
+      }
+    },
+    {
+      "id": "seaice-pareto-teacher-b",
+      "why": "前線でTeacher Bが最も高い点。旧pareto-balanced(季節・ITCZ・雪氷)にほぼ一致する強さに、海氷年間収支が同時に立つ。季節クラス合計14.9。",
+      "params": {
+        "seasonalSensitivityC": 24.317161203129217,
+        "itczLandPullDeg": 30,
+        "itczPullRangeDeg": 18.94339485699311,
+        "itczSmoothDeg": 8.703415551502257,
+        "itczElevationPullM": 25936.55750681646,
+        "snowBalanceWeight": 0.8120530129224063,
+        "snowMeltDegreeDay": 0.8105901508126407,
+        "snowBalanceRequiredM": -0.3309166085440665,
+        "snowSummerMeltC": -25.285005619050935,
+        "seaIceBalanceWeight": 0.7555250928550958,
+        "seaIceMeltDegreeDay": 0.4891474755480885,
+        "seaIceBalanceRequired": -0.3651244989363477
+      },
+      "teacherA": {
+        "total": 55.27,
+        "vegetation": 47.6,
+        "arid": 55.3,
+        "landIce": 64.9,
+        "landIceRecall": 77.7,
+        "landIcePrecision": 79.7,
+        "landIceAreaPct": 3.24,
+        "seaIce": 53.3,
+        "seaIceRecall": 75.4,
+        "seaIcePrecision": 64.5,
+        "seaIceAreaPct": 1.18,
+        "region": 32.7
+      },
+      "teacherB": {
+        "total": 19.36,
+        "seasonalClassSum": 14.9
+      },
+      "longitudinalSharePct": 26.7,
+      "places": {
+        "インドシナ": {
+          "modelVegetatedPct": 60.1,
+          "teacherVegetatedPct": 74.4
+        },
+        "華中・華南": {
+          "modelVegetatedPct": 1.2,
+          "teacherVegetatedPct": 98.2
+        },
+        "インド": {
+          "modelVegetatedPct": 7.2,
+          "teacherVegetatedPct": 4.9
+        },
+        "米中西部": {
+          "modelVegetatedPct": 1.3,
+          "teacherVegetatedPct": 64.6
+        },
+        "パタゴニア風下": {
+          "modelVegetatedPct": 60.7,
+          "teacherVegetatedPct": 4.2
+        },
+        "サハラ": {
+          "modelVegetatedPct": 0,
+          "teacherVegetatedPct": 0
+        },
+        "ヒマラヤ・チベット": {
+          "modelVegetatedPct": 0,
+          "teacherVegetatedPct": 7.2
+        }
+      }
+    }
+  ]
+}

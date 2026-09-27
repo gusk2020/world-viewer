@@ -1,0 +1,169 @@
+{
+  "id": "venus",
+  "name": "金星",
+  "antiKyTerraStages": true,
+  "body": {
+    "radiusMetres": 6051800,
+    "axialTiltDegrees": 177.36,
+    "dayLengthHours": 5832.6,
+    "orbitPeriodDays": 224.701,
+    "rotationDirection": -1,
+    "datum": "Magellan GTDR heights referenced to 6051.0 km, shifted by -800 m to displayed 6051.8 km radius",
+    "assumedGravityMps2": 9.80665,
+    "assumedAtmosphere": "Earth composition",
+    "assumedSolarFlux": "Earth-equivalent at top of atmosphere",
+    "radiation": "ignored"
+  },
+  "display": {
+    "verticalExaggeration": 20,
+    "seaLevel": {
+      "label": "仮想海面",
+      "downToMetres": -8000,
+      "downStepMetres": 100,
+      "upToMetres": 12000,
+      "upStepMetres": 100
+    },
+    "hypsometric": {
+      "stops": [
+        [
+          -8000,
+          [
+            10,
+            26,
+            66
+          ]
+        ],
+        [
+          -3000,
+          [
+            26,
+            74,
+            140
+          ]
+        ],
+        [
+          -800,
+          [
+            72,
+            140,
+            200
+          ]
+        ],
+        [
+          -50,
+          [
+            140,
+            195,
+            225
+          ]
+        ],
+        [
+          0,
+          [
+            206,
+            214,
+            160
+          ]
+        ],
+        [
+          300,
+          [
+            150,
+            178,
+            96
+          ]
+        ],
+        [
+          2000,
+          [
+            120,
+            152,
+            78
+          ]
+        ],
+        [
+          5000,
+          [
+            178,
+            152,
+            84
+          ]
+        ],
+        [
+          9000,
+          [
+            140,
+            104,
+            66
+          ]
+        ],
+        [
+          14000,
+          [
+            160,
+            158,
+            152
+          ]
+        ],
+        [
+          21500,
+          [
+            248,
+            248,
+            248
+          ]
+        ]
+      ]
+    }
+  },
+  "terrain": {
+    "sourceReferenceRadiusMetres": 6051000,
+    "source": "https://planetarymaps.usgs.gov/mosaic/Venus_Magellan_Topography_Global_4641m_v02.tif",
+    "encoding": {
+      "type": "rg16-metres",
+      "offsetMetres": 16000
+    },
+    "levels": [
+      {
+        "url": "./worlds/venus/terrain/venus_512x256.png",
+        "width": 512,
+        "height": 256
+      },
+      {
+        "url": "./worlds/venus/terrain/venus_1024x512.png",
+        "width": 1024,
+        "height": 512
+      },
+      {
+        "url": "./worlds/venus/terrain/venus_2048x1024.png",
+        "width": 2048,
+        "height": 1024
+      }
+    ],
+    "processing": {
+      "sourceDimensions": [
+        8192,
+        4096
+      ],
+      "sourceFirstLongitude": -19009777.2544,
+      "sourceCoordinateUnits": "projected metres",
+      "sourceValueScale": 1.0,
+      "sourceValueOffsetMetres": 0.0,
+      "sourceReferenceRadiusMetres": 6051000,
+      "displayReferenceRadiusMetres": 6051800,
+      "datumShiftMetres": -800,
+      "resampling": "GDAL average to 2048x1024, then 2x2 area means for lower levels",
+      "outputMinMaxMetres": [
+        -3685.0,
+        10567.0
+      ],
+      "missingCellsAfterResampling": 166494,
+      "missingFractionAfterResampling": 0.0793905258178711,
+      "missingLatitudeBoundsDegrees": [
+        -89.91,
+        89.91
+      ],
+      "missingPolicy": "nearest valid elevation on 2048x1024 grid; no new fine detail"
+    }
+  }
+}
