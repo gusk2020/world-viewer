@@ -1,0 +1,55 @@
+{
+ "id": "kasoku-sekai",
+ "name": "過速世界",
+ "globeTexture": "../../worlds/kasoku-sekai/textures/globe.jpg",
+ "body": {
+  "radiusMetres": 6371000,
+  "axialTiltDegrees": 23.44,
+  "axialTiltNote": "Earth's obliquity to its orbital plane (the ecliptic).",
+  "datum": "GEBCO: 0 m is mean sea level.",
+  "dayLengthHours": 23.9345,
+  "dayLengthNote": "Earth's sidereal day. The solar day is 24 h; the sidereal one is what the Coriolis deflection actually depends on.",
+  "rotationDirection": 1,
+  "rotationDirectionNote": "Prograde: seen from above the north pole, Earth turns anticlockwise."
+ },
+ "display": {
+  "verticalExaggeration": 30,
+  "surfaceGamma": 0.6,
+  "seaLevel": {
+   "label": "海面の高さ",
+   "downToMetres": -6000,
+   "downStepMetres": 20,
+   "upToMetres": 200,
+   "upStepMetres": 2
+  }
+ },
+ "terrain": {
+  "source": "GEBCO_2026 Grid (ice surface elevation), 15 arc-second, via CEDA",
+  "encoding": {
+   "type": "rg16-metres",
+   "offsetMetres": 12000
+  },
+  "levels": [
+   {
+    "url": "../../worlds/kasoku-sekai/terrain/gebco2026_ice_512x256.png",
+    "width": 512,
+    "height": 256
+   },
+   {
+    "url": "../../worlds/kasoku-sekai/terrain/gebco2026_ice_1024x512.png",
+    "width": 1024,
+    "height": 512
+   },
+   {
+    "url": "../../worlds/kasoku-sekai/terrain/gebco2026_ice_2048x1024.png",
+    "width": 2048,
+    "height": 1024
+   },
+   {
+    "url": "../../worlds/kasoku-sekai/terrain/gebco2026_ice_4096x2048.png",
+    "width": 4096,
+    "height": 2048
+   }
+  ]
+ }
+}

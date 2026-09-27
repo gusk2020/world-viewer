@@ -1,0 +1,266 @@
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overscroll-behavior: none;
+  background: #000;
+}
+
+#app {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100dvh;
+}
+
+#app canvas {
+  display: block;
+  touch-action: none;
+}
+
+#map2d {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100dvh;
+}
+
+#loading {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #eaf2ff;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 1rem;
+  background: #000;
+  z-index: 10;
+  pointer-events: none;
+}
+
+#loading.hidden {
+  display: none;
+}
+
+/* The bottom group: the stage panel (centre readout, legend) above the
+   天体 / 2D-3D / 軸 / 線 rows, as in v1s. */
+#bottom-controls {
+  position: fixed;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0) + 12px);
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: min(368px, 92vw);
+  z-index: 5;
+}
+
+#bottom-panel {
+  width: 100%;
+}
+
+/* The nav row: body on the left, view on the right, one row inside the
+   bottom panel. */
+#nav-row button { flex: 1 1 0; }
+
+/* One look for both control boxes -- the one at the top and the one under
+   the 2D/3D button -- so moving a row between them changes nothing but where
+   it sits. */
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px 11px 5px;
+  border-radius: 18px;
+  background: rgba(15, 23, 35, 0.82);
+  color: #eaf2ff;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+/* The top panel: sea level, water opacity, 地表, stage switches, mean
+   temperature. Shown in both 3D and 2D (2D draws the same conditions). */
+#sea-level-control {
+  position: fixed;
+  left: 50%;
+  top: calc(env(safe-area-inset-top, 0) + 16px);
+  transform: translateX(-50%);
+  z-index: 5;
+  width: min(368px, 92vw);
+}
+
+.panel .control-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 27px;
+}
+
+/* A row set to display:flex outranks the browser's own
+   [hidden] { display: none }, so hiding a row from JavaScript did nothing at
+   all -- Earth's seabed buttons stayed on screen on Mars. This has the same
+   specificity as the rule above, so it has to stay *after* it. */
+.panel [hidden] {
+  display: none;
+}
+
+/* ...and the same trap for the box itself: `.panel { display: flex }`
+   outranks the browser's own [hidden] rule, so hiding the whole bottom panel
+   in 2D mode left an empty 11 px pill floating over the map. Third time this
+   project has hit this; see CLAUDE.md. */
+.panel[hidden] {
+  display: none;
+}
+
+.panel label {
+  white-space: nowrap;
+  min-width: 4.6em;
+}
+
+.panel input[type="range"] {
+  flex: 1;
+}
+
+#sea-level-readout {
+  min-width: 4.6em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.segmented {
+  display: flex;
+  flex: 1;
+  gap: 4px;
+}
+
+.segmented button {
+  flex: 1;
+  min-height: 28px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.14);
+  color: #eaf2ff;
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.segmented button.selected {
+  background: #2f7ee0;
+}
+
+/* The virtual-sea caption on Mars and the Moon. Small, but it has to be
+   readable on a phone in sunlight, so it stays at the panel's own contrast
+   rather than being greyed out. */
+#virtual-sea-note {
+  margin: 0 2px 1px;
+  font-size: 0.68rem;
+  font-weight: 400;
+  line-height: 1.25;
+  color: #c8d6ea;
+}
+
+/* Single buttons that cycle through their states (天体, 2D/3D, 軸, 線, 線色). */
+.pill {
+  flex: 1;
+  min-height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.14);
+  color: #eaf2ff;
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pill.active {
+  background: #2f7ee0;
+}
+
+#axis-readout {
+  min-width: 3.2em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* The scale bar sits on the map itself, where a scale bar belongs, rather
+   than in the control panel -- and only while a graticule is shown. */
+#scale-bar {
+  position: fixed;
+  left: 14px;
+  /* Initial value; main.js lifts it above the bottom group every frame. */
+  bottom: calc(env(safe-area-inset-bottom, 0) + 152px);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(15, 23, 35, 0.7);
+  color: #eaf2ff;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 0.72rem;
+  font-weight: 600;
+  z-index: 5;
+  pointer-events: none;
+}
+
+#scale-bar[hidden] {
+  display: none;
+}
+
+#scale-bar-line {
+  height: 6px;
+  border: 1px solid #eaf2ff;
+  border-top: 0;
+}
+
+/* ---- Anti-KyTerra v2 additions (everything above is v1s's css/style.css,
+   with the rules for Climate v1 rows that v2 does not have removed) ---- */
+#surface-mode { gap: 2px; }
+/* Nine choices in two rows remain large enough to tap on a phone. */
+#surface-mode { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); }
+#surface-mode button { white-space: nowrap; padding: 0 1px; font-size: 0.74rem; }
+#world-select { max-width: 142px; flex: 1 1 auto; color: #eaf2ff; background: #273c58; }
+#world-select option, #world-select optgroup { background: #273c58; color: #fff; }
+#veg-style-row { font-size: .76rem; }
+#stage-src-row .segmented button { font-size: 0.78rem; padding: 0 2px; }
+#stage-src { flex: 3; }
+#stage-mode { flex: 2; }
+#ak-condition { margin: 0 2px 1px; font-size: 0.7rem; font-weight: 500; line-height: 1.3; color: #ffd98a; }
+#ak-condition[hidden] { display: none; }
+#ak-info { width: 100%; box-sizing: border-box; gap: 2px; max-height: 38vh; overflow-y: auto; }
+#ak-readout { font-size: 0.78rem; font-weight: 500; line-height: 1.35; font-variant-numeric: tabular-nums; }
+#ak-readout b { font-weight: 700; }
+#ak-readout .m { color: #9fd0ff; }
+#ak-readout .t { color: #ffd98a; }
+#ak-readout .k { color: #9aa7b8; font-size: 0.72rem; }
+#ak-readout .w { color: #ffb4a8; font-size: 0.72rem; }
+#ak-score { font-size: 0.72rem; font-weight: 500; color: #cfe3ff; font-variant-numeric: tabular-nums; }
+#ak-bar-wrap { display: flex; align-items: center; gap: 6px; font-size: 0.72rem; font-variant-numeric: tabular-nums; }
+#ak-bar-wrap[hidden] { display: none; }
+#ak-bar { flex: 1; min-width: 0; width: 10px; height: 10px; border-radius: 3px; }
+#ak-classes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px 6px; font-size: 0.66rem; font-weight: 500; }
+#ak-classes[hidden] { display: none; }
+#ak-classes div { display: flex; align-items: center; gap: 4px; min-width: 0; white-space: nowrap; overflow: hidden; }
+#ak-classes i { flex: none; width: 10px; height: 10px; border-radius: 2px; border: 1px solid rgba(255,255,255,.25); }
+#ak-classes .n { color: #9aa7b8; margin-left: auto; font-variant-numeric: tabular-nums; }
+#ak-note { margin: 0; font-size: 0.66rem; font-weight: 400; line-height: 1.35; color: #c8d6ea; }
+#ak-note[hidden] { display: none; }
+#axis-row .pill { padding: 0 4px; font-size: 0.78rem; }
+#cross { position: fixed; left: 50%; top: 50%; width: 16px; height: 16px; margin: -8px 0 0 -8px; pointer-events: none; z-index: 4; }
+#cross:before, #cross:after { content: ""; position: absolute; background: #fff; opacity: .85; box-shadow: 0 0 2px #000; }
+#cross:before { left: 7px; top: 0; width: 2px; height: 16px; }
+#cross:after { top: 7px; left: 0; height: 2px; width: 16px; }
+#cross[hidden] { display: none; }
+#version-badge { position: fixed; right: 10px; top: calc(env(safe-area-inset-top, 0) + 150px); z-index: 4; padding: 2px 7px; border-radius: 9px;
+  background: rgba(15, 23, 35, 0.72); color: #cfe3ff; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 0.66rem; font-weight: 600; pointer-events: none; }

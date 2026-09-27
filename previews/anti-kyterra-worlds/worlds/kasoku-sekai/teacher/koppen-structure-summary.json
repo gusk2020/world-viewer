@@ -1,0 +1,107 @@
+{
+  "dataset": "Beck et al. (2018) Koppen-Geiger climate classification, present-day",
+  "sourceFile": "Beck_KG_V1_present_0p5.tif",
+  "sourceResolutionDegrees": 0.5,
+  "sourceUrl": "https://doi.org/10.6084/m9.figshare.6396959",
+  "sourceChecksumSha256": "4dcc0f4a6343af2ac354c4a9676262510c3a96acceab2d992a6c2f5e86659756",
+  "retrievedAt": "2026-09-09T21:46:09Z",
+  "license": "CC BY 4.0 (figshare article 10.6084/m9.figshare.6396959)",
+  "citation": "Beck, H.E., N.E. Zimmermann, T.R. McVicar, N. Vergopolan, A. Berg, E.F. Wood (2018). Present and future Koppen-Geiger climate classification maps at 1-km resolution. Scientific Data 5:180214. https://doi.org/10.1038/sdata.2018.214",
+  "outputWidth": 720,
+  "outputHeight": 360,
+  "classes": [
+    "tropicalHumid",
+    "tropicalSeasonal",
+    "arid",
+    "temperateHumid",
+    "temperateSeasonal",
+    "coldHumid",
+    "coldSeasonal",
+    "polar"
+  ],
+  "koppenGroupsPerClass": {
+    "tropicalHumid": [
+      "Af"
+    ],
+    "tropicalSeasonal": [
+      "Am",
+      "Aw"
+    ],
+    "arid": [
+      "BWh",
+      "BWk",
+      "BSh",
+      "BSk"
+    ],
+    "temperateHumid": [
+      "Cfa",
+      "Cfb",
+      "Cfc"
+    ],
+    "temperateSeasonal": [
+      "Csa",
+      "Csb",
+      "Csc",
+      "Cwa",
+      "Cwb",
+      "Cwc"
+    ],
+    "coldHumid": [
+      "Dfa",
+      "Dfb",
+      "Dfc",
+      "Dfd"
+    ],
+    "coldSeasonal": [
+      "Dsa",
+      "Dsb",
+      "Dsc",
+      "Dsd",
+      "Dwa",
+      "Dwb",
+      "Dwc",
+      "Dwd"
+    ],
+    "polar": [
+      "ET",
+      "EF"
+    ]
+  },
+  "areaFractions": {
+    "tropicalHumid": {
+      "globeFraction": 0.0175,
+      "landFraction": 0.0564
+    },
+    "tropicalSeasonal": {
+      "globeFraction": 0.047,
+      "landFraction": 0.1519
+    },
+    "arid": {
+      "globeFraction": 0.0942,
+      "landFraction": 0.3042
+    },
+    "temperateHumid": {
+      "globeFraction": 0.018,
+      "landFraction": 0.058
+    },
+    "temperateSeasonal": {
+      "globeFraction": 0.0171,
+      "landFraction": 0.0552
+    },
+    "coldHumid": {
+      "globeFraction": 0.0522,
+      "landFraction": 0.1686
+    },
+    "coldSeasonal": {
+      "globeFraction": 0.0155,
+      "landFraction": 0.05
+    },
+    "polar": {
+      "globeFraction": 0.0482,
+      "landFraction": 0.1556
+    }
+  },
+  "namedPlaceChecks": 8,
+  "regenerate": "python3 tools/build_koppen_teacher.py worlds/<world> -- or from GitHub's Actions tab, run 'Build K\u00f6ppen structure teacher (Teacher B)'.",
+  "note": "Land/sea in this map follows Beck et al.'s own coastline, not this app's GEBCO raster -- the two occasionally disagree by a pixel at the coast. js/climate.js's scorer decides land/sea from the app's own elevation raster and only reads this map's class where it already calls a pixel land, so a stray ocean-side mismatch here costs at most a handful of coastal pixels, the same tolerance build_teacher.py already accepts for Teacher A."
+}

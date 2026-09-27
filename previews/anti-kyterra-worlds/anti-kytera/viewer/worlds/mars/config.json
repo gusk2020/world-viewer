@@ -1,0 +1,159 @@
+{
+  "id": "mars",
+  "name": "火星",
+  "body": {
+    "radiusMetres": 3389500,
+    "axialTiltDegrees": 25.19,
+    "axialTiltNote": "Mars's obliquity to its orbital plane.",
+    "datum": "MOLA areoid: 0 m is Mars's equipotential surface, the standard Mars vertical datum.",
+    "dayLengthHours": 24.6229,
+    "dayLengthNote": "Mars's sidereal day.",
+    "rotationDirection": 1,
+    "rotationDirectionNote": "Prograde, like Earth's.",
+    "orbitPeriodDays": 686.98,
+    "assumedGravityMps2": 9.80665,
+    "assumedAtmosphere": "Earth composition",
+    "assumedSolarFlux": "Earth-equivalent at top of atmosphere",
+    "radiation": "ignored"
+  },
+  "display": {
+    "verticalExaggeration": 10,
+    "seaLevel": {
+      "label": "仮想海面",
+      "downToMetres": -9000,
+      "downStepMetres": 100,
+      "upToMetres": 6000,
+      "upStepMetres": 100
+    },
+    "hypsometric": {
+      "stops": [
+        [
+          -8000,
+          [
+            10,
+            26,
+            66
+          ]
+        ],
+        [
+          -3000,
+          [
+            26,
+            74,
+            140
+          ]
+        ],
+        [
+          -800,
+          [
+            72,
+            140,
+            200
+          ]
+        ],
+        [
+          -50,
+          [
+            140,
+            195,
+            225
+          ]
+        ],
+        [
+          0,
+          [
+            206,
+            214,
+            160
+          ]
+        ],
+        [
+          300,
+          [
+            150,
+            178,
+            96
+          ]
+        ],
+        [
+          2000,
+          [
+            120,
+            152,
+            78
+          ]
+        ],
+        [
+          5000,
+          [
+            178,
+            152,
+            84
+          ]
+        ],
+        [
+          9000,
+          [
+            140,
+            104,
+            66
+          ]
+        ],
+        [
+          14000,
+          [
+            160,
+            158,
+            152
+          ]
+        ],
+        [
+          21500,
+          [
+            248,
+            248,
+            248
+          ]
+        ]
+      ]
+    },
+    "surfaceGamma": 1.0
+  },
+  "terrain": {
+    "source": "Mars MGS MOLA DEM global mosaic, 463 m/px (USGS Astrogeology)",
+    "encoding": {
+      "type": "rg16-metres",
+      "offsetMetres": 12000
+    },
+    "levels": [
+      {
+        "url": "../../worlds/mars/terrain/mola463_areoid_512x256.png",
+        "width": 512,
+        "height": 256
+      },
+      {
+        "url": "../../worlds/mars/terrain/mola463_areoid_1024x512.png",
+        "width": 1024,
+        "height": 512
+      },
+      {
+        "url": "../../worlds/mars/terrain/mola463_areoid_2048x1024.png",
+        "width": 2048,
+        "height": 1024
+      },
+      {
+        "url": "../../worlds/mars/terrain/mola463_areoid_4096x2048.png",
+        "width": 4096,
+        "height": 2048
+      }
+    ]
+  },
+  "antiKyTerraStages": true,
+  "globeTexture": "./worlds/mars/photo.jpg",
+  "image": {
+    "source": "https://www.solarsystemscope.com/textures/download/2k_mars.jpg",
+    "credit": "Solar System Scope (INOVE), CC BY 4.0",
+    "kind": "Orbiter imagery-derived composited, colour-adjusted map",
+    "warning": "Source notes some unmapped gaps use fictional fill; do not interpret image-only details as measured terrain."
+  }
+}

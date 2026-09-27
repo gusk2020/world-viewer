@@ -1,0 +1,50 @@
+{
+  "id": "venus",
+  "name": "金星",
+  "antiKyTerraStages": true,
+  "body": {
+    "radiusMetres": 6051800,
+    "axialTiltDegrees": 177.36,
+    "dayLengthHours": 5832.6,
+    "orbitPeriodDays": 224.701,
+    "rotationDirection": -1,
+    "datum": "Magellan GTDR heights referenced to 6051.0 km, shifted by -800 m to displayed 6051.8 km radius",
+    "assumedGravityMps2": 9.80665,
+    "assumedAtmosphere": "Earth composition",
+    "assumedSolarFlux": "Earth-equivalent at top of atmosphere",
+    "radiation": "ignored"
+  },
+  "display": {
+    "verticalExaggeration": 20,
+    "seaLevel": {
+      "label": "仮想海面",
+      "downToMetres": -8000,
+      "downStepMetres": 100,
+      "upToMetres": 12000,
+      "upStepMetres": 100
+    },
+    "surfaceGamma": 1.0
+  },
+  "terrain": {
+    "sourceReferenceRadiusMetres": 6051000,
+    "source": "https://planetarymaps.usgs.gov/mosaic/Venus_Magellan_Topography_Global_4641m_v02.tif",
+    "encoding": {
+      "type": "rg16-metres",
+      "offsetMetres": 16000
+    },
+    "levels": [
+      {
+        "url": "./worlds/venus/terrain/venus_2048x1024.png",
+        "width": 2048,
+        "height": 1024
+      }
+    ]
+  },
+  "globeTexture": "./worlds/venus/photo.jpg",
+  "image": {
+    "source": "https://www.solarsystemscope.com/textures/download/2k_venus_surface.jpg",
+    "credit": "Solar System Scope (INOVE), CC BY 4.0",
+    "kind": "Venus: radar-derived synthetic coloured surface",
+    "warning": "Source notes some unmapped gaps use fictional fill; do not interpret image-only details as measured terrain."
+  }
+}
