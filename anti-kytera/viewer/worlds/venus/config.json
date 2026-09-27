@@ -39,11 +39,49 @@
     },
     "levels": [
       {
+        "url": "./worlds/venus/terrain/venus_512x256.png",
+        "width": 512,
+        "height": 256
+      },
+      {
+        "url": "./worlds/venus/terrain/venus_1024x512.png",
+        "width": 1024,
+        "height": 512
+      },
+      {
         "url": "./worlds/venus/terrain/venus_2048x1024.png",
         "width": 2048,
         "height": 1024
       }
-    ]
+    ],
+    "processing": {
+      "sourceDimensions": [
+        8192,
+        4096
+      ],
+      "sourceFirstLongitude": -19009777.2544,
+      "sourceCentralMeridianDegrees": 0.0,
+      "sourceFirstColumnWestEdgeEastLongitude": -180.0000010181639,
+      "longitudeRollColumns": 0,
+      "sourceCoordinateUnits": "projected metres",
+      "sourceValueScale": 1.0,
+      "sourceValueOffsetMetres": 0.0,
+      "sourceReferenceRadiusMetres": 6051000,
+      "displayReferenceRadiusMetres": 6051800,
+      "datumShiftMetres": -800,
+      "resampling": "GDAL average to 2048x1024, then 2x2 area means for lower levels",
+      "outputMinMaxMetres": [
+        -3685.0,
+        10567.0
+      ],
+      "missingCellsAfterResampling": 166494,
+      "missingFractionAfterResampling": 0.0793905258178711,
+      "missingLatitudeBoundsDegrees": [
+        -89.91,
+        89.91
+      ],
+      "missingPolicy": "nearest valid elevation on 2048x1024 grid; no new fine detail"
+    }
   },
   "globeTexture": "./worlds/venus/photo.jpg",
   "image": {
