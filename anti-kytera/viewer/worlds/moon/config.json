@@ -1,145 +1,159 @@
 {
- "id": "moon",
- "name": "月",
- "body": {
-  "radiusMetres": 1737400,
-  "axialTiltDegrees": 6.68,
-  "axialTiltNote": "The Moon's obliquity to its orbital plane; it is 1.54 degrees to the ecliptic.",
-  "datum": "LOLA LDEM: 0 m is a sphere of radius 1737400 m, the standard lunar reference.",
-  "dayLengthHours": 655.72,
-  "dayLengthNote": "The Moon's sidereal rotation period -- it turns once per orbit, so a lunar day is 27.3 Earth days. Slow enough that its circulation would be one cell per hemisphere.",
-  "rotationDirection": 1,
-  "rotationDirectionNote": "Prograde."
- },
- "display": {
-  "verticalExaggeration": 10,
-  "seaLevel": {
-   "label": "仮想海面",
-   "downToMetres": -9000,
-   "downStepMetres": 100,
-   "upToMetres": 5000,
-   "upStepMetres": 100
+  "id": "moon",
+  "name": "月",
+  "body": {
+    "radiusMetres": 1737400,
+    "axialTiltDegrees": 6.68,
+    "axialTiltNote": "The Moon's obliquity to its orbital plane; it is 1.54 degrees to the ecliptic.",
+    "datum": "LOLA LDEM: 0 m is a sphere of radius 1737400 m, the standard lunar reference.",
+    "dayLengthHours": 655.72,
+    "dayLengthNote": "The Moon's sidereal rotation period -- it turns once per orbit, so a lunar day is 27.3 Earth days. Slow enough that its circulation would be one cell per hemisphere.",
+    "rotationDirection": 1,
+    "rotationDirectionNote": "Prograde.",
+    "orbitPeriodDays": 27.3217,
+    "assumedGravityMps2": 9.80665,
+    "assumedAtmosphere": "Earth composition",
+    "assumedSolarFlux": "Earth-equivalent at top of atmosphere",
+    "radiation": "ignored"
   },
-  "hypsometric": {
-   "stops": [
-    [
-     -9000,
-     [
-      10,
-      26,
-      66
-     ]
-    ],
-    [
-     -4000,
-     [
-      26,
-      74,
-      140
-     ]
-    ],
-    [
-     -1200,
-     [
-      72,
-      140,
-      200
-     ]
-    ],
-    [
-     -80,
-     [
-      140,
-      195,
-      225
-     ]
-    ],
-    [
-     0,
-     [
-      206,
-      214,
-      160
-     ]
-    ],
-    [
-     400,
-     [
-      150,
-      178,
-      96
-     ]
-    ],
-    [
-     2500,
-     [
-      120,
-      152,
-      78
-     ]
-    ],
-    [
-     5000,
-     [
-      178,
-      152,
-      84
-     ]
-    ],
-    [
-     7500,
-     [
-      140,
-      104,
-      66
-     ]
-    ],
-    [
-     9500,
-     [
-      160,
-      158,
-      152
-     ]
-    ],
-    [
-     11000,
-     [
-      248,
-      248,
-      248
-     ]
+  "display": {
+    "verticalExaggeration": 10,
+    "seaLevel": {
+      "label": "仮想海面",
+      "downToMetres": -9000,
+      "downStepMetres": 100,
+      "upToMetres": 5000,
+      "upStepMetres": 100
+    },
+    "hypsometric": {
+      "stops": [
+        [
+          -9000,
+          [
+            10,
+            26,
+            66
+          ]
+        ],
+        [
+          -4000,
+          [
+            26,
+            74,
+            140
+          ]
+        ],
+        [
+          -1200,
+          [
+            72,
+            140,
+            200
+          ]
+        ],
+        [
+          -80,
+          [
+            140,
+            195,
+            225
+          ]
+        ],
+        [
+          0,
+          [
+            206,
+            214,
+            160
+          ]
+        ],
+        [
+          400,
+          [
+            150,
+            178,
+            96
+          ]
+        ],
+        [
+          2500,
+          [
+            120,
+            152,
+            78
+          ]
+        ],
+        [
+          5000,
+          [
+            178,
+            152,
+            84
+          ]
+        ],
+        [
+          7500,
+          [
+            140,
+            104,
+            66
+          ]
+        ],
+        [
+          9500,
+          [
+            160,
+            158,
+            152
+          ]
+        ],
+        [
+          11000,
+          [
+            248,
+            248,
+            248
+          ]
+        ]
+      ]
+    },
+    "surfaceGamma": 1.0
+  },
+  "terrain": {
+    "source": "LRO LOLA global LDEM, 118 m/px, March 2014 (USGS Astrogeology)",
+    "encoding": {
+      "type": "rg16-metres",
+      "offsetMetres": 12000
+    },
+    "levels": [
+      {
+        "url": "../../worlds/moon/terrain/lola118_ldem_512x256.png",
+        "width": 512,
+        "height": 256
+      },
+      {
+        "url": "../../worlds/moon/terrain/lola118_ldem_1024x512.png",
+        "width": 1024,
+        "height": 512
+      },
+      {
+        "url": "../../worlds/moon/terrain/lola118_ldem_2048x1024.png",
+        "width": 2048,
+        "height": 1024
+      },
+      {
+        "url": "../../worlds/moon/terrain/lola118_ldem_4096x2048.png",
+        "width": 4096,
+        "height": 2048
+      }
     ]
-   ]
-  }
- },
- "terrain": {
-  "source": "LRO LOLA global LDEM, 118 m/px, March 2014 (USGS Astrogeology)",
-  "encoding": {
-   "type": "rg16-metres",
-   "offsetMetres": 12000
   },
-  "levels": [
-   {
-    "url": "../../worlds/moon/terrain/lola118_ldem_512x256.png",
-    "width": 512,
-    "height": 256
-   },
-   {
-    "url": "../../worlds/moon/terrain/lola118_ldem_1024x512.png",
-    "width": 1024,
-    "height": 512
-   },
-   {
-    "url": "../../worlds/moon/terrain/lola118_ldem_2048x1024.png",
-    "width": 2048,
-    "height": 1024
-   },
-   {
-    "url": "../../worlds/moon/terrain/lola118_ldem_4096x2048.png",
-    "width": 4096,
-    "height": 2048
-   }
-  ]
- }
+  "antiKyTerraStages": true,
+  "globeTexture": "./worlds/moon/photo.jpg",
+  "image": {
+    "source": "https://www.solarsystemscope.com/textures/download/2k_moon.jpg",
+    "credit": "Solar System Scope (INOVE), CC BY 4.0",
+    "kind": "Orbiter imagery-derived composited, colour-adjusted map",
+    "warning": "Source notes some unmapped gaps use fictional fill; do not interpret image-only details as measured terrain."
+  }
 }

@@ -17,7 +17,7 @@ import { createStagePanel } from "./stage-panel.js";
 
 export async function loadStages(base, planetary = false) {
   const data = await loadStageData(base, planetary);
-  const state = { v: "bed", src: "model", mode: "fit", seaLevel: 0, opacity: 0.4 };
+  const state = { v: "bed", src: "model", mode: "fit", seaLevel: 0, opacity: 0.4, vegStyle: "detailed" };
   const ctx = {
     ...data,
     state,
@@ -33,6 +33,7 @@ export async function loadStages(base, planetary = false) {
     state,
     apply: draw.apply,
     createMaterial: draw.createMaterial,
+    createElevationMaterial: draw.createElevationMaterial,
     renderMercator: draw.renderMercator,
     legend: panel.legend,
     readout: panel.readout,

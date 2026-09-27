@@ -150,6 +150,12 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
     new THREE.MeshLambertMaterial({ map: texture })
   );
   body3d.add(globe);
+  const standardMaterial = globe.material;
+  let elevationMaterial = null;
+  function setElevationMode(api, enabled) {
+    if (enabled && !elevationMaterial) elevationMaterial = api.createElevationMaterial(metresToRadius);
+    globe.material = enabled ? elevationMaterial : standardMaterial;
+  }
 
   // Land and sea are two independent objects, per the user's own design
   // direction: raising sea level only resizes this sphere and never
@@ -435,7 +441,8 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
     window.removeEventListener("resize", onResize);
     controls.dispose();
     globe.geometry.dispose();
-    globe.material.dispose();
+    standardMaterial.dispose();
+    if (elevationMaterial) elevationMaterial.dispose();
     seaSphere.geometry.dispose();
     seaSphere.material.dispose();
     if (graticule) graticule.dispose();
@@ -469,6 +476,7 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
     getAxisAngle,
     supportsStages,
     setStage,
+    setElevationMode,
     setGraticule,
     setGraticuleColor,
     getMetresPerPixel,
@@ -478,6 +486,7 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
     // ice-surface grid, so the 2D map can draw the same 標準 view.
     photoTexture: usesPhoto ? texture : null,
     getElevation: () => ({ width: elevation.width, height: elevation.height, metres: elevation.metres }),
+    sampleElevation: metresAt,
     dispose,
   };
 }

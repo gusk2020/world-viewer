@@ -24,6 +24,14 @@ const RAMP_ROWS = Object.keys(RAMPS);
 export const BED_LO = -8000, BED_HI = 6000;
 export const AGREE = { same: [70, 170, 90], veg: [215, 70, 60], ice: [120, 150, 220], none: [90, 90, 90], sea: [20, 40, 70] };
 export const EXPOSED = [150, 140, 125];      // seabed above a lowered sea: no vegetation estimate exists there
+export const SIMPLE_VEG = [
+  { codes: [11, 12, 13, 14, 15, 16, 17, 18], ja: "森林", rgb: [36, 122, 65] },
+  { codes: [19, 20], ja: "サバンナ・草原", rgb: [100, 170, 70] },
+  { codes: [21, 22], ja: "低木地", rgb: [135, 155, 78] },
+  { codes: [23], ja: "ツンドラ", rgb: [154, 180, 122] },
+  { codes: [24, 25], ja: "砂漠・極地荒原", rgb: [218, 196, 145] },
+];
+export const simpleVeg = (code) => SIMPLE_VEG.find((g) => g.codes.includes(code));
 const WATER = [47, 111, 168];          // v1s's sea colour (0x2f6fa8), for the 2D map
 const STAGE_ID = { bed: 0, sea: 1, t2m: 2, hum: 2, precip: 2, ice: 3, veg: 4 };
 
@@ -96,7 +104,7 @@ export function createStageDraw(ctx) {
     T.ramp = new THREE.DataTexture(rp, 256, RAMP_ROWS.length, THREE.RGBAFormat, THREE.UnsignedByteType);
     T.ramp.minFilter = T.ramp.magFilter = THREE.LinearFilter; T.ramp.generateMipmaps = false; T.ramp.needsUpdate = true;
     const pal = new Uint8Array(256 * 4);
-    for (const [code, rgb] of Object.entries(vcol)) pal.set([...rgb, 255], Number(code) * 4);
+    for (const [code, rgb] of Object.entries(vcol)) pal.set([...(state.vegStyle === "simple" ? simpleVeg(Number(code))?.rgb || rgb : rgb), 255], Number(code) * 4);
     T.pal = new THREE.DataTexture(pal, 256, 1, THREE.RGBAFormat, THREE.UnsignedByteType);
     T.pal.minFilter = T.pal.magFilter = THREE.NearestFilter; T.pal.generateMipmaps = false; T.pal.needsUpdate = true;
   }
@@ -107,14 +115,14 @@ export function createStageDraw(ctx) {
     akHM: { value: T.H_fit }, akHT: { value: T.H_teacher }, akVM: { value: T.veg_fit }, akVT: { value: T.veg_teacher },
     akRamp: { value: T.ramp }, akPal: { value: T.pal },
     akStage: { value: 0 }, akSrc: { value: 0 }, akRampRow: { value: 0 }, akNRamps: { value: RAMP_ROWS.length },
-    akLo: { value: 0 }, akHi: { value: 1 }, akLog: { value: false }, akSeaLevel: { value: 0 },
+    akLo: { value: 0 }, akHi: { value: 1 }, akLog: { value: false }, akSeaLevel: { value: 0 }, akVegSimple: { value: false },
   };
 
   const GLSL = /* glsl */`
 uniform sampler2D akBed, akNrm, akFM, akFT, akHM, akHT, akVM, akVT, akRamp, akPal;
 uniform int akStage, akSrc, akRampRow, akNRamps;
 uniform float akLo, akHi, akSeaLevel;
-uniform bool akLog;
+uniform bool akLog, akVegSimple;
 const float AK_BED_LO = ${BED_LO.toFixed(1)}, AK_BED_HI = ${BED_HI.toFixed(1)}, AK_ICE_MIN = ${ICE_MIN_M.toFixed(1)};
 const int AK_ROCK = ${RAMP_ROWS.indexOf("rock")}, AK_SEA = ${RAMP_ROWS.indexOf("sea")};
 float akBil(sampler2D t, vec2 ll) {
@@ -133,6 +141,14 @@ int akCls(sampler2D t, vec2 ll) {
   int x = int(mod(floor((ll.x + 180.0) / 360.0 * float(sz.x)), float(sz.x)));
   int y = clamp(int(floor((ll.y + 90.0) / 180.0 * float(sz.y))), 0, sz.y - 1);
   return int(texelFetch(t, ivec2(x, y), 0).r * 255.0 + 0.5);
+}
+int akVegGroup(int c) {
+  if (c >= 11 && c <= 18) return 11;
+  if (c == 19 || c == 20) return 19;
+  if (c == 21 || c == 22) return 21;
+  if (c == 23) return 23;
+  if (c == 24 || c == 25) return 24;
+  return c;
 }
 vec3 akRampC(int row, float x) {
   return texture(akRamp, vec2((clamp(x, 0.0, 1.0) * 255.0 + 0.5) / 256.0, (float(row) + 0.5) / float(akNRamps))).rgb * 255.0;
@@ -171,7 +187,7 @@ vec3 akColour(vec2 ll, float z, out float relief) {
       if (m == 0 && t == 0) return vec3(${AGREE.sea.join(",")});
       if (m == -1) return vec3(${EXPOSED.join(",")});
       if (t == 255) return vec3(${AGREE.none.join(",")});
-      if (m == t) return vec3(${AGREE.same.join(",")});
+      if ((akVegSimple ? akVegGroup(m) == akVegGroup(t) : m == t)) return vec3(${AGREE.same.join(",")});
       return (m == 1 || t == 1) ? vec3(${AGREE.ice.join(",")}) : vec3(${AGREE.veg.join(",")});
     }
     int k = akSrc == 1 ? akVeg(akHT, akVT, ll, z) : akVeg(akHM, akVM, ll, z);
@@ -220,6 +236,24 @@ float akCoast(float z) {      // the sea-level contour, about one screen pixel w
     return m;
   }
 
+  // Earth's input terrain carries today's ice surface. Colour that same
+  // geometry solely by its height, with the same rock ramp as the 2D view.
+  function createElevationMaterial(metresToRadius) {
+    const m = new THREE.MeshLambertMaterial({ color: 0xffffff });
+    m.onBeforeCompile = (shader) => {
+      Object.assign(shader.uniforms, U);
+      shader.vertexShader = shader.vertexShader.replace("#include <common>", "#include <common>\nvarying vec3 vAkPos;")
+        .replace("#include <begin_vertex>", "#include <begin_vertex>\nvAkPos = position;");
+      shader.fragmentShader = shader.fragmentShader.replace("#include <common>", "#include <common>\nvarying vec3 vAkPos;\n" + GLSL)
+        .replace("#include <map_fragment>", `#include <map_fragment>
+        float z = (length(vAkPos) - 1.0) / ${metresToRadius.toExponential(12)};
+        vec3 c = akRock(z) / 255.0;
+        diffuseColor.rgb = mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c));`);
+    };
+    m.customProgramCacheKey = () => "anti-kytera-elevation";
+    return m;
+  }
+
   // ------------------------------------------------ 2D: the same colour, per pixel in Web Mercator
   const MERC_R = 6378137;
   const quadScene = new THREE.Scene();
@@ -243,10 +277,13 @@ void main() {
   float lat = degrees(atan(sinh(my / ${MERC_R}.0)));
   vec2 ll = vec2(lng, lat);
   vec3 c; float z;
-  if (akMode == 0) {        // 標準: v1s's photo, water where the GEBCO surface is below the sea
+  if (akMode == 0 || akMode == 2) { // photo or elevation-only, both on the input terrain
     z = akBil(akElev, ll);
-    vec3 lin = texture(akPhoto, vec2((lng + 180.0) / 360.0, (lat + 90.0) / 180.0)).rgb;   // sRGB texture, decoded
-    c = mix(lin * 12.92, 1.055 * pow(lin, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, lin)) * 255.0;
+    if (akMode == 2) c = akRock(z);
+    else {
+      vec3 lin = texture(akPhoto, vec2((lng + 180.0) / 360.0, (lat + 90.0) / 180.0)).rgb;
+      c = mix(lin * 12.92, 1.055 * pow(lin, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, lin)) * 255.0;
+    }
     if (z < akSeaLevel) c = mix(c, vec3(${WATER.join(",")}), akOpacity);
   } else {
     z = akBil(akBed, ll);
@@ -270,11 +307,11 @@ void main() {
   quadScene.add(quad);
   let rt = null, pixels = null, elevTex = null;
   // extent: EPSG:3857 [minx, miny, maxx, maxy]; returns a canvas of size w x h
-  function renderMercator(renderer, extent, w, h, { photo, photoTexture, elevation }) {
+  function renderMercator(renderer, extent, w, h, { photo, elevationColor, photoTexture, elevation }) {
     U2.akExtent.value.set(extent[0], extent[1], extent[2], extent[3]);
-    U2.akMode.value = photo ? 0 : 1;
+    U2.akMode.value = elevationColor ? 2 : photo ? 0 : 1;
     U2.akOpacity.value = state.opacity;
-    if (photo) {
+    if (photo || elevationColor) {
       if (!elevTex || elevTex.userData.src !== elevation.metres) {
         if (elevTex) elevTex.dispose();
         // elevation.js keeps row 0 at the NORTH pole; every stage grid (and
@@ -308,6 +345,10 @@ void main() {
 
   // ------------------------------------------------ state -> uniforms
   function apply() {
+    U.akVegSimple.value = state.vegStyle === "simple";
+    const pal = T.pal.image.data;
+    for (const [code, rgb] of Object.entries(vcol)) pal.set([...(state.vegStyle === "simple" ? simpleVeg(Number(code))?.rgb || rgb : rgb), 255], Number(code) * 4);
+    T.pal.needsUpdate = true;
     U.akStage.value = STAGE_ID[state.v];
     U.akSrc.value = { model: 0, teacher: 1, diff: 2 }[state.src];
     U.akSeaLevel.value = state.seaLevel;
@@ -320,5 +361,5 @@ void main() {
     U.akVM.value = T[`veg_${state.mode}`]; U.akVT.value = T.veg_teacher;
   }
 
-  return { createMaterial, renderMercator, apply };
+  return { createMaterial, createElevationMaterial, renderMercator, apply };
 }

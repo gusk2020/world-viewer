@@ -61,13 +61,23 @@ def packed(output, arrays, source):
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--body", choices=["mercury", "venus"], required=True)
-    p.add_argument("--bed", type=Path, required=True, help="2048x1024 south-first float32 metres, lon -180..180")
+    p.add_argument("--body", choices=["mercury", "venus", "moon", "mars"], required=True)
+    p.add_argument("--bed", type=Path, help="2048x1024 south-first float32 metres, lon -180..180")
     p.add_argument("--radius", type=float, required=True)
     p.add_argument("--obliquity", type=float, required=True)
     p.add_argument("--rotation", type=int, choices=[-1, 1], required=True)
     args = p.parse_args()
-    planet = np.fromfile(args.bed, dtype="<f4").reshape(1024, 2048).astype(float)
+    if args.bed:
+        planet = np.fromfile(args.bed, dtype="<f4").reshape(1024, 2048).astype(float)
+    else:
+        # Existing v1s RG16 terrain, north-first, already metres relative to
+        # each body's datum. No second download and no changed datum.
+        from PIL import Image
+        config = json.loads((AK / "viewer/worlds" / args.body / "config.json").read_text())
+        level = next(x for x in config["terrain"]["levels"] if x["width"] == 2048)
+        png = AK.parent / "worlds" / args.body / "terrain" / Path(level["url"]).name
+        rgb = np.asarray(Image.open(png).convert("RGB"), dtype=np.int32)
+        planet = (rgb[:, :, 0] * 256 + rgb[:, :, 1] - config["terrain"]["encoding"]["offsetMetres"])[::-1].astype(float)
     if not np.isfinite(planet).all():
         raise ValueError("Planetary DEM has missing cells; do not invent terrain")
     meta, earth = earth_fields()
@@ -140,7 +150,7 @@ def main():
         m["teacherNote"] = "この天体には教師データがありません。"
     meta["modeNote"] = {"fit": "地球で学習した規則を適用した試験的な塗り分け。", "holdout": "教師なし"}
     meta["bodyRadiusMetres"] = args.radius
-    meta["terrainProcessing"] = json.loads((AK / "viewer/worlds" / args.body / "config.json").read_text())["terrain"]["processing"]
+    meta["terrainProcessing"] = json.loads((AK / "viewer/worlds" / args.body / "config.json").read_text())["terrain"].get("processing", {})
     packed(base, stage, meta)
     vmeta = json.loads((AK / "veg/results/veg_display.json").read_text())
     vmeta["fields"] = {}

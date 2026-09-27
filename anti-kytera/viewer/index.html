@@ -41,6 +41,7 @@
     <div class="control-row" id="surface-row">
       <div id="surface-mode" class="segmented">
         <button type="button" data-surface="standard" class="selected">標準</button>
+        <button type="button" data-surface="elevation">標高色</button>
         <button type="button" data-surface="bed">岩盤</button>
         <button type="button" data-surface="sea">海</button>
         <button type="button" data-surface="t2m">気温</button>
@@ -49,6 +50,10 @@
         <button type="button" data-surface="ice">陸氷</button>
         <button type="button" data-surface="veg">植生</button>
       </div>
+    </div>
+    <div class="control-row" id="veg-style-row" hidden>
+      <span>植生表示</span>
+      <div id="veg-style" class="segmented"><button type="button" data-veg-style="detailed" class="selected">15区分</button><button type="button" data-veg-style="simple">簡略5区分</button></div>
     </div>
     <div class="control-row" id="stage-src-row" hidden>
       <div id="stage-src" class="segmented">
@@ -82,7 +87,7 @@
     </div>
     <div id="bottom-panel" class="panel">
       <div class="control-row" id="nav-row">
-        <button type="button" id="world-cycle" class="pill">天体 地球</button>
+        <label for="world-select">天体</label><select id="world-select" class="pill" aria-label="天体を選択"></select>
         <button type="button" id="view-toggle" class="pill">2Dに切替</button>
       </div>
       <div class="control-row" id="axis-row">

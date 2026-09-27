@@ -1,0 +1,65 @@
+name: Build Anti-KyTerra Moon Mars and photos
+
+on:
+  push:
+    branches: [codex/anti-kyterra-worlds-palette]
+    paths:
+      - '.github/workflows/build-anti-kytera-moon-mars-and-photos.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 -m pip install --quiet numpy scipy scikit-learn pillow
+      - name: Build Moon and Mars from their already committed v1s DEMs
+        run: |
+          python3 anti-kytera/stat/predict_planet.py --body moon --radius 1737400 --obliquity 6.68 --rotation 1
+          python3 anti-kytera/stat/predict_planet.py --body mars --radius 3389500 --obliquity 25.19 --rotation 1
+      - name: Download and shrink credited viewing images
+        run: python3 tools/prepare_world_photos.py
+      - name: Commit only generated assets
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add anti-kytera/viewer/worlds/{moon,mars}/stages anti-kytera/viewer/worlds/{moon,mars,mercury,venus}/photo.jpg
+          git diff --cached --quiet && exit 0
+          git commit -m 'Generate Moon Mars stages and four credited viewing maps [skip ci]'
+          git pull --rebase origin "${{ github.ref_name }}"
+          git push origin HEAD:"${{ github.ref_name }}"
+      - name: Publish under an isolated Pages preview folder
+        run: |
+          set -euo pipefail
+          git fetch origin climate-v1-stable-ui
+          git worktree add -b preview-publish ../pages origin/climate-v1-stable-ui
+          dest='../pages/previews/anti-kyterra-worlds'
+          mkdir -p "$dest/anti-kytera/viewer" "$dest/anti-kytera/results" "$dest/anti-kytera/veg/results" "$dest/worlds"
+          rsync -a --delete anti-kytera/viewer/ "$dest/anti-kytera/viewer/"
+          rsync -a --delete anti-kytera/results/ "$dest/anti-kytera/results/"
+          rsync -a --delete anti-kytera/veg/results/ "$dest/anti-kytera/veg/results/"
+          rsync -a --delete worlds/ "$dest/worlds/"
+          printf 'Preview source: %s\n' "$(git rev-parse HEAD)" > "$dest/PREVIEW_SOURCE.txt"
+          cd ../pages
+          git add previews/anti-kyterra-worlds
+          changed=$(git diff --cached --name-only | rg -v '^previews/anti-kyterra-worlds/' || true)
+          if [ -n "$changed" ]; then echo "Unexpected paths: $changed" >&2; exit 1; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Publish isolated expanded Anti-KyTerra preview'
+          git push origin HEAD:climate-v1-stable-ui
+      - name: Install phone-width browser
+        run: npm install --no-save playwright && npx playwright install --with-deps chromium
+      - name: Verify published page
+        env:
+          PREVIEW_URL: https://gusk2020.github.io/world-viewer/previews/anti-kyterra-worlds/anti-kytera/viewer/index.html
+        run: node tools/smoke_expanded.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: expanded-phone-screens
+          path: /tmp/*-expanded.png
+          if-no-files-found: ignore

@@ -1,0 +1,61 @@
+name: Publish and verify expanded Anti-KyTerra preview
+
+on:
+  push:
+    branches: [codex/anti-kyterra-worlds-palette]
+    paths:
+      - '.github/workflows/publish-anti-kytera-worlds.yml'
+      - 'anti-kytera/viewer/js/**'
+      - 'anti-kytera/viewer/css/**'
+      - 'anti-kytera/viewer/index.html'
+      - 'tools/smoke_expanded.mjs'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: anti-kyterra-expanded-pages
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Publish under an isolated Pages preview folder
+        run: |
+          set -euo pipefail
+          git fetch origin climate-v1-stable-ui
+          git worktree add -b preview-publish ../pages origin/climate-v1-stable-ui
+          dest='../pages/previews/anti-kyterra-worlds'
+          mkdir -p "$dest/anti-kytera/viewer" "$dest/anti-kytera/results" "$dest/anti-kytera/veg/results" "$dest/worlds"
+          rsync -a --delete anti-kytera/viewer/ "$dest/anti-kytera/viewer/"
+          rsync -a --delete anti-kytera/results/ "$dest/anti-kytera/results/"
+          rsync -a --delete anti-kytera/veg/results/ "$dest/anti-kytera/veg/results/"
+          rsync -a --delete worlds/ "$dest/worlds/"
+          printf 'Preview source: %s\n' "$(git rev-parse HEAD)" > "$dest/PREVIEW_SOURCE.txt"
+          cd ../pages
+          git add previews/anti-kyterra-worlds
+          changed=$(git diff --cached --name-only | rg -v '^previews/anti-kyterra-worlds/' || true)
+          if [ -n "$changed" ]; then echo "Unexpected paths: $changed" >&2; exit 1; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Publish isolated expanded Anti-KyTerra preview'
+          git push origin HEAD:climate-v1-stable-ui
+      - name: Install phone-width browser
+        run: npm install --no-save playwright && npx playwright install --with-deps chromium
+      - name: Verify published page
+        env:
+          PREVIEW_URL: http://127.0.0.1:8765/anti-kytera/viewer/index.html
+        run: |
+          python3 -m http.server 8765 >/tmp/anti-kyterra-http.log 2>&1 &
+          node tools/smoke_expanded.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: expanded-phone-screens
+          path: /tmp/*-expanded.png
+          if-no-files-found: ignore
