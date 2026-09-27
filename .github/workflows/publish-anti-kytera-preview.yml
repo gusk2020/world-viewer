@@ -1,0 +1,45 @@
+name: Publish isolated Anti-KyTerra v2 preview
+
+on:
+  push:
+    branches: [codex/anti-kyterra-mercury-venus]
+    paths:
+      - '.github/workflows/publish-anti-kytera-preview.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: anti-kyterra-preview
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Add preview folder to existing Pages source
+        run: |
+          set -euo pipefail
+          git fetch origin climate-v1-stable-ui
+          git worktree add -b preview-publish ../pages origin/climate-v1-stable-ui
+          dest='../pages/previews/anti-kyterra-v2'
+          mkdir -p "$dest/anti-kytera/viewer" "$dest/anti-kytera/results" \
+            "$dest/anti-kytera/veg/results" "$dest/worlds"
+          rsync -a --delete anti-kytera/viewer/ "$dest/anti-kytera/viewer/"
+          rsync -a --delete anti-kytera/results/ "$dest/anti-kytera/results/"
+          rsync -a --delete anti-kytera/veg/results/ "$dest/anti-kytera/veg/results/"
+          rsync -a --delete worlds/ "$dest/worlds/"
+          printf 'Preview source: %s\nOnly previews/anti-kyterra-v2/ was added to the Pages source branch.\n' \
+            "$GITHUB_SHA" > "$dest/PREVIEW_SOURCE.txt"
+          cd ../pages
+          git add previews/anti-kyterra-v2
+          if git diff --cached --quiet; then echo 'Preview already current'; exit 0; fi
+          changed=$(git diff --cached --name-only | rg -v '^previews/anti-kyterra-v2/' || true)
+          if [ -n "$changed" ]; then echo "Unexpected paths: $changed" >&2; exit 1; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Publish isolated Anti-KyTerra v2 preview'
+          git push origin HEAD:climate-v1-stable-ui
