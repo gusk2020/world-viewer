@@ -62,6 +62,7 @@ jobs:
           PYTHONPATH: tools
         run: |
           set -e
+          mkdir -p anti-kytera/data
           gdal_translate -q -of ENVI -ot Int16 -r average -outsize 2048 1024 source.nc bed.bin
           rm -f source.nc
           python3 tools/encode_elevation.py bed.bin 2048 1024 \
