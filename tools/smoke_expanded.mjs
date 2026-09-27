@@ -5,9 +5,12 @@ const browser = await chromium.launch({ headless: true, args: ['--use-gl=angle',
 const page = await browser.newPage({ viewport: { width: 393, height: 851 }, isMobile: true, hasTouch: true });
 const errors = [];
 page.on('pageerror', e => errors.push(e.message));
-page.on('response', r => { if (r.status() >= 400) errors.push(`${r.status()} ${r.url()}`); });
+page.on('response', r => {
+  if (r.status() >= 400) errors.push(`${r.status()} ${r.url()}`);
+  if (/fields\.bin|photo\.jpg|display\.json/.test(r.url())) console.log('Asset', r.status(), r.url().split('/').slice(-3).join('/'));
+});
 const ready = async id => page.waitForFunction(x =>
-  window.__akWorldId === x && document.getElementById('loading')?.classList.contains('hidden'), id, { timeout: 180000 });
+  window.__akWorldId === x && document.getElementById('loading')?.classList.contains('hidden'), id, { timeout: 90000 });
 try {
   // A fresh Pages deployment normally takes a little longer than the
   // publisher's push. Wait for its exact URL, not an old or cached build.
@@ -19,9 +22,12 @@ try {
     await page.waitForTimeout(10000);
   }
   await ready('kasoku-sekai');
+  console.log('Ready Earth');
   for (const id of ['moon', 'mars', 'mercury', 'venus', 'kasoku-sekai']) {
+    console.log('Switching to', id);
     await page.selectOption('#world-select', id);
     await ready(id);
+    console.log('Ready', id);
     await page.locator('[data-surface="standard"]').click();
     if (id === 'kasoku-sekai') {
       await page.locator('[data-surface="elevation"]').click();
@@ -48,7 +54,9 @@ try {
   console.log('Phone-width preview passed: five bodies, image/elevation, seven stages, simple vegetation, 2D/3D, sliders.');
 } catch (error) {
   await page.screenshot({ path: '/tmp/expanded-failure.png', timeout: 10000 }).catch(() => {});
-  console.error('World:', await page.locator('#world-select').inputValue().catch(() => '?'),
-    'loading:', await page.locator('#loading').textContent().catch(() => '?'), errors);
+    console.error('World:', await page.locator('#world-select').inputValue().catch(() => '?'),
+    'loading:', await page.locator('#loading').textContent().catch(() => '?'),
+    'status:', await page.evaluate(() => ({ ready: window.__akWorldId, body: document.body.innerText.slice(0, 400),
+      resources: performance.getEntriesByType('resource').slice(-15).map(x => x.name) })).catch(() => '?'), errors);
   throw error;
 } finally { await browser.close(); }

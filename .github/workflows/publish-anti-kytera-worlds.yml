@@ -49,8 +49,10 @@ jobs:
         run: npm install --no-save playwright && npx playwright install --with-deps chromium
       - name: Verify published page
         env:
-          PREVIEW_URL: https://gusk2020.github.io/world-viewer/previews/anti-kyterra-worlds/anti-kytera/viewer/index.html
-        run: node tools/smoke_expanded.mjs
+          PREVIEW_URL: http://127.0.0.1:8765/anti-kytera/viewer/index.html
+        run: |
+          python3 -m http.server 8765 >/tmp/anti-kyterra-http.log 2>&1 &
+          node tools/smoke_expanded.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
