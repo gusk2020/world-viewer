@@ -45,12 +45,14 @@ function polarFootprint(a, w, h) {
 
 export async function loadBin(path) { return (await fetch(path)).arrayBuffer(); }
 
-export async function loadStageData(base) {
+export async function loadStageData(base, planetary = false) {
+  const results = planetary ? `${base}stages/` : `${base}results/`;
+  const vegetation = planetary ? `${base}stages/` : `${base}veg/results/`;
   const [S, V] = await Promise.all([
-    fetch(`${base}results/display.json`).then((r) => r.json()),
-    fetch(`${base}veg/results/veg_display.json`).then((r) => r.json()),
+    fetch(`${results}display.json`).then((r) => { if (!r.ok) throw Error(`Missing stage data: ${r.url}`); return r.json(); }),
+    fetch(`${vegetation}veg_display.json`).then((r) => { if (!r.ok) throw Error(`Missing vegetation data: ${r.url}`); return r.json(); }),
   ]);
-  const [sb, vb] = await Promise.all([loadBin(`${base}results/fields.bin`), loadBin(`${base}veg/results/veg_fields.bin`)]);
+  const [sb, vb] = await Promise.all([loadBin(`${results}fields.bin`), loadBin(`${vegetation}veg_fields.bin`)]);
   const F = {}, D = {};   // F: committed arrays as stored (readout); D: drawing copies
   const view = (meta, buf, keys) => {
     for (const k of keys) {
@@ -95,5 +97,5 @@ export async function loadStageData(base) {
     if (cell("bed", lng, lat) < 0) return 0;
     return cell(`veg_${which}`, lng, lat) || 255;
   }
-  return { S, V, F, D, vcol, vlab, cell, bilinear, drawnComposite, rawComposite };
+  return { S, V, F, D, vcol, vlab, cell, bilinear, drawnComposite, rawComposite, hasTeacher: !planetary };
 }

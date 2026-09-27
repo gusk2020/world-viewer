@@ -1,5 +1,5 @@
 {
-  "_note": "The order here is the order the 天体 button cycles in: 地球 -> 月 -> 火星 -> 地球. Adding a body means putting it where it belongs in this list.",
+  "_note": "Earth -> Moon -> Mars -> Mercury -> Venus",
   "default": "kasoku-sekai",
   "worlds": [
     {
@@ -16,6 +16,16 @@
       "id": "mars",
       "label": "火星",
       "config": "./worlds/mars/config.json"
+    },
+    {
+      "id": "mercury",
+      "label": "水星",
+      "config": "./worlds/mercury/config.json"
+    },
+    {
+      "id": "venus",
+      "label": "金星",
+      "config": "./worlds/venus/config.json"
     }
   ]
 }
