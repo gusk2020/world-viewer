@@ -1,0 +1,7 @@
+{
+  "test": "ai-handoff-v1",
+  "cycle": 3,
+  "maxCycles": 3,
+  "status": "DONE",
+  "lastActor": "CHATGPT"
+}
