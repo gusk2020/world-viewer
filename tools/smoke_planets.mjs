@@ -44,7 +44,10 @@ try {
     if (await page.locator('#ak-condition').isHidden()) throw Error(`${name}: slider limitation hidden`);
     await click('#view-toggle');
     await page.waitForFunction(() => document.getElementById('view-toggle').textContent.includes('3D'));
-    await click('[data-surface="sea"]');
+    // Software WebGL keeps the top panel moving between frames in CI; invoke
+    // the same button handler directly after confirming the 2D mode is open.
+    await page.locator('[data-surface="sea"]').evaluate(el => el.click());
+    await page.waitForFunction(() => document.querySelector('[data-surface="sea"]').classList.contains('selected'));
     await page.locator('#sea-level-slider').evaluate(el => { el.value = '-10'; el.dispatchEvent(new Event('input', { bubbles: true })); });
     await page.waitForTimeout(300);
     await page.screenshot({ path: `/tmp/${name}.png` });
