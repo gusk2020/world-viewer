@@ -257,6 +257,15 @@ agreement 33% (15 classes), 55% in 4 groups; with teacher climate as a
 diagnostic only, 49% -- so the classifier limit and the holdout climate error
 are roughly equal parts. PR #12 code is not changed by this branch.
 
+**Integrated viewer (branch `claude/anti-kytera-integrated`, Draft PR #14, on
+top of #13).** `anti-kytera/globe/` shows all seven stages on one globe; read
+its README. It draws on the GPU: every pixel computes lng/lat from its own
+direction and reads the data grids directly (no equirectangular texture, no
+mesh UVs), relief uses object-space normals with the east-west slope taken over
+a physical distance, and continuous fields are averaged over ~1/cos(lat) cells
+per row so polar cells have an equal footprint. That is what removed the polar
+streaks; do not go back to a painted texture.
+
 ## Architecture (Three.js for 3D, OpenLayers for 2D, one page, toggle button)
 
 **Three.js** for the 3D globe, **OpenLayers** for the 2D map, both mounted

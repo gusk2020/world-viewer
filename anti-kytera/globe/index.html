@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>Anti-KyTerra 地球儀</title>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.185.1/examples/jsm/"
+} }
+</script>
+<style>
+  :root { --bg:#0b0f16; --panel:rgba(16,22,32,.9); --fg:#e8edf4; --muted:#9aa7b8; --acc:#5aa9ff; color-scheme:dark; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--fg);
+    font-family: system-ui, -apple-system, "Noto Sans JP", sans-serif; overflow:hidden; }
+  #globe { position:fixed; inset:0; }
+  .panel { position:fixed; left:8px; right:8px; background:var(--panel); border-radius:10px; padding:5px 7px; font-size:13px; }
+  #top { top:calc(8px + env(safe-area-inset-top, 0px)); }
+  #bottom { bottom:calc(8px + env(safe-area-inset-bottom, 0px)); max-height:44vh; overflow:auto; }
+  .row { display:flex; gap:3px; align-items:center; margin:3px 0; }
+  .row .lab { color:var(--muted); width:2.4em; flex:none; font-size:11.5px; }
+  button { flex:1; min-width:0; background:#1d2838; color:var(--fg); border:1px solid #2f3d52; border-radius:7px;
+    padding:6px 0; font-size:12.5px; white-space:nowrap; }
+  button.on { background:var(--acc); color:#04121f; border-color:var(--acc); font-weight:600; }
+  button:focus-visible { outline:2px solid #fff; }
+  .row.off { opacity:.35; pointer-events:none; }
+  #bar-wrap { display:flex; align-items:center; gap:6px; font-size:12px; font-variant-numeric:tabular-nums; }
+  #bar { flex:1; min-width:0; height:10px; border-radius:3px; }
+  #bar-wrap[hidden], #classes[hidden], #note[hidden] { display:none; }
+  #readout { font-size:13px; line-height:1.4; font-variant-numeric:tabular-nums; }
+  #readout b { font-weight:600; }
+  #readout .t { color:#ffd98a; }
+  #readout .k { color:var(--muted); font-size:11.5px; }
+  #readout .w { color:#ffb4a8; font-size:11.5px; }
+  #readout .m { color:#9fd0ff; }
+  #score { color:#cfe3ff; font-size:12px; font-variant-numeric:tabular-nums; }
+  #note { color:var(--muted); font-size:11px; line-height:1.35; }
+  #classes { display:grid; grid-template-columns:repeat(3, 1fr); gap:2px 6px; font-size:11px; }
+  #classes div { display:flex; align-items:center; gap:4px; min-width:0; white-space:nowrap; overflow:hidden; }
+  #classes i { flex:none; width:11px; height:11px; border-radius:2px; border:1px solid rgba(255,255,255,.25); }
+  #classes .n { color:var(--muted); margin-left:auto; font-variant-numeric:tabular-nums; }
+  #cross { position:fixed; left:50%; top:50%; width:16px; height:16px; margin:-8px 0 0 -8px; pointer-events:none; }
+  #cross:before,#cross:after { content:""; position:absolute; background:#fff; opacity:.85; box-shadow:0 0 2px #000; }
+  #cross:before { left:7px; top:0; width:2px; height:16px; }
+  #cross:after { top:7px; left:0; height:2px; width:16px; }
+  #loading { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; color:var(--muted); }
+</style>
+</head>
+<body>
+<div id="globe"></div>
+<div id="cross"></div>
+<div id="loading">読み込み中…</div>
+<div class="panel" id="top">
+  <div class="row">
+    <button data-v="bed" class="on">1岩盤</button><button data-v="sea">2海</button><button data-v="t2m">3気温</button><button data-v="hum">4湿度</button><button data-v="precip">5降水</button><button data-v="ice">6陸氷</button><button data-v="veg">7植生</button></div>
+  <div class="row" id="srcRow"><span class="lab">表示</span>
+    <button data-src="model" class="on">モデル</button><button data-src="teacher">教師</button><button data-src="diff">差</button></div>
+  <div class="row" id="modeRow"><span class="lab">検証</span>
+    <button data-mode="fit" class="on">地球適合</button><button data-mode="holdout">地域保留</button></div>
+</div>
+<div class="panel" id="bottom">
+  <div id="readout">中央: –</div>
+  <div id="score"></div>
+  <div id="bar-wrap"><span id="lo"></span><canvas id="bar" width="256" height="1"></canvas><span id="hi"></span><span id="unit"></span></div>
+  <div id="classes" hidden></div>
+  <div class="row"><button id="noteBtn">説明</button></div>
+  <div id="note" hidden></div>
+</div>
+<script type="module" src="./app.js"></script>
+</body>
+</html>
