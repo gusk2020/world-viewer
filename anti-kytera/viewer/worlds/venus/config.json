@@ -23,7 +23,12 @@
       "upToMetres": 12000,
       "upStepMetres": 100
     },
-    "surfaceGamma": 1.0
+    "surfaceGamma": 1.0,
+    "reliefColourRangeMetres": [
+      -4000,
+      11000
+    ],
+    "reliefColourRangeNote": "標高色と岩盤の色の両端（m）。この天体の地形の最低〜最高を1000 m単位で外側へ丸めた値。地球は -8000〜6000 のまま。"
   },
   "terrain": {
     "sourceReferenceRadiusMetres": 6051000,
@@ -45,6 +50,8 @@
     "source": "https://www.solarsystemscope.com/textures/download/2k_venus_surface.jpg",
     "credit": "Solar System Scope (INOVE), CC BY 4.0",
     "kind": "Venus: radar-derived synthetic coloured surface",
-    "warning": "Source notes some unmapped gaps use fictional fill; do not interpret image-only details as measured terrain."
+    "warning": "Source notes some unmapped gaps use fictional fill; do not interpret image-only details as measured terrain.",
+    "orientation": "rotate180",
+    "orientationEvidence": "The distributed 2k_venus_surface.jpg is turned 180 degrees against the IAU frame of the Magellan DEM: Maxwell Montes (65.2N 3.3E, highest point in the DEM) appears near 65S 177W in the file. Turned 180 degrees, the image edges correlate with the DEM edges at zero shift (r 0.28 vs <0.12 for any other orientation or shift); checked by tools/verify_planet_alignment.py."
   }
 }

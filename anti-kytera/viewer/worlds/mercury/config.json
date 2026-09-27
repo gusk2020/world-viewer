@@ -23,7 +23,12 @@
       "upToMetres": 12000,
       "upStepMetres": 100
     },
-    "surfaceGamma": 1.0
+    "surfaceGamma": 1.0,
+    "reliefColourRangeMetres": [
+      -6000,
+      5000
+    ],
+    "reliefColourRangeNote": "標高色と岩盤の色の両端（m）。この天体の地形の最低〜最高を1000 m単位で外側へ丸めた値。地球は -8000〜6000 のまま。"
   },
   "terrain": {
     "sourceReferenceRadiusMetres": 2439400,
