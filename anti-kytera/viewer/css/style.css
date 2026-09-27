@@ -256,6 +256,7 @@ html, body {
 #ak-classes .n { color: #9aa7b8; margin-left: auto; font-variant-numeric: tabular-nums; }
 #ak-note { margin: 0; font-size: 0.66rem; font-weight: 400; line-height: 1.35; color: #c8d6ea; }
 #ak-note[hidden] { display: none; }
+#ak-note a { color: #9fd0ff; }
 #axis-row .pill { padding: 0 4px; font-size: 0.78rem; }
 #cross { position: fixed; left: 50%; top: 50%; width: 16px; height: 16px; margin: -8px 0 0 -8px; pointer-events: none; z-index: 4; }
 #cross:before, #cross:after { content: ""; position: absolute; background: #fff; opacity: .85; box-shadow: 0 0 2px #000; }

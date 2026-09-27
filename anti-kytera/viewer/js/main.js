@@ -147,7 +147,9 @@ async function main() {
         $("ak-lo").textContent = BED_LO; $("ak-hi").textContent = BED_HI; $("ak-unit").textContent = "m";
       }
       $("ak-score").textContent = surface === "elevation" ? "標高色：入力地形の高さだけ（推定値ではない）" : "標準：探査画像・地球写真（推定値ではない）";
-      $("ak-note").textContent = surface === "elevation" ? "標高色は探査機・地球の標高を着色。海面を変えても高さ自体は変わらない。" : "標準の画像は探査データ由来の合成・彩色画像を含む。金星は雲の下のレーダー画像由来で可視光写真ではない。";
+      if (surface === "elevation") $("ak-note").textContent = "標高色は探査機・地球の標高を着色。海面を変えても高さ自体は変わらない。";
+      else if (world?.config.image) $("ak-note").innerHTML = '画像：<a href="https://www.solarsystemscope.com/textures/" target="_blank" rel="noopener">Solar System Scope / INOVE</a>、<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>。2048×1024以下に縮小。探査画像に基づく合成・彩色で未観測域の創作的補完あり。金星はレーダー由来。';
+      else $("ak-note").textContent = "標準：地球の衛星画像。";
       return;
     }
     const L = stages.legend();
