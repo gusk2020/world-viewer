@@ -1,0 +1,126 @@
+{
+ "bed_correction_m": 0.0,
+ "features": [
+  "Q_annual",
+  "Q_season",
+  "elev_land",
+  "elev_rough",
+  "land_frac",
+  "land_300km",
+  "elev_300km",
+  "land_1000km",
+  "elev_1000km",
+  "land_3000km",
+  "elev_3000km",
+  "ocean_upwind_500km",
+  "barrier_upwind_500km",
+  "ocean_upwind_2000km",
+  "barrier_upwind_2000km",
+  "ocean_upwind_6000km",
+  "barrier_upwind_6000km",
+  "ocean_downwind_1000km",
+  "ocean_downwind_4000km"
+ ],
+ "scores": {
+  "fit": {
+   "temperature_rmse_K": 0.7763033097133514,
+   "temperature_rmse_land_K": 0.9923965700786316,
+   "temperature_corr": 0.9984614743968099,
+   "humidity_rmse_hPa": 0.48196264448629483,
+   "humidity_corr": 0.9985541947356711,
+   "humidity_global_model_teacher_hPa": [
+    15.79145496502083,
+    15.805316897209975
+   ],
+   "precip_corr_log": 0.9916516501707181,
+   "precip_corr_log_land": 0.9915925871969932,
+   "precip_global_model_teacher": [
+    966.9591895106305,
+    983.0143153523221
+   ],
+   "desert_hit": 1.0,
+   "rainforest_hit": 0.9862123827326527,
+   "ice_iou": 0.9377639760538135,
+   "ice_area_Mkm2": {
+    "Antarctica": [
+     12.470696165208263,
+     13.04211316016061
+    ],
+    "Greenland": [
+     1.7532397246740588,
+     2.0723126504239486
+    ],
+    "other land": [
+     0.0,
+     0.0
+    ]
+   },
+   "ice_volume_Mkm3": {
+    "Antarctica": [
+     25.89669984990511,
+     25.922472533485656
+    ],
+    "Greenland": [
+     2.9658814710568153,
+     2.973191297035845
+    ],
+    "other land": [
+     0.0,
+     0.0
+    ]
+   },
+   "teacher_ice_on_marine_bed_area_Mkm2": 6.816002795617948,
+   "model_ice_on_marine_bed_area_Mkm2": 6.313919925957811
+  },
+  "holdout": {
+   "temperature_rmse_K": 2.6291789980729225,
+   "temperature_rmse_land_K": 3.464247008509944,
+   "temperature_corr": 0.982214630110735,
+   "humidity_rmse_hPa": 2.37564307488988,
+   "humidity_corr": 0.9645440926148053,
+   "humidity_global_model_teacher_hPa": [
+    15.74783577788719,
+    15.805316897209975
+   ],
+   "precip_corr_log": 0.7380047890792237,
+   "precip_corr_log_land": 0.641899416361267,
+   "precip_global_model_teacher": [
+    898.3260289089981,
+    983.0143153523221
+   ],
+   "desert_hit": 0.660841592575964,
+   "rainforest_hit": 0.6978691485718027,
+   "ice_iou": 0.6738786697766331,
+   "ice_area_Mkm2": {
+    "Antarctica": [
+     12.316936270989293,
+     13.04211316016061
+    ],
+    "Greenland": [
+     0.35770887757208336,
+     2.0723126504239486
+    ],
+    "other land": [
+     0.847758292835669,
+     0.0
+    ]
+   },
+   "ice_volume_Mkm3": {
+    "Antarctica": [
+     25.526969264008475,
+     25.922472533485656
+    ],
+    "Greenland": [
+     0.4776001675831522,
+     2.973191297035845
+    ],
+    "other land": [
+     1.2214321402581616,
+     0.0
+    ]
+   },
+   "teacher_ice_on_marine_bed_area_Mkm2": 6.816002795617948,
+   "model_ice_on_marine_bed_area_Mkm2": 6.203101636770009
+  }
+ }
+}

@@ -1,90 +1,51 @@
 {
- "fields": {
-  "t2m_teacher": {
-   "offset": 0,
-   "w": 180,
-   "h": 90
+ "stages": {
+  "bed": {
+   "note": "岩盤だけの地球（水・氷なし）。GEBCO_2026 氷床下地形（岩盤）、補正 +0 m（アプリ用の仮定）。現在の氷床表面は使っていない。",
+   "score": "岩盤の標高 −8000〜+6000 m を色分け（陰影つき）"
   },
-  "precip_teacher": {
-   "offset": 64800,
-   "w": 180,
-   "h": 90
-  },
-  "land": {
-   "offset": 129600,
-   "w": 720,
-   "h": 360
-  },
-  "t2m_model_ST": {
-   "offset": 1166400,
-   "w": 180,
-   "h": 90
-  },
-  "precip_model_ST": {
-   "offset": 1231200,
-   "w": 180,
-   "h": 90
-  },
-  "ice_model_ST": {
-   "offset": 1296000,
-   "w": 720,
-   "h": 360
-  },
-  "ice_teacher_ST": {
-   "offset": 2332800,
-   "w": 720,
-   "h": 360
-  },
-  "t2m_model_E2": {
-   "offset": 3369600,
-   "w": 180,
-   "h": 90
-  },
-  "precip_model_E2": {
-   "offset": 3434400,
-   "w": 180,
-   "h": 90
-  },
-  "ice_model_E2": {
-   "offset": 3499200,
-   "w": 720,
-   "h": 360
-  },
-  "ice_teacher_E2": {
-   "offset": 4536000,
-   "w": 720,
-   "h": 360
+  "sea": {
+   "note": "海抜0 mを固定境界として、岩盤が0 m未満の所に海を置いた。氷床の下で海面下にある岩盤（西南極など）も海になる。",
+   "score": "陸の面積 27.7%（現在の地表で数えると 29.1%）"
   }
  },
- "runs": [
-  {
-   "key": "ST",
-   "experiment": "STAT_v2",
-   "label": "統計"
-  },
-  {
-   "key": "E2",
-   "experiment": "E2_fix",
-   "label": "物理(参考)"
-  }
- ],
- "default": "ST",
+ "modeNote": {
+  "fit": "地球適合＝地球全体で学習し地球に当てはめた値（見たことのある場所）。",
+  "holdout": "地域保留＝経度60°ごとに、その帯を学習から外したモデルで予測した値。"
+ },
  "vars": {
   "t2m": {
-   "model": "t2m_model_",
-   "teacher": "t2m_teacher",
+   "key": "T",
    "unit": "°C",
    "ramp": "temp",
    "lo": -40,
    "hi": 32,
    "diffRange": 15,
    "digits": 1,
-   "modelNote": "モデル: 年平均地表気温（2°格子）。統計版は、その経度帯を学習から外して予測した値。",
-   "teacherNote": "教師: Berkeley Earth 観測解析 1991–2020 年平均（同じ2°格子）。"
+   "modelNote": "モデル: 年平均地表気温（2°格子）。岩盤地形・海陸・日射から推定。",
+   "teacherNote": "教師: Berkeley Earth 観測解析 1991–2020（同じ2°格子、実際の地表＝氷床表面を含む）。",
+   "score": {
+    "fit": "誤差(RMSE) 0.8 K・相関 0.998",
+    "holdout": "誤差(RMSE) 2.6 K・相関 0.982"
+   }
+  },
+  "hum": {
+   "key": "E",
+   "unit": "hPa",
+   "ramp": "hum",
+   "lo": 0,
+   "hi": 32,
+   "diffRange": 6,
+   "digits": 1,
+   "modelNote": "モデル: 年平均の地表付近水蒸気圧（2°格子）。気温の推定値と地形・海からの距離から推定。",
+   "teacherNote": "教師: ERA5 再解析 2 m露点から計算（4年抽出、2°格子）。観測そのものではない。",
+   "score": {
+    "fit": "誤差 0.5 hPa・相関 0.999",
+    "holdout": "誤差 2.4 hPa・相関 0.965"
+   }
   },
   "precip": {
-   "model": "precip_model_",
-   "teacher": "precip_teacher",
+   "key": "P",
    "unit": "mm/年",
    "ramp": "precip",
    "lo": 50,
@@ -92,22 +53,107 @@
    "log": true,
    "diffRange": 1500,
    "digits": 0,
-   "modelNote": "モデル: 年降水量（2°格子）。統計版は経度帯を外した予測。",
-   "teacherNote": "教師: GPCP v2.3 観測解析（衛星＋雨量計）1991–2020（同じ2°格子）。"
+   "modelNote": "モデル: 年降水量（2°格子）。気温・湿度の推定値と地形から推定。",
+   "teacherNote": "教師: GPCP v2.3 観測解析 1991–2020（同じ2°格子）。",
+   "score": {
+    "fit": "相関(対数) 0.99・砂漠 100%・熱帯雨林 99%",
+    "holdout": "相関(対数) 0.74・砂漠 66%・熱帯雨林 70%"
+   }
   },
   "ice": {
-   "model": "ice_model_",
-   "teacher": "ice_teacher_",
-   "teacherPerRun": true,
+   "key": "H",
    "unit": "m",
    "ramp": "ice",
    "lo": 0,
    "hi": 4000,
    "diffRange": 2500,
    "digits": 0,
-   "modelNote": "モデル: 陸氷の厚さ。統計版は無氷の岩盤地形から経度帯を外して予測（0.5°）、物理版は氷ゼロから形成（60 km）。",
-   "teacherNote": "教師: GEBCO_2026 氷表面−氷床下岩盤の接地氷厚（モデルと同じ格子）。山岳氷河・小氷帽は含まない。"
+   "modelNote": "モデル: 接地した陸氷の厚さ（0.5°格子）。海面下の岩盤の上にも置ける（西南極のように）。",
+   "teacherNote": "教師: GEBCO_2026 氷表面−岩盤の接地氷厚（同じ0.5°格子）。山岳氷河は含まない。",
+   "score": {
+    "fit": "一致(IoU) 0.94・南極 12.5/13.0・グリーンランド 1.75/2.07・他 0.00 百万km²",
+    "holdout": "一致(IoU) 0.67・南極 12.3/13.0・グリーンランド 0.36/2.07・他 0.85 百万km²"
+   }
   }
  },
- "caveat": "統計版は地形・海陸・日射から教師に合わせた色分けで、物理計算ではない。物理版は無氷から計算した参考。"
+ "fields": {
+  "bed": {
+   "offset": 0,
+   "w": 1440,
+   "h": 720,
+   "dtype": "i16"
+  },
+  "T_fit": {
+   "offset": 2073600,
+   "w": 180,
+   "h": 90,
+   "dtype": "f32"
+  },
+  "E_fit": {
+   "offset": 2138400,
+   "w": 180,
+   "h": 90,
+   "dtype": "f32"
+  },
+  "P_fit": {
+   "offset": 2203200,
+   "w": 180,
+   "h": 90,
+   "dtype": "f32"
+  },
+  "H_fit": {
+   "offset": 2268000,
+   "w": 720,
+   "h": 360,
+   "dtype": "f32"
+  },
+  "T_holdout": {
+   "offset": 3304800,
+   "w": 180,
+   "h": 90,
+   "dtype": "f32"
+  },
+  "E_holdout": {
+   "offset": 3369600,
+   "w": 180,
+   "h": 90,
+   "dtype": "f32"
+  },
+  "P_holdout": {
+   "offset": 3434400,
+   "w": 180,
+   "h": 90,
+   "dtype": "f32"
+  },
+  "H_holdout": {
+   "offset": 3499200,
+   "w": 720,
+   "h": 360,
+   "dtype": "f32"
+  },
+  "T_teacher": {
+   "offset": 4536000,
+   "w": 180,
+   "h": 90,
+   "dtype": "f32"
+  },
+  "E_teacher": {
+   "offset": 4600800,
+   "w": 180,
+   "h": 90,
+   "dtype": "f32"
+  },
+  "P_teacher": {
+   "offset": 4665600,
+   "w": 180,
+   "h": 90,
+   "dtype": "f32"
+  },
+  "H_teacher": {
+   "offset": 4730400,
+   "w": 720,
+   "h": 360,
+   "dtype": "f32"
+  }
+ }
 }

@@ -236,6 +236,16 @@ no longitude. The globe shows longitude-sector HOLD-OUT predictions only, so
 no region is coloured by a model that saw it. The physical run E2 stays as a
 reference button.
 
+**Terrain-first revision (same day, later): read `anti-kytera/TERRAIN.md` and
+`anti-kytera/STAGES.md`.** Input terrain is ONLY GEBCO_2026 sub-ice bedrock
+with a fixed 0 m correction (an app assumption; literature rebound values are
+spatial and need ice thickness, which may not be used as a feature). Never use
+the present ice surface as bedrock or the teacher ice thickness as a feature.
+The globe shows stages 1 bedrock -> 2 sea at 0 m -> 3 temperature -> 4
+humidity (ERA5 dewpoint via the public NSF NCAR mirror on AWS) -> 5
+precipitation -> 6 land ice, each chained on the previous predictions, with
+"地球適合" (in-sample) and "地域保留" (6-sector hold-out) kept separate.
+
 ## Architecture (Three.js for 3D, OpenLayers for 2D, one page, toggle button)
 
 **Three.js** for the 3D globe, **OpenLayers** for the 2D map, both mounted
