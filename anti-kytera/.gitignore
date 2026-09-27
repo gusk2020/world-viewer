@@ -1,0 +1,5 @@
+runs/*/climate.npz
+runs/*/fields.npz
+runs/plumbing/
+runs/probe_c2/
+model/__pycache__/

@@ -210,6 +210,42 @@ continue.
 Nothing from V0.6 onward is implemented yet. Do not add pieces of them
 now "while already in the file."
 
+## Anti-KyTerra (independent branch, not integrated)
+
+Started 2026-09-27 on branch `claude/anti-kytera-initial-implementation-lx6p6s`,
+PR only, never merged by Claude. Everything lives in `anti-kytera/`
+(independent page `anti-kytera/index.html`; Python model in
+`anti-kytera/model/`; results in `anti-kytera/results/`). It does NOT reuse
+Climate v1 (`js/climate.js`); only `js/cubeSphere.js`/`js/geoConvert.js` are
+shared for drawing. Read `anti-kytera/RESULTS.md` first: first run formed
+Antarctica/Greenland only partially plus a spurious Tibetan ice sheet; the one
+allowed fix (near-surface lapse 6.5 -> 4.5 K/km) removed Tibet but also
+stopped inception on Antarctica/Greenland -- a compensating error exposed. An
+ice slab start keeps them (strong hysteresis). Bedrock comes from
+`.github/workflows/anti-kytera-bed.yml` (GEBCO_2026 sub-ice, on a runner);
+teachers (Berkeley Earth, GPCP) are fetched from public S3, reachable from the
+sandbox. Stop after the audit point; do not integrate into the main app until
+the user decides.
+
+**Policy change (same day): physics diagnosis stopped.** The current Anti-KyTerra
+deliverable is the statistical colouring in `anti-kytera/stat/` (see
+`anti-kytera/STAT.md`): gradient boosting on body-agnostic terrain features
+(insolation from obliquity, elevation, land fraction at several scales,
+upwind/downwind ocean and barriers along the prevailing wind). No place names,
+no longitude. The globe shows longitude-sector HOLD-OUT predictions only, so
+no region is coloured by a model that saw it. The physical run E2 stays as a
+reference button.
+
+**Terrain-first revision (same day, later): read `anti-kytera/TERRAIN.md` and
+`anti-kytera/STAGES.md`.** Input terrain is ONLY GEBCO_2026 sub-ice bedrock
+with a fixed 0 m correction (an app assumption; literature rebound values are
+spatial and need ice thickness, which may not be used as a feature). Never use
+the present ice surface as bedrock or the teacher ice thickness as a feature.
+The globe shows stages 1 bedrock -> 2 sea at 0 m -> 3 temperature -> 4
+humidity (ERA5 dewpoint via the public NSF NCAR mirror on AWS) -> 5
+precipitation -> 6 land ice, each chained on the previous predictions, with
+"地球適合" (in-sample) and "地域保留" (6-sector hold-out) kept separate.
+
 ## Architecture (Three.js for 3D, OpenLayers for 2D, one page, toggle button)
 
 **Three.js** for the 3D globe, **OpenLayers** for the 2D map, both mounted

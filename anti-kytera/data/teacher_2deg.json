@@ -1,0 +1,17 @@
+{
+ "grid": "2x2 degree, row 0 = southernmost, col 0 starts at -180",
+ "period": "1991-2020 climatology",
+ "temperature": {
+  "source": "Berkeley Earth Land+Ocean LatLong1 (observational analysis)",
+  "url": "https://berkeley-earth-temperature.s3.us-west-1.amazonaws.com/Global/Gridded/Land_and_Ocean_LatLong1.nc",
+  "licence": "CC BY-NC 4.0, Berkeley Earth",
+  "global_mean_c": 14.89,
+  "missing_cells": 0
+ },
+ "precipitation": {
+  "source": "GPCP v2.3 monthly CDR (observational analysis, satellite+gauge)",
+  "url": "https://noaa-cdr-precip-gpcp-monthly-pds.s3.amazonaws.com/data/",
+  "licence": "NOAA Climate Data Record, open use",
+  "global_mean_mm_yr": 983.0
+ }
+}

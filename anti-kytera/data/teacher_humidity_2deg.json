@@ -1,0 +1,7 @@
+{
+ "source": "ERA5 hourly 2 m dewpoint (REANALYSIS), NSF NCAR mirror s3://nsf-ncar-era5 (d633000)",
+ "licence": "Copernicus licence; attribution: Contains modified Copernicus Climate Change Service information 2026",
+ "quantity": "near-surface water-vapour pressure, hPa, monthly climatology",
+ "sampling": "years 1994,2001,2008,2015; each month one 27-hour block from day 14",
+ "global_mean_hpa": 15.8
+}
