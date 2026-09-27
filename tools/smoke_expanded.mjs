@@ -5,6 +5,7 @@ const browser = await chromium.launch({ headless: true, args: ['--use-gl=angle',
 const page = await browser.newPage({ viewport: { width: 393, height: 851 }, isMobile: true, hasTouch: true });
 const errors = [];
 page.on('pageerror', e => errors.push(e.message));
+page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
 page.on('response', r => {
   if (r.status() >= 400) errors.push(`${r.status()} ${r.url()}`);
   if (/fields\.bin|photo\.jpg|display\.json/.test(r.url())) console.log('Asset', r.status(), r.url().split('/').slice(-3).join('/'));
@@ -31,7 +32,7 @@ try {
     await page.locator('[data-surface="standard"]').click();
     if (id === 'kasoku-sekai') {
       await page.locator('[data-surface="elevation"]').click();
-      if (!(await page.locator('#ak-score').textContent()).includes('標高色')) throw Error('Earth elevation legend missing');
+      await page.waitForFunction(() => document.querySelector('#ak-score')?.textContent.includes('標高色'));
     }
     for (const stage of ['bed', 'sea', 't2m', 'hum', 'precip', 'ice', 'veg']) {
       await page.locator(`[data-surface="${stage}"]`).click();
