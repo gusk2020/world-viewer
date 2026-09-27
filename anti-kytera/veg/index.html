@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>Anti-KyTerra 植生</title>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.185.1/examples/jsm/"
+} }
+</script>
+<style>
+  :root { --bg:#0b0f16; --panel:rgba(16,22,32,.88); --fg:#e8edf4; --muted:#9aa7b8; --acc:#5aa9ff; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--fg);
+    font-family: system-ui, -apple-system, "Noto Sans JP", sans-serif; overflow:hidden; }
+  #globe { position:fixed; inset:0; }
+  .panel { position:fixed; left:8px; right:8px; background:var(--panel); border-radius:10px;
+    padding:6px 8px; font-size:13px; }
+  #top { top:calc(8px + env(safe-area-inset-top, 0px)); }
+  #bottom { bottom:calc(8px + env(safe-area-inset-bottom, 0px)); max-height:46vh; overflow:auto; }
+  .row { display:flex; gap:4px; align-items:center; margin:3px 0; }
+  .row .lab { color:var(--muted); width:2.6em; flex:none; font-size:12px; }
+  button { flex:1; min-width:0; background:#1d2838; color:var(--fg); border:1px solid #2f3d52; border-radius:7px;
+    padding:6px 1px; font-size:12.5px; }
+  button.on { background:var(--acc); color:#04121f; border-color:var(--acc); font-weight:600; }
+  #readout, #score { font-variant-numeric: tabular-nums; font-size:12px; }
+  #score { color:#cfe3ff; }
+  #note { color:var(--muted); font-size:11px; line-height:1.35; margin-top:3px; }
+  #legend { display:grid; grid-template-columns:repeat(3, 1fr); gap:2px 6px; font-size:11px; margin-top:4px; }
+  #legend[hidden] { display:none; }
+  #legend div { display:flex; align-items:center; gap:4px; min-width:0; white-space:nowrap; overflow:hidden; }
+  #legend i { flex:none; width:11px; height:11px; border-radius:2px; border:1px solid rgba(255,255,255,.25); }
+  #legend .n { color:var(--muted); font-variant-numeric: tabular-nums; margin-left:auto; }
+  #cross { position:fixed; left:50%; top:50%; width:14px; height:14px; margin:-7px 0 0 -7px; pointer-events:none; }
+  #cross:before,#cross:after { content:""; position:absolute; background:#fff; opacity:.8; }
+  #cross:before { left:6px; top:0; width:2px; height:14px; }
+  #cross:after { top:6px; left:0; height:2px; width:14px; }
+  #loading { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; color:var(--muted); }
+</style>
+</head>
+<body>
+<div id="globe"></div>
+<div id="cross"></div>
+<div id="loading">読み込み中…</div>
+<div class="panel" id="top">
+  <div class="row"><span class="lab">表示</span>
+    <button data-src="model" class="on">モデル</button><button data-src="teacher">教師</button><button data-src="diff">一致</button></div>
+  <div class="row" id="modeRow"><span class="lab">検証</span>
+    <button data-mode="fit" class="on">地球適合</button><button data-mode="holdout">地域保留</button></div>
+</div>
+<div class="panel" id="bottom">
+  <div id="readout">中央: –</div>
+  <div id="score"></div>
+  <div class="row"><button id="legendBtn" class="on">凡例</button><button id="noteBtn">説明</button></div>
+  <div id="legend"></div>
+  <div id="note" hidden></div>
+</div>
+<script type="module" src="./app.js"></script>
+</body>
+</html>
