@@ -210,6 +210,23 @@ continue.
 Nothing from V0.6 onward is implemented yet. Do not add pieces of them
 now "while already in the file."
 
+## Anti-KyTerra (independent branch, not integrated)
+
+Started 2026-09-27 on branch `claude/anti-kytera-initial-implementation-lx6p6s`,
+PR only, never merged by Claude. Everything lives in `anti-kytera/`
+(independent page `anti-kytera/index.html`; Python model in
+`anti-kytera/model/`; results in `anti-kytera/results/`). It does NOT reuse
+Climate v1 (`js/climate.js`); only `js/cubeSphere.js`/`js/geoConvert.js` are
+shared for drawing. Read `anti-kytera/RESULTS.md` first: first run formed
+Antarctica/Greenland only partially plus a spurious Tibetan ice sheet; the one
+allowed fix (near-surface lapse 6.5 -> 4.5 K/km) removed Tibet but also
+stopped inception on Antarctica/Greenland -- a compensating error exposed. An
+ice slab start keeps them (strong hysteresis). Bedrock comes from
+`.github/workflows/anti-kytera-bed.yml` (GEBCO_2026 sub-ice, on a runner);
+teachers (Berkeley Earth, GPCP) are fetched from public S3, reachable from the
+sandbox. Stop after the audit point; do not integrate into the main app until
+the user decides.
+
 ## Architecture (Three.js for 3D, OpenLayers for 2D, one page, toggle button)
 
 **Three.js** for the 3D globe, **OpenLayers** for the 2D map, both mounted

@@ -1,0 +1,127 @@
+{
+ "fields": {
+  "t2m_teacher": {
+   "offset": 0,
+   "w": 180,
+   "h": 90
+  },
+  "precip_teacher": {
+   "offset": 64800,
+   "w": 180,
+   "h": 90
+  },
+  "land": {
+   "offset": 129600,
+   "w": 720,
+   "h": 360
+  },
+  "t2m_model_E1": {
+   "offset": 1166400,
+   "w": 180,
+   "h": 90
+  },
+  "precip_model_E1": {
+   "offset": 1231200,
+   "w": 180,
+   "h": 90
+  },
+  "ice_model_E1": {
+   "offset": 1296000,
+   "w": 720,
+   "h": 360
+  },
+  "ice_teacher": {
+   "offset": 2332800,
+   "w": 720,
+   "h": 360
+  },
+  "t2m_model_E2": {
+   "offset": 3369600,
+   "w": 180,
+   "h": 90
+  },
+  "precip_model_E2": {
+   "offset": 3434400,
+   "w": 180,
+   "h": 90
+  },
+  "ice_model_E2": {
+   "offset": 3499200,
+   "w": 720,
+   "h": 360
+  },
+  "t2m_model_S": {
+   "offset": 4536000,
+   "w": 180,
+   "h": 90
+  },
+  "precip_model_S": {
+   "offset": 4600800,
+   "w": 180,
+   "h": 90
+  },
+  "ice_model_S": {
+   "offset": 4665600,
+   "w": 720,
+   "h": 360
+  }
+ },
+ "runs": [
+  {
+   "key": "E1",
+   "experiment": "E1b_limiter_only",
+   "label": "初回"
+  },
+  {
+   "key": "E2",
+   "experiment": "E2_fix",
+   "label": "修整後"
+  },
+  {
+   "key": "S",
+   "experiment": "E2_S_slab1000",
+   "label": "参考:初期氷"
+  }
+ ],
+ "default": "E2",
+ "vars": {
+  "t2m": {
+   "model": "t2m_model_",
+   "teacher": "t2m_teacher",
+   "unit": "°C",
+   "ramp": "temp",
+   "lo": -40,
+   "hi": 32,
+   "diffRange": 15,
+   "digits": 1,
+   "modelNote": "モデル: 年平均地表気温（2°格子、モデル自身の最終地表高度）。",
+   "teacherNote": "教師: Berkeley Earth 観測解析 1991–2020 年平均（同じ2°格子）。"
+  },
+  "precip": {
+   "model": "precip_model_",
+   "teacher": "precip_teacher",
+   "unit": "mm/年",
+   "ramp": "precip",
+   "lo": 50,
+   "hi": 4000,
+   "log": true,
+   "diffRange": 1500,
+   "digits": 0,
+   "modelNote": "モデル: 年降水量（2°格子）。",
+   "teacherNote": "教師: GPCP v2.3 観測解析（衛星＋雨量計）1991–2020（同じ2°格子）。"
+  },
+  "ice": {
+   "model": "ice_model_",
+   "teacher": "ice_teacher",
+   "unit": "m",
+   "ramp": "ice",
+   "lo": 0,
+   "hi": 4000,
+   "diffRange": 2500,
+   "digits": 0,
+   "modelNote": "モデル: 氷なしから形成した陸氷の厚さ（60 km格子）。",
+   "teacherNote": "教師: GEBCO_2026 氷表面−氷床下岩盤の接地氷厚（同じ60 km格子）。山岳氷河・小氷帽は含まない。"
+  }
+ },
+ "caveat": "教師は現在の観測地球、モデルは無氷の岩盤から固定条件で計算した地球。条件が違うので、差をそのままモデル誤差とは断定できない。"
+}
