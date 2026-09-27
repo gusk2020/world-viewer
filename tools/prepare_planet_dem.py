@@ -10,6 +10,7 @@ from pathlib import Path
 
 import numpy as np
 from PIL import Image
+from scipy.ndimage import distance_transform_edt
 
 
 def main():
@@ -41,8 +42,28 @@ def main():
     else:
         raise ValueError(f"Unexpected first longitude coordinate {x0}; inspect map")
     arr = np.fromfile(a.raw, dtype="<f4").reshape(1024, 2048)
+    band = geo["bands"][0]
+    scale, band_offset = float(band.get("scale", 1)), float(band.get("offset", 0))
+    nodata = band.get("noDataValue")
+    missing = ~np.isfinite(arr) | (np.abs(arr) > 30000)
+    if nodata is not None:
+        missing |= arr == float(nodata)
+    missing_count = int(missing.sum())
+    missing_latitude_bounds = None
+    if missing_count:
+        rows = np.flatnonzero(missing.any(axis=1))
+        missing_latitude_bounds = [round(90 - (rows[-1] + .5) * 180 / 1024, 2),
+                                   round(90 - (rows[0] + .5) * 180 / 1024, 2)]
+    if missing_count:
+        if missing_count > arr.size * .05:
+            raise ValueError(f"DEM has {missing_count}/{arr.size} missing cells; inspect source")
+        # A small unresolved region is explicitly identified in metadata and
+        # filled by the closest observed cell. This adds no claimed detail.
+        nearest = distance_transform_edt(missing, return_distances=False, return_indices=True)
+        arr = arr[tuple(nearest)]
+    arr = arr * scale + band_offset
     if not np.isfinite(arr).all() or np.any(np.abs(arr) > 30000):
-        raise ValueError("Missing/invalid DEM samples; no unstated infilling is allowed")
+        raise ValueError("Decoded DEM is invalid; inspect source scale and offset")
     display_radius = config["body"]["radiusMetres"]
     # Convert height above the product datum into height above the body's
     # displayed radius. This is one global datum shift, not a climate rule.
@@ -72,12 +93,16 @@ def main():
     config["terrain"]["processing"] = {
         "sourceDimensions": geo["size"], "sourceFirstLongitude": x0,
         "sourceCoordinateUnits": "degrees" if degrees else "projected metres",
+        "sourceValueScale": scale, "sourceValueOffsetMetres": band_offset,
         "sourceReferenceRadiusMetres": source_radius,
         "displayReferenceRadiusMetres": display_radius,
         "datumShiftMetres": source_radius - display_radius,
         "resampling": "GDAL average to 2048x1024, then 2x2 area means for lower levels",
         "outputMinMaxMetres": [float(south.min()), float(south.max())],
-        "missingCellsAfterResampling": 0,
+        "missingCellsAfterResampling": missing_count,
+        "missingFractionAfterResampling": missing_count / arr.size,
+        "missingLatitudeBoundsDegrees": missing_latitude_bounds,
+        "missingPolicy": "nearest valid elevation on 2048x1024 grid; no new fine detail" if missing_count else "none",
     }
     (conf / "config.json").write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n")
     print(a.body, config["terrain"]["processing"])

@@ -140,6 +140,7 @@ def main():
         m["teacherNote"] = "この天体には教師データがありません。"
     meta["modeNote"] = {"fit": "地球で学習した規則を適用した試験的な塗り分け。", "holdout": "教師なし"}
     meta["bodyRadiusMetres"] = args.radius
+    meta["terrainProcessing"] = json.loads((AK / "viewer/worlds" / args.body / "config.json").read_text())["terrain"]["processing"]
     packed(base, stage, meta)
     vmeta = json.loads((AK / "veg/results/veg_display.json").read_text())
     vmeta["fields"] = {}

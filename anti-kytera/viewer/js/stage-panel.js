@@ -49,7 +49,9 @@ export function createStagePanel(ctx) {
       }
     }
     if (hasTeacher && (isClimate() || veg)) out.note += " 地球適合＝見たことのある場所への当てはめ（ほぼ一致して当然）。実力の目安は地域保留。";
-    if (!hasTeacher) out.note = "地球条件から学習した規則を当てた試験表示。実際の天体環境ではない。教師なし。" + out.note;
+    if (!hasTeacher) out.note = "探査機の地形に地球で学習した規則を当てた試験表示。実際の天体環境ではない。教師なし。" +
+      (S.terrainProcessing?.missingCellsAfterResampling ?
+        ` 地形の欠損${(100 * S.terrainProcessing.missingFractionAfterResampling).toFixed(2)}%は近隣の有効な高さで補完。補完域に観測された細部はない。` : "");
     out.note += " 画面の色：緯度60°より極側は、極付近の細いセルの筋を抑えるため東西に平均した値で描く（描画だけ）。" +
       "海岸線・氷の縁は隣のセルとの間を補間した線。中央の数値は常に平均前の元データのセルの値。" +
       (hasTeacher ? " 形は Anti-KyTerra の岩盤（GEBCO_2026 氷床下地形）、光と海面は v1s と同じ。" : " 地形は探査機の地形図、海面は仮想。日射は地球と同じ強さ、重力1G、大気組成は地球と同じ、放射線は無視。");
