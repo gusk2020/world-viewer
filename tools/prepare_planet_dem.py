@@ -21,25 +21,38 @@ def main():
     conf = Path("anti-kytera/viewer/worlds") / a.body
     geo = json.loads(a.geojson.read_text())
     gt = geo.get("geoTransform")
-    if not gt or abs(abs(gt[1]) * geo["size"][0] - 360) > 1 or abs(abs(gt[5]) * geo["size"][1] - 180) > 1:
-        raise ValueError("Source is not a global 360x180 geographic map; inspect projection before conversion")
+    if not gt or abs(gt[2]) > 1e-6 or abs(gt[4]) > 1e-6 or gt[1] <= 0 or gt[5] >= 0:
+        raise ValueError("Expected north-up global DEM; inspect georeferencing")
     x0 = gt[0]
-    if min(abs(x0), abs(x0 - 360)) < 1:
-        shift = 1024
-    elif abs(x0 + 180) < 1:
-        shift = 0
+    span_x, span_y = gt[1] * geo["size"][0], -gt[5] * geo["size"][1]
+    config = json.loads((conf / "config.json").read_text())
+    source_radius = config["terrain"]["sourceReferenceRadiusMetres"]
+    # USGS simple-cylindrical GeoTIFFs can store projected metres rather than
+    # degrees. Both span checks correspond to a full 360 by 180 degree world.
+    projected_width = 2 * np.pi * source_radius
+    degrees = abs(span_x - 360) < 1 and abs(span_y - 180) < 1
+    metres = abs(span_x / projected_width - 1) < .01 and abs(span_y / (projected_width / 2) - 1) < .01
+    if not (degrees or metres):
+        raise ValueError(f"Source is not a full simple-cylindrical world: {span_x} x {span_y}")
+    if abs(x0 / span_x) < .01:
+        shift = 1024  # source longitudes 0..360
+    elif abs(x0 / span_x + .5) < .01:
+        shift = 0     # source longitudes -180..180
     else:
-        raise ValueError(f"Unexpected first longitude {x0}; inspect map before conversion")
+        raise ValueError(f"Unexpected first longitude coordinate {x0}; inspect map")
     arr = np.fromfile(a.raw, dtype="<f4").reshape(1024, 2048)
     if not np.isfinite(arr).all() or np.any(np.abs(arr) > 30000):
         raise ValueError("Missing/invalid DEM samples; no unstated infilling is allowed")
+    display_radius = config["body"]["radiusMetres"]
+    # Convert height above the product datum into height above the body's
+    # displayed radius. This is one global datum shift, not a climate rule.
+    arr += source_radius - display_radius
     if shift:
         arr = np.roll(arr, shift, axis=1)
     south = np.flipud(arr).copy()
     out = conf / "terrain"
     out.mkdir(exist_ok=True)
     south.astype("<f4").tofile(conf / "bed_2048x1024.f32")
-    config = json.loads((conf / "config.json").read_text())
     offset = config["terrain"]["encoding"]["offsetMetres"]
     levels = []
     for w in (512, 1024, 2048):
@@ -58,6 +71,10 @@ def main():
     config["terrain"]["levels"] = levels
     config["terrain"]["processing"] = {
         "sourceDimensions": geo["size"], "sourceFirstLongitude": x0,
+        "sourceCoordinateUnits": "degrees" if degrees else "projected metres",
+        "sourceReferenceRadiusMetres": source_radius,
+        "displayReferenceRadiusMetres": display_radius,
+        "datumShiftMetres": source_radius - display_radius,
         "resampling": "GDAL average to 2048x1024, then 2x2 area means for lower levels",
         "outputMinMaxMetres": [float(south.min()), float(south.max())],
         "missingCellsAfterResampling": 0,

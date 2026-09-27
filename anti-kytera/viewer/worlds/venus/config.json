@@ -8,7 +8,7 @@
     "dayLengthHours": 5832.6,
     "orbitPeriodDays": 224.701,
     "rotationDirection": -1,
-    "datum": "Venus Magellan GTDR elevation relative to its product reference surface",
+    "datum": "Magellan GTDR heights referenced to 6051.0 km, shifted by -800 m to displayed 6051.8 km radius",
     "assumedGravityMps2": 9.80665,
     "assumedAtmosphere": "Earth composition",
     "assumedSolarFlux": "Earth-equivalent at top of atmosphere",
@@ -25,6 +25,7 @@
     }
   },
   "terrain": {
+    "sourceReferenceRadiusMetres": 6051000,
     "source": "https://planetarymaps.usgs.gov/mosaic/Venus_Magellan_Topography_Global_4641m_v02.tif",
     "encoding": {
       "type": "rg16-metres",
