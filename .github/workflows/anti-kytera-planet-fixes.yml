@@ -1,0 +1,89 @@
+name: Anti-KyTerra planet alignment fixes
+
+# Re-derives Mercury from the USGS DEM with its central meridian read from
+# the GeoTIFF, re-runs Venus's terrain step only to prove it is unchanged and
+# to write its processing record back into config.json, turns the Venus
+# viewing image to the DEM's IAU frame, then refuses to commit unless every
+# layer passes tools/verify_planet_alignment.py.
+on:
+  push:
+    branches: [claude/anti-kytera-v2-planet-fixes]
+    paths:
+      - '.github/workflows/anti-kytera-planet-fixes.yml'
+      - 'tools/prepare_planet_dem.py'
+      - 'tools/prepare_world_photos.py'
+      - 'tools/verify_planet_alignment.py'
+
+permissions:
+  contents: write
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gdal-bin aria2 >/dev/null
+          python3 -m pip install --quiet --break-system-packages numpy scipy scikit-learn pillow
+      - name: Source georeferencing (recorded in the log)
+        run: |
+          set -euo pipefail
+          for body in mercury venus; do
+            url=$(python3 -c "import json;print(json.load(open('anti-kytera/viewer/worlds/$body/config.json'))['terrain']['source'])")
+            echo "== $body $url"
+            gdalinfo "/vsicurl/$url" | sed -n '1,60p'
+          done
+      - name: Mercury and Venus terrain; Mercury stages
+        run: |
+          set -euo pipefail
+          for body in mercury venus; do
+            url=$(python3 -c "import json;print(json.load(open('anti-kytera/viewer/worlds/$body/config.json'))['terrain']['source'])")
+            aria2c -x 12 -s 12 -k 4M --file-allocation=none --console-log-level=warn -o source.tif "$url" \
+              || curl --fail --location --retry 3 -o source.tif "$url"
+            gdalinfo -json source.tif > source.json
+            gdal_translate -q -of ENVI -ot Float32 -r average -outsize 2048 1024 source.tif small.bin
+            python3 tools/prepare_planet_dem.py "$body" small.bin source.json
+            if [ "$body" = mercury ]; then
+              python3 anti-kytera/stat/predict_planet.py --body mercury \
+                --bed anti-kytera/viewer/worlds/mercury/bed_2048x1024.f32 \
+                --radius 2439400 --obliquity 0.034 --rotation 1
+            fi
+            rm -f "anti-kytera/viewer/worlds/$body/bed_2048x1024.f32" source.* small.*
+          done
+          echo "Venus terrain PNGs must be unchanged:"
+          git diff --exit-code --stat -- anti-kytera/viewer/worlds/venus/terrain
+      - name: Venus viewing image in the DEM frame
+        # The texture host refuses runner downloads, so the committed copy is
+        # turned instead: jpegtran -perfect is lossless for a 2048x1024 JPEG.
+        # Turned only while the alignment test says it is still upside down,
+        # so a re-run can never turn it back.
+        run: |
+          set -euo pipefail
+          sudo apt-get install -y -qq libjpeg-turbo-progs >/dev/null
+          f=anti-kytera/viewer/worlds/venus/photo.jpg
+          if python3 -c "
+          import sys; sys.path.insert(0, 'tools')
+          import verify_planet_alignment as v
+          a = v.image_alignment('venus', v.terrain('venus'))
+          print({k: round(x[0], 3) for k, x in a.items()})
+          sys.exit(0 if a['rot180'][0] > a['placed'][0] + .05 else 1)"; then
+            jpegtran -perfect -rotate 180 -copy all -outfile venus.jpg "$f"
+            mv venus.jpg "$f"
+            echo "Venus image turned 180 degrees (lossless)"
+          else
+            echo "Venus image already in the DEM frame"
+          fi
+      - name: Every layer at the same place
+        run: python3 tools/verify_planet_alignment.py
+      - name: Commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add anti-kytera/viewer/worlds/mercury anti-kytera/viewer/worlds/venus
+          git diff --cached --quiet && exit 0
+          git commit -m 'Regenerate Mercury in its true longitude and turn the Venus image to the DEM frame [skip ci]'
+          git pull --rebase origin "${{ github.ref_name }}"
+          git push origin HEAD:"${{ github.ref_name }}"

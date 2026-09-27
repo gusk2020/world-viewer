@@ -5,22 +5,27 @@
 //   stage-draw.js   palette and the one colour function used by 3D and 2D
 //   stage-panel.js  legend/notes and the centre readout (元データ値)
 //
-// state: which stage (v), model/teacher/diff (src), fit/holdout (mode), and
+// state: which stage (v), model/teacher/diff (src; teacher and diff exist on
+// Earth only), mode (always "fit": 地球適合 is the adopted estimate), and
 // the two display conditions that reach the colouring -- the sea level (the
 // sea surface wins where it disagrees with the 0 m estimates) and the water
 // opacity (2D tint). The mean-temperature slider reaches nothing here: every
 // estimate is for present conditions and a 0 m sea, which main.js says on
 // screen whenever a slider moves away from them.
 import { loadStageData } from "./stage-data.js";
-import { createStageDraw, colourScale } from "./stage-draw.js";
+import { createStageDraw, colourScale, BED_LO, BED_HI } from "./stage-draw.js";
 import { createStagePanel } from "./stage-panel.js";
 
-export async function loadStages(base, planetary = false) {
+// options.bedRange: the relief colour range for 岩盤/海/標高色 (Earth keeps
+// -8000..6000); options.processing: the terrain record from config.json.
+export async function loadStages(base, planetary = false, { bedRange = [BED_LO, BED_HI], processing = null } = {}) {
   const data = await loadStageData(base, planetary);
   const state = { v: "bed", src: "model", mode: "fit", seaLevel: 0, opacity: 0.4, vegStyle: "detailed" };
   const ctx = {
     ...data,
     state,
+    bedRange,
+    processing,
     drawnComposite: (which, lng, lat) => data.drawnComposite(which, lng, lat, state.seaLevel),
     isClimate: () => ["t2m", "hum", "precip", "ice"].includes(state.v),
     vm: () => data.S.vars[state.v],
@@ -30,6 +35,8 @@ export async function loadStages(base, planetary = false) {
   const panel = createStagePanel(ctx);
   return {
     hasTeacher: data.hasTeacher,
+    bedRange,
+    processing,
     state,
     apply: draw.apply,
     createMaterial: draw.createMaterial,

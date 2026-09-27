@@ -7,7 +7,8 @@
 import { initGlobe3D } from "./globe3d.js";
 import { initMap2D } from "./map2d.js";
 import { loadStages } from "./stages.js";
-import { ramp, BED_LO, BED_HI } from "./stage-draw.js";
+import { ramp } from "./stage-draw.js";
+import { gapShort, gapNote } from "./stage-panel.js";
 
 const WORLD_INDEX_URL = "./worlds/index.json";
 const AK_BASE = "../";                 // anti-kytera/, where results/ and veg/results/ live
@@ -22,7 +23,12 @@ const $ = (id) => document.getElementById(id);
 
 async function main() {
   const index = await (await fetch(WORLD_INDEX_URL)).json();
-  const earthStagesPromise = loadStages(AK_BASE);
+  // Earth's stages load once and are shared by every visit to Earth. A failed
+  // download is forgotten, so the next visit tries again instead of failing
+  // for the rest of the session.
+  let earthStagesPromise = null;
+  const earthStages = () => (earthStagesPromise ??= loadStages(AK_BASE).catch((err) => { earthStagesPromise = null; throw err; }));
+  earthStages().catch(() => {});
   let stages = null;
 
   const appEl = $("app"), map2dEl = $("map2d"), loading = $("loading");
@@ -40,7 +46,10 @@ async function main() {
   let mode = "3d";
   let globe3d = null, map2d = null, world = null;
   let axisUpright = true, graticuleIndex = 0, lineWhite = false;
-  let surface = "standard", src = "model", vmode = "fit", vegStyle = "detailed";
+  // 地球適合 is the adopted estimate, so the mode is fixed; 教師 and 差 exist on
+  // Earth only and are put back to モデル on every world switch.
+  let surface = "standard", src = "model", vegStyle = "detailed";
+  const vmode = "fit";
   let legendOpen = true;
 
   const isEarth = () => world?.entry.id === "kasoku-sekai";
@@ -117,11 +126,10 @@ async function main() {
   function applySurface() {
     selectButtons("#surface-mode button", "surface", surface);
     selectButtons("#stage-src button", "src", src);
-    selectButtons("#stage-mode button", "mode", vmode);
     selectButtons("#veg-style button", "vegStyle", vegStyle);
     $("veg-style-row").hidden = surface !== "veg";
     srcRow.hidden = !isEarth() || !inStage() || surface === "bed" || surface === "sea";
-    $("stage-mode").parentElement.hidden = !isEarth();
+    if (!isEarth()) src = "model";   // no teacher exists here; never draw an empty one
     document.getElementById("cross").hidden = !hasStages();
     if (!hasStages()) { globe3d.setStage(null); info.hidden = true; return; }
     info.hidden = false;
@@ -144,11 +152,12 @@ async function main() {
       if (surface === "elevation") {
         const bc = $("ak-bar").getContext("2d");
         for (let i = 0; i < 256; i++) { bc.fillStyle = `rgb(${ramp("rock", i / 255).map(Math.round).join(",")})`; bc.fillRect(i, 0, 1, 1); }
-        $("ak-lo").textContent = BED_LO; $("ak-hi").textContent = BED_HI; $("ak-unit").textContent = "m";
+        $("ak-lo").textContent = stages.bedRange[0]; $("ak-hi").textContent = stages.bedRange[1]; $("ak-unit").textContent = "m";
       }
-      $("ak-score").textContent = surface === "elevation" ? "標高色：入力地形の高さだけ（推定値ではない）" : "標準：探査画像・地球写真（推定値ではない）";
-      if (surface === "elevation") $("ak-note").textContent = "標高色は探査機・地球の標高を着色。海面を変えても高さ自体は変わらない。";
-      else if (world?.config.image) $("ak-note").innerHTML = '画像：<a href="https://www.solarsystemscope.com/textures/" target="_blank" rel="noopener">Solar System Scope / INOVE</a>、<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>。2048×1024以下に縮小。探査画像に基づく合成・彩色で未観測域の創作的補完あり。金星はレーダー由来。';
+      const gap = gapShort(world?.config.terrain.processing);
+      $("ak-score").textContent = (surface === "elevation" ? "標高色：地表の高さだけ（推定値ではない）" : "標準：探査画像・地球写真（推定値ではない）") + (gap ? `・${gap}` : "");
+      if (surface === "elevation") $("ak-note").textContent = `標高色は地表の標高を着色（地球は現在の氷表面を含むGEBCO、他の天体は探査機の地形）。色の両端は ${stages.bedRange[0]}〜${stages.bedRange[1]} m。海面を変えても高さ自体は変わらない。` + (gap ? " " + gapNote(world.config.terrain.processing) : "");
+      else if (world?.config.image) $("ak-note").innerHTML = (gap ? gapNote(world.config.terrain.processing) + '<br>' : '') + '画像：<a href="https://www.solarsystemscope.com/textures/" target="_blank" rel="noopener">Solar System Scope / INOVE</a>、<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>。2048×1024以下に縮小' + (world.config.image.orientation === 'rotate180' ? '、地形図の向きに合わせて180°回転' : '') + '。探査画像に基づく合成・彩色で未観測域の創作的補完あり。金星はレーダー由来。';
       else $("ak-note").textContent = "標準：地球の衛星画像。";
       return;
     }
@@ -175,7 +184,6 @@ async function main() {
     surface = b.dataset.surface; requestAnimationFrame(applySurface);
   }));
   document.querySelectorAll("#stage-src button").forEach((b) => b.addEventListener("click", () => { src = b.dataset.src; applySurface(); }));
-  document.querySelectorAll("#stage-mode button").forEach((b) => b.addEventListener("click", () => { vmode = b.dataset.mode; applySurface(); }));
   document.querySelectorAll("#veg-style button").forEach((b) => b.addEventListener("click", () => { vegStyle = b.dataset.vegStyle; applySurface(); }));
   $("legend-toggle").addEventListener("click", (e) => { legendOpen = !legendOpen; e.target.classList.toggle("active", legendOpen); renderLegend(); });
   $("note-toggle").addEventListener("click", (e) => { const n = $("ak-note"); n.hidden = !n.hidden; e.target.classList.toggle("active", !n.hidden); });
@@ -193,7 +201,7 @@ async function main() {
     if (!c) html = "中央: 地球の外";
     else if (!inStage()) {
       const pos = `中央 ${Math.abs(c.lat).toFixed(1)}°${c.lat >= 0 ? "N" : "S"} ${Math.abs(c.lng).toFixed(1)}°${c.lng >= 0 ? "E" : "W"}`;
-      html = `${pos}　<span class="k">${surface === "elevation" ? "標高色" : "標準画像"}</span><br><b class="m">入力</b> 標高 ${globe3d.sampleElevation(c.lng, c.lat).toFixed(0)} m　<b class="t">教師</b> なし`;
+      html = `${pos}　<span class="k">${surface === "elevation" ? "標高色" : "標準画像"}</span><br><b class="m">地表</b> 標高 ${globe3d.sampleElevation(c.lng, c.lat).toFixed(0)} m　<b class="t">教師</b> なし`;
     } else html = stages.readout(c.lng, c.lat);
     if (html !== lastReadout) { $("ak-readout").innerHTML = html; lastReadout = html; }
   }
@@ -248,6 +256,25 @@ async function main() {
 
   // ------------------------------------------------ worlds (v1s's safe switch)
   let loadSequence = 0;
+  // A failed switch leaves the body that was already showing untouched, so
+  // the message only has to get out of the way: a button to go back to it
+  // (or, if nothing loaded yet, to retry), and it also clears by itself.
+  function showLoadFailure(entry) {
+    const back = Boolean(world);
+    window.__akWorldId = world?.entry.id ?? null;
+    worldSelect.value = world?.entry.id || entry.id;
+    loading.replaceChildren(
+      Object.assign(document.createElement("div"), { textContent: `${entry.label}を読み込めませんでした。通信状況を確認してください。` }),
+      Object.assign(document.createElement("button"), {
+        type: "button", className: "pill", id: "loading-dismiss",
+        textContent: back ? `${world.entry.label}の表示に戻る` : "もう一度読み込む",
+        onclick: () => (back ? loading.classList.add("hidden") : loadWorld(entry)),
+      }));
+    if (back) {
+      const token = loadSequence;
+      setTimeout(() => { if (token === loadSequence) loading.classList.add("hidden"); }, 6000);
+    }
+  }
   async function loadWorld(entry) {
     const token = ++loadSequence;
     window.__akWorldId = null;
@@ -261,17 +288,15 @@ async function main() {
       // context. Switching bodies on a software-rendered phone can otherwise
       // keep two large renderers alive throughout the data preparation.
       nextStages = config.globeTexture || config.antiKyTerraStages
-        ? entry.id === "kasoku-sekai" ? await earthStagesPromise :
-          await loadStages(`./worlds/${entry.id}/`, true)
+        ? entry.id === "kasoku-sekai" ? await earthStages() :
+          await loadStages(`./worlds/${entry.id}/`, true, {
+            bedRange: config.display.reliefColourRangeMetres, processing: config.terrain.processing })
         : null;
       next = await initGlobe3D("app", config, onFrame);
     } catch (err) {
       if (next) next.dispose();
       console.error("Failed to switch world:", err);
-      if (token === loadSequence) {
-        loading.textContent = "読み込みに失敗しました。通信状況を確認してください。";
-        worldSelect.value = world?.entry.id || entry.id;
-      }
+      if (token === loadSequence) showLoadFailure(entry);
       return;
     }
     if (token !== loadSequence) { next.dispose(); return; }
@@ -291,6 +316,7 @@ async function main() {
     toggleButton.hidden = !enabled;
     virtualNote.hidden = isEarth();
     surface = "standard";
+    src = "model";
     worldSelect.value = entry.id;
     applySeaLevel();
     applyWaterOpacity();

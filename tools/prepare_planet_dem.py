@@ -2,10 +2,12 @@
 
 The GDAL input is north-first ENVI Float32, downsampled to 2048x1024 with
 area averaging. The source GeoTIFF's geographic bounds are checked by the
-workflow; this script converts longitude 0..360 to -180..180 if needed.
+workflow; this script reads the central meridian and rolls the columns so that
+the output starts at -180 E.
 """
 import argparse
 import json
+import re
 from pathlib import Path
 
 import numpy as np
@@ -35,12 +37,26 @@ def main():
     metres = abs(span_x / projected_width - 1) < .01 and abs(span_y / (projected_width / 2) - 1) < .01
     if not (degrees or metres):
         raise ValueError(f"Source is not a full simple-cylindrical world: {span_x} x {span_y}")
-    if abs(x0 / span_x) < .01:
-        shift = 1024  # source longitudes 0..360
-    elif abs(x0 / span_x + .5) < .01:
-        shift = 0     # source longitudes -180..180
+    # Where the first column starts, in east longitude. A projected
+    # simple-cylindrical grid counts x from its own central meridian, so the
+    # start alone is not enough: MESSENGER's DEM is centred on 180 E, and
+    # reading x0 = -pi R as "-180" put every Mercury feature half a turn away.
+    wkt = (geo.get("coordinateSystem") or {}).get("wkt", "")
+    central = 0.0
+    if not degrees:
+        m = re.search(r'PARAMETER\["(?:central_meridian|Longitude of natural origin)",\s*(-?[0-9.]+)', wkt, re.I)
+        if not m:
+            raise ValueError("Projected DEM without a central meridian; inspect georeferencing")
+        central = float(m.group(1))
+        first_lon = central + np.degrees(x0 / source_radius)
     else:
-        raise ValueError(f"Unexpected first longitude coordinate {x0}; inspect map")
+        first_lon = x0
+    if re.search(r"west", wkt, re.I) and re.search(r"AXIS\[[^\]]*west", wkt, re.I):
+        raise ValueError("West-positive longitude axis; inspect map before use")
+    cols = (first_lon + 180) / 360 * 2048
+    shift = int(round(cols)) % 2048
+    if abs(cols - round(cols)) > .01:
+        raise ValueError(f"First column at {first_lon} E is not on the output grid")
     arr = np.fromfile(a.raw, dtype="<f4").reshape(1024, 2048)
     band = geo["bands"][0]
     scale, band_offset = float(band.get("scale", 1)), float(band.get("offset", 0))
@@ -92,6 +108,8 @@ def main():
     config["terrain"]["levels"] = levels
     config["terrain"]["processing"] = {
         "sourceDimensions": geo["size"], "sourceFirstLongitude": x0,
+        "sourceCentralMeridianDegrees": central, "sourceFirstColumnWestEdgeEastLongitude": float(first_lon),
+        "longitudeRollColumns": shift,
         "sourceCoordinateUnits": "degrees" if degrees else "projected metres",
         "sourceValueScale": scale, "sourceValueOffsetMetres": band_offset,
         "sourceReferenceRadiusMetres": source_radius,

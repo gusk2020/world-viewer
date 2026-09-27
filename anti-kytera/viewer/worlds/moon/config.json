@@ -117,7 +117,12 @@
         ]
       ]
     },
-    "surfaceGamma": 1.0
+    "surfaceGamma": 1.0,
+    "reliefColourRangeMetres": [
+      -9000,
+      11000
+    ],
+    "reliefColourRangeNote": "標高色と岩盤の色の両端（m）。この天体の地形の最低〜最高を1000 m単位で外側へ丸めた値。地球は -8000〜6000 のまま。"
   },
   "terrain": {
     "source": "LRO LOLA global LDEM, 118 m/px, March 2014 (USGS Astrogeology)",

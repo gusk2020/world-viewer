@@ -23,7 +23,12 @@
       "upToMetres": 12000,
       "upStepMetres": 100
     },
-    "surfaceGamma": 1.0
+    "surfaceGamma": 1.0,
+    "reliefColourRangeMetres": [
+      -4000,
+      11000
+    ],
+    "reliefColourRangeNote": "標高色と岩盤の色の両端（m）。この天体の地形の最低〜最高を1000 m単位で外側へ丸めた値。地球は -8000〜6000 のまま。"
   },
   "terrain": {
     "sourceReferenceRadiusMetres": 6051000,
@@ -34,17 +39,58 @@
     },
     "levels": [
       {
+        "url": "./worlds/venus/terrain/venus_512x256.png",
+        "width": 512,
+        "height": 256
+      },
+      {
+        "url": "./worlds/venus/terrain/venus_1024x512.png",
+        "width": 1024,
+        "height": 512
+      },
+      {
         "url": "./worlds/venus/terrain/venus_2048x1024.png",
         "width": 2048,
         "height": 1024
       }
-    ]
+    ],
+    "processing": {
+      "sourceDimensions": [
+        8192,
+        4096
+      ],
+      "sourceFirstLongitude": -19009777.2544,
+      "sourceCentralMeridianDegrees": 0.0,
+      "sourceFirstColumnWestEdgeEastLongitude": -180.0000010181639,
+      "longitudeRollColumns": 0,
+      "sourceCoordinateUnits": "projected metres",
+      "sourceValueScale": 1.0,
+      "sourceValueOffsetMetres": 0.0,
+      "sourceReferenceRadiusMetres": 6051000,
+      "displayReferenceRadiusMetres": 6051800,
+      "datumShiftMetres": -800,
+      "resampling": "GDAL average to 2048x1024, then 2x2 area means for lower levels",
+      "outputMinMaxMetres": [
+        -3685.0,
+        10567.0
+      ],
+      "missingCellsAfterResampling": 166494,
+      "missingFractionAfterResampling": 0.0793905258178711,
+      "missingLatitudeBoundsDegrees": [
+        -89.91,
+        89.91
+      ],
+      "missingPolicy": "nearest valid elevation on 2048x1024 grid; no new fine detail"
+    }
   },
   "globeTexture": "./worlds/venus/photo.jpg",
   "image": {
     "source": "https://www.solarsystemscope.com/textures/download/2k_venus_surface.jpg",
     "credit": "Solar System Scope (INOVE), CC BY 4.0",
     "kind": "Venus: radar-derived synthetic coloured surface",
-    "warning": "Source notes some unmapped gaps use fictional fill; do not interpret image-only details as measured terrain."
+    "warning": "Source notes some unmapped gaps use fictional fill; do not interpret image-only details as measured terrain.",
+    "orientation": "rotate180",
+    "orientationEvidence": "The distributed 2k_venus_surface.jpg is turned 180 degrees against the IAU frame of the Magellan DEM: Maxwell Montes (65.2N 3.3E, highest point in the DEM) appears near 65S 177W in the file. Turned 180 degrees, the image edges correlate with the DEM edges at zero shift (r 0.28 vs <0.12 for any other orientation or shift); checked by tools/verify_planet_alignment.py.",
+    "orientationApplied": "The committed photo.jpg is the PR #18 copy turned 180 degrees with jpegtran -perfect (lossless); tools/prepare_world_photos.py applies the same turn to any fresh download."
   }
 }
