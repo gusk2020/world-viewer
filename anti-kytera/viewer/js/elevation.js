@@ -1,8 +1,9 @@
 // Reading the world's elevation data. Nothing here knows how the globe is
 // drawn, which body it belongs to, or what the heights will be used for --
 // it turns an encoded raster into "metres at this lng/lat" and stops there.
-// Both the terrain mesh and the seabed colouring sample through it, which
-// is what keeps the two from drifting apart.
+// (from v1s's js/elevation.js) The photo mesh, its graticule and the 2D
+// 標準 water all sample the GEBCO ice-surface grid through it. Row 0 is the
+// NORTH pole here, unlike the south-first stage grids.
 
 // Elevation arrives as a PNG carrying real metres, not a brightness ramp:
 // each pixel's red and green channels are the high and low byte of an
@@ -16,8 +17,7 @@
 // Decoded once into an Int16Array of plain metres rather than kept as the
 // raw RGBA the canvas returns: half the memory (4 MB instead of 8 for the
 // level actually loaded) and no unpacking arithmetic in the two hot loops
-// that read it -- the 393k-vertex mesh build and the 8.4M-pixel seabed
-// pass. Int16 covers any real planetary relief with room to spare; Earth's
+// that read it. Int16 covers any real planetary relief with room to spare; Earth's
 // own range is about -10.9 km to +8.8 km.
 export function decodeElevationGrid(image, encoding) {
   if (encoding.type !== "rg16-metres") {
@@ -54,9 +54,7 @@ export function pickElevationLevel(levels, usefulWidth) {
 // grid coordinates. Sampling at a higher resolution than the consumer and
 // interpolating keeps single-pixel noise from showing up as spurious bumps
 // in the mesh, and puts the 0 m contour *between* cells rather than on a
-// cell boundary -- which is what stops the seabed colouring from painting
-// the grid's own ~20 km cells as visible staircase blocks along a drained
-// coastline.
+// cell boundary.
 export function sampleGridMetres(grid, fx, fy) {
   const { metres, width, height } = grid;
   const x0 = Math.floor(fx);

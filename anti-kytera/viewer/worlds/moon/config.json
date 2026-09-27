@@ -115,62 +115,9 @@
  },
  "terrain": {
   "source": "LRO LOLA global LDEM, 118 m/px, March 2014 (USGS Astrogeology)",
-  "build": {
-   "url": "https://planetarymaps.usgs.gov/mosaic/Lunar_LRO_LOLA_Global_LDEM_118m_Mar2014.tif",
-   "filePrefix": "lola118_ldem",
-   "unscale": true,
-   "baseWidth": 4096,
-   "baseHeight": 2048
-  },
   "encoding": {
    "type": "rg16-metres",
    "offsetMetres": 12000
-  },
-  "verify": {
-   "checkWidth": 2048,
-   "landmarks": [
-    {
-     "lon": -17.0,
-     "lat": 33.0,
-     "label": "Mare Imbrium",
-     "minMetres": -5500,
-     "maxMetres": 500
-    },
-    {
-     "lon": -57.0,
-     "lat": 20.0,
-     "label": "Oceanus Procellarum",
-     "minMetres": -5500,
-     "maxMetres": 1000
-    },
-    {
-     "lon": -23.0,
-     "lat": 13.0,
-     "label": "Mare Vaporum / central nearside",
-     "minMetres": -5500,
-     "maxMetres": 1500
-    },
-    {
-     "lon": 180.0,
-     "lat": -55.0,
-     "label": "South Pole-Aitken basin interior",
-     "minMetres": -9500,
-     "maxMetres": -500
-    },
-    {
-     "lon": 160.0,
-     "lat": 25.0,
-     "label": "far-side highlands",
-     "minMetres": -500,
-     "maxMetres": 9000
-    }
-   ],
-   "lowestMetres": -7000,
-   "highestMetres": 7000,
-   "belowDatumFraction": [
-    0.3,
-    0.8
-   ]
   },
   "levels": [
    {

@@ -26,33 +26,6 @@ const RAMP_WIDTH = 1024;
 // in each world's config.json so a body's palette can be tuned to its own
 // elevation range without touching code. Earth's own numbers are useless
 // for Mars, whose relief spans nearly 30 km.
-/**
- * The same ramp as a plain lookup, with no three.js and no texture: one
- * colour per height, for painting an equirectangular image directly.
- *
- * Earth cannot use the 1-D-texture path above -- its mesh's `u` carries
- * longitude, not height, because it draws a photograph. So the 未調整 view
- * paints the ramp into the surface texture instead. Both routes read the
- * same `stops` and interpolate them the same way, which is why a body can be
- * shown either way without its palette meaning two different things.
- */
-export function buildHypsometricLookup(stops) {
-  const { data, minMetres, spanMetres } = rampBytes(stops);
-  return {
-    minMetres,
-    maxMetres: minMetres + spanMetres,
-    colourAt(metres, out) {
-      let i = Math.floor(((metres - minMetres) / spanMetres) * RAMP_WIDTH);
-      if (!(i >= 0)) i = 0;
-      else if (i > RAMP_WIDTH - 1) i = RAMP_WIDTH - 1;
-      out[0] = data[i * 4];
-      out[1] = data[i * 4 + 1];
-      out[2] = data[i * 4 + 2];
-      return out;
-    },
-  };
-}
-
 function rampBytes(stops) {
   if (!Array.isArray(stops) || stops.length < 2) {
     throw new Error("display.hypsometric.stops needs at least two entries");
@@ -80,9 +53,6 @@ function rampBytes(stops) {
 }
 
 export function buildHypsometricRamp(stops) {
-  // One implementation of the ramp, shared with buildHypsometricLookup: two
-  // copies would let a body's texture route and its painted route drift into
-  // meaning different colours for the same height.
   const { data, minMetres, spanMetres } = rampBytes(stops);
   const maxMetres = minMetres + spanMetres;
 

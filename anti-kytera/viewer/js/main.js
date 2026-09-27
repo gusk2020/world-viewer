@@ -1,10 +1,12 @@
-// Anti-KyTerra viewer: PR #14's seven stages with v1s's globe, map and
-// controls. The world loading, 3D/2D switch, sea sliders, axis and graticule
-// behave as in v1s (climate-v1-stable-ui js/main.js); what is new is the 地表
-// row carrying the stages and the centre readout, both from stages.js.
+// v2 entry: loads the worlds, wires the on-screen controls, owns the 3D/2D
+// switch and puts the stage panel (legend, centre readout) on screen.
+//   3D view   globe3d.js      2D view   map2d.js
+//   stages    stages.js (-> stage-data / stage-draw / stage-panel)
+// World loading, the 3D/2D switch, sea sliders, axis and graticule behave as
+// in v1s (climate-v1-stable-ui js/main.js).
 import { initGlobe3D } from "./globe3d.js";
 import { initMap2D } from "./map2d.js";
-import { loadStages, MODE_JA } from "./stages.js";
+import { loadStages } from "./stages.js";
 
 const WORLD_INDEX_URL = "./worlds/index.json";
 const AK_BASE = "../";                 // anti-kytera/, where results/ and veg/results/ live
@@ -255,8 +257,6 @@ async function main() {
     seaLevelSlider.max = String(Math.round(sea.upToMetres / sea.upStepMetres));
     seaLevelSlider.value = "0";
     const earth = globe3d.supportsStages;
-    // Seabed colour is fixed to one kind: v1s's default, the photograph.
-    if (earth) globe3d.setSeabedStyle("photo");
     surfaceRow.hidden = !earth;
     tempRow.hidden = !earth;
     toggleButton.hidden = !earth;
