@@ -39,7 +39,9 @@ const BED_LO = -8000, BED_HI = 6000;
 const AGREE = { same: [70, 170, 90], veg: [215, 70, 60], ice: [120, 150, 220], none: [90, 90, 90], sea: [20, 40, 70] };
 
 const state = { v: "bed", src: "model", mode: "fit" };
-let S, V, F = {}, ready = false;
+let S, V, ready = false;
+const F = {};   // the committed data exactly as stored: read by the centre readout
+const D = {};   // drawing copies of the continuous fields (polar footprint average), GPU only
 const vcol = {}, vlab = {};
 
 async function loadBin(path) { return (await fetch(path)).arrayBuffer(); }
@@ -61,7 +63,7 @@ async function load() {
   view(V, vb, ["veg_fit", "veg_holdout", "veg_teacher"]);
   for (const c of V.classes) { vcol[c.code] = c.rgb; vlab[c.code] = c.ja; }
   for (const [k, s2] of Object.entries(V.special)) { vcol[k] = s2.rgb; vlab[k] = s2.ja; }
-  for (const k of Object.keys(S.fields)) { const m = F[k].meta; F[k] = polarFootprint(F[k], m.w, m.h); F[k].meta = m; }
+  for (const k of Object.keys(S.fields)) { const m = F[k].meta; D[k] = polarFootprint(F[k], m.w, m.h); D[k].meta = m; }
 }
 
 // A latitude/longitude grid keeps the same number of cells in every row, so
@@ -71,8 +73,9 @@ async function load() {
 // radial streaks: the streaks are the grid's cell shape, not the terrain.
 // Each row of every continuous field is therefore averaged over an odd window
 // of about 1/cos(lat) cells, i.e. over a footprint as wide as it is tall. It is
-// the same rule for every row of every field (below ~70 degrees the window is
-// one cell and nothing changes); vegetation classes are never averaged.
+// the same rule for every row of every field (equatorward of 60 degrees the
+// window is one cell and nothing changes); vegetation classes are never
+// averaged. This is for drawing only: the centre readout reads F, never D.
 function polarFootprint(a, w, h) {
   const out = new Float32Array(w * h), pre = new Float64Array(w + 1);
   for (let j = 0; j < h; j++) {
@@ -95,14 +98,14 @@ function polarFootprint(a, w, h) {
 }
 
 // ---------------------------------------------------------------- sampling (CPU twin of the shader, for the readout)
-function cell(name, lng, lat) {
-  const f = F[name].meta;
+function cell(name, lng, lat, src = F) {
+  const f = src[name].meta;
   const y = Math.min(f.h - 1, Math.max(0, Math.floor((lat + 90) / 180 * f.h)));
   const x = ((Math.floor((lng + 180) / 360 * f.w) % f.w) + f.w) % f.w;
-  return F[name][y * f.w + x];
+  return src[name][y * f.w + x];
 }
-function bilinear(name, lng, lat) {
-  const f = F[name].meta, a = F[name];
+function bilinear(name, lng, lat, src = D) {
+  const f = src[name].meta, a = src[name];
   const fy = (lat + 90) / 180 * f.h - 0.5, fx = (lng + 180) / 360 * f.w - 0.5;
   const y0 = Math.max(0, Math.min(f.h - 1, Math.floor(fy))), y1 = Math.min(f.h - 1, y0 + 1);
   const wy = Math.max(0, Math.min(1, fy - y0));
@@ -111,14 +114,23 @@ function bilinear(name, lng, lat) {
   return (a[y0 * f.w + x0] * (1 - wx) + a[y0 * f.w + x1] * wx) * (1 - wy) +
          (a[y1 * f.w + x0] * (1 - wx) + a[y1 * f.w + x1] * wx) * wy;
 }
-// Continuous fields (bed, climate, ice thickness) are interpolated between cell
-// centres; the land/sea line is the 0 m contour and the ice edge the 10 m
-// contour of that interpolation. Vegetation is a class per 0.5-degree cell and
-// is never interpolated. Order: ice > sea > vegetation.
-const bed = (lng, lat) => bilinear("bed", lng, lat);
-function vegComposite(which, lng, lat) {
+// Two ways of asking "what is here", kept apart on purpose.
+//  drawn*: what the screen paints -- continuous fields interpolated between
+//          cell centres of the drawing copy D; the land/sea line is its 0 m
+//          contour and the ice edge its 10 m contour (the shader's twin).
+//  raw*:   what the data says -- the committed cell containing the point, as
+//          stored (land = bed cell >= 0 m, the hand-off land mask; ice = cell
+//          thickness > 10 m, the hand-off ice mask). The readout shows these.
+// Vegetation is a class per 0.5-degree cell in both. Order: ice > sea > vegetation.
+const POLAR_AVERAGE_LAT = 60;   // polarFootprint's window exceeds one cell poleward of this
+function drawnComposite(which, lng, lat) {
   if (bilinear(`H_${which}`, lng, lat) > ICE_MIN_M) return 1;
-  if (bed(lng, lat) < 0) return 0;
+  if (bilinear("bed", lng, lat) < 0) return 0;
+  return cell(`veg_${which}`, lng, lat) || 255;
+}
+function rawComposite(which, lng, lat) {
+  if (cell(`H_${which}`, lng, lat) > ICE_MIN_M) return 1;
+  if (cell("bed", lng, lat) < 0) return 0;
   return cell(`veg_${which}`, lng, lat) || 255;
 }
 
@@ -147,7 +159,7 @@ const seaColour = (z) => ramp("sea", 1 - Math.min(1, -z / 6000));
 // cell-to-cell difference by that tiny distance is what drew the radial
 // streaks. Normals in object space stay meaningful across the pole.
 function buildNormals() {
-  const f = F.bed.meta, a = F.bed, W = f.w, H = f.h, R = 6.371e6;
+  const f = D.bed.meta, a = D.bed, W = f.w, H = f.h, R = 6.371e6;
   const out = new Uint8Array(W * H * 4), dy = Math.PI * R / H;
   for (let j = 0; j < H; j++) {
     const lat = (j + 0.5) / H * Math.PI - Math.PI / 2, cl = Math.cos(lat), sl = Math.sin(lat);
@@ -182,7 +194,7 @@ function floatTex(arr, w, h) {
   return t;
 }
 function buildTextures() {
-  for (const k of Object.keys(S.fields)) T[k] = floatTex(F[k], F[k].meta.w, F[k].meta.h);
+  for (const k of Object.keys(S.fields)) T[k] = floatTex(D[k], D[k].meta.w, D[k].meta.h);
   for (const k of ["veg_fit", "veg_holdout", "veg_teacher"]) {
     const t = new THREE.DataTexture(F[k], F[k].meta.w, F[k].meta.h, THREE.RedFormat, THREE.UnsignedByteType);
     t.minFilter = t.magFilter = THREE.NearestFilter; t.generateMipmaps = false; t.unpackAlignment = 1; t.needsUpdate = true;
@@ -366,31 +378,50 @@ function legend() {
     }
   }
   if (isClimate() || veg) note += " 地球適合＝見たことのある場所への当てはめ（ほぼ一致して当然）。実力の目安は地域保留。";
+  note += " 画面の色：緯度60°より極側は、極付近の細いセルの筋を抑えるため東西に平均した値で描く（描画だけ）。" +
+    "海岸線・氷の縁は隣のセルとの間を補間した線。中央の数値は常に平均前の元データのセルの値で、画面の塗りと元データの判定が違う地点ではその旨を表示する。";
   document.getElementById("score").textContent = score;
   document.getElementById("note").textContent = note;
 }
 
 // ---------------------------------------------------------------- readout at the crosshair
+const SEA_JA = (z) => (z < 0 ? "海" : "陸");
 function readoutText(lng, lat) {
   const pos = `中央 ${Math.abs(lat).toFixed(1)}°${lat >= 0 ? "N" : "S"} ${Math.abs(lng).toFixed(1)}°${lng >= 0 ? "E" : "W"}`;
-  const z = bed(lng, lat);
+  const polar = Math.abs(lat) >= POLAR_AVERAGE_LAT ? "（この緯度の画面の色は東西平均）" : "";
+  const head = `${pos}　<span class="k">元データ値</span>${polar}`;
+  const z = cell("bed", lng, lat);
   const tag = `モデル（${MODE_JA[state.mode]}）`;
+  const warn = (drawn, raw) => drawn === raw ? "" :
+    `<br><span class="w">※画面の塗りは「${drawn}」、元データのセルは「${raw}」（境界付近の補間・平均による差）</span>`;
   if (state.v === "bed" || state.v === "sea") {
-    const what = state.v === "sea" ? (z < 0 ? "・海" : "・陸") : "";
-    return `${pos}<br><b class="m">入力</b> 岩盤 ${z.toFixed(0)} m${what}　<b class="t">教師</b> なし（入力データの段階）`;
+    const what = state.v === "sea" ? `・${SEA_JA(z)}` : "";
+    const w = state.v === "sea" ? warn(SEA_JA(bilinear("bed", lng, lat)), SEA_JA(z)) : "";
+    return `${head}<br><b class="m">入力</b> 岩盤 ${z.toFixed(0)} m${what}　<b class="t">教師</b> なし（入力データの段階）${w}`;
   }
   if (state.v === "veg") {
-    const m = vegComposite(state.mode, lng, lat), t = vegComposite("teacher", lng, lat);
-    return `${pos}<br><b class="m">${tag}</b> ${vlab[m]}　<b class="t">教師</b> ${vlab[t]}`;
+    const m = rawComposite(state.mode, lng, lat), t = rawComposite("teacher", lng, lat);
+    const shown = state.src === "teacher" ? "teacher" : state.mode;
+    const w = state.src === "diff"
+      ? (drawnComposite(state.mode, lng, lat) !== m || drawnComposite("teacher", lng, lat) !== t
+        ? `<br><span class="w">※この地点の画面の塗りは、境界付近の補間・平均で元データのセルと異なる</span>` : "")
+      : warn(vlab[drawnComposite(shown, lng, lat)], vlab[shown === "teacher" ? t : m]);
+    return `${head}<br><b class="m">${tag}</b> ${vlab[m]}　<b class="t">教師</b> ${vlab[t]}${w}`;
   }
   const m0 = vm(), key = m0.key;
-  const mod = bilinear(`${key}_${state.mode}`, lng, lat), tea = bilinear(`${key}_teacher`, lng, lat);
+  const mod = cell(`${key}_${state.mode}`, lng, lat), tea = cell(`${key}_teacher`, lng, lat);
   const f = (x) => Number.isFinite(x) ? x.toFixed(m0.digits) : null;
   const iceTxt = (x) => x > ICE_MIN_M ? `${f(x)} m` : "氷なし";
   const mv = state.v === "ice" ? iceTxt(mod) : `${f(mod)} ${m0.unit}`;
   const tv = f(tea) == null ? "教師なし" : state.v === "ice" ? iceTxt(tea) : `${f(tea)} ${m0.unit}`;
   const dv = f(tea) == null ? "" : `　差 ${mod - tea >= 0 ? "+" : ""}${f(mod - tea)}`;
-  return `${pos}<br><b class="m">${tag}</b> ${mv}　<b class="t">教師</b> ${tv}${dv}`;
+  let w = "";
+  if (state.v === "ice" && state.src !== "diff") {
+    const which = state.src === "teacher" ? "teacher" : state.mode;
+    const ice = (x) => (x > ICE_MIN_M ? "氷" : "氷なし");
+    w = warn(ice(bilinear(`H_${which}`, lng, lat)), ice(which === "teacher" ? tea : mod));
+  }
+  return `${head}<br><b class="m">${tag}</b> ${mv}　<b class="t">教師</b> ${tv}${dv}${w}`;
 }
 
 // ---------------------------------------------------------------- scene
