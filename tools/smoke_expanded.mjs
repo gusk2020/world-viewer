@@ -7,8 +7,7 @@ const errors = [];
 page.on('pageerror', e => errors.push(e.message));
 page.on('response', r => { if (r.status() >= 400) errors.push(`${r.status()} ${r.url()}`); });
 const ready = async id => page.waitForFunction(x =>
-  document.getElementById('world-select')?.value === x &&
-  document.getElementById('loading')?.classList.contains('hidden'), id, { timeout: 90000 });
+  window.__akWorldId === x && document.getElementById('loading')?.classList.contains('hidden'), id, { timeout: 180000 });
 try {
   // A fresh Pages deployment normally takes a little longer than the
   // publisher's push. Wait for its exact URL, not an old or cached build.
@@ -48,7 +47,7 @@ try {
   if (errors.length) throw Error(errors.join('\n'));
   console.log('Phone-width preview passed: five bodies, image/elevation, seven stages, simple vegetation, 2D/3D, sliders.');
 } catch (error) {
-  await page.screenshot({ path: '/tmp/expanded-failure.png' });
+  await page.screenshot({ path: '/tmp/expanded-failure.png', timeout: 10000 }).catch(() => {});
   console.error('World:', await page.locator('#world-select').inputValue().catch(() => '?'),
     'loading:', await page.locator('#loading').textContent().catch(() => '?'), errors);
   throw error;

@@ -30,10 +30,10 @@ export function createStagePanel(ctx) {
       out.classes = items;
       out.score = hasTeacher ? state.vegStyle === "simple" ? `${MODE_JA[state.mode]}：簡略5区分（表示用に統合・一致率未集計）` : `${MODE_JA[state.mode]}：15区分 一致 ${pct(sc.accuracy)}・κ ${sc.kappa.toFixed(2)}・大区分 ${pct(sc.group)}` : "地球で学習した規則による試験的な塗り分け・教師なし";
       out.note = {
-        model: "モデル：年平均の気温・降水・水蒸気圧（3〜5段階と同じ推定値）と岩盤地形から分類した、通年の代表的な自然植生。数字は種類ごとの一致度（%）。",
+        model: "モデル：年平均の気温・降水・水蒸気圧（3〜5段階と同じ推定値）と岩盤地形から分類した、通年の代表的な自然植生。15区分の数字は種類ごとの一致度（%）。",
         teacher: "教師：Ramankutty & Foley (1999) 潜在自然植生（人の土地利用が無い場合）。南極は教師に区分が無い。",
         diff: "差：モデルと教師を、氷＞海＞植生の順に重ねた最終表示どうしで比べた一致・不一致。",
-      }[state.src] + " 重ね順は 氷＞海＞植生。限界：年平均だけなので季節性（常緑/落葉、雨季の有無）は区別できない。";
+      }[state.src] + (state.vegStyle === "simple" ? " 簡略表示は元の15区分を5色へ統合しただけで、再学習はしていません。" : "") + " 重ね順は 氷＞海＞植生。限界：年平均だけなので季節性（常緑/落葉、雨季の有無）は区別できない。";
     } else {
       let rp, lo, hi, unit;
       if (!isClimate()) { rp = "rock"; lo = BED_LO; hi = BED_HI; unit = "m"; }
