@@ -210,6 +210,52 @@ unmodified parent commit** and both give `1e2a09adcdc7`, so the difference
 predates the stabilization pass and is a later UI round's layout, not a
 physics change.)
 
+## 9a. The stable UI: every display control is reachable
+
+A UI-only pass after the physics was closed. **No physics scope changed** —
+no parameter, no field, no default state; only which controls are on screen.
+
+Brought back (they had been hidden while the panel was too tall, and
+`js/main.js` had been forcing them hidden rather than judging them per world):
+
+| Control | Now shown when |
+| --- | --- |
+| 海面の高さ | 3D (every body) |
+| 海の濃さ | 3D (every body) |
+| 海底の色 | 3D, and only on a body with a photograph to repaint |
+| 平均気温 | with the 陸地塗り分け colouring, beside the 気候 set row |
+| 軸 / 線 (tilt + graticule) | 3D — which also makes the scale bar reachable again |
+
+Everything else was already conditional and correct: 地表, 気候 sets, the
+agreement-score lines, the Climate v1 five-way mode row, 蒸発冷却 / 現行風・
+観測風, 年間 / 季節 with its phase slider, 軌道, 海氷 切 / 入 with its
+"実験・面積過大" note, 天体, 2D/3D, and the planet-settings overlay.
+
+**Nothing experimental was newly exposed.** Land ET, eddy diffusion, the
+Hadley/Gill terms, Stage 5C-alpha recycling and the land-sea thermal coupling
+stay off the production UI — they change physics, not the view. 蒸発冷却 and
+現行風/観測風 were already production UI and were neither added nor removed.
+
+Measured at 412x892 (top panel / bottom group, px):
+
+| State | Top | Bottom |
+| --- | --- | --- |
+| default (標準, Climate v1 off) | **122** | **95** |
+| 陸地塗り分け | 210 | 95 |
+| Climate v1 気温モデル | 122 | 197 |
+| + 季節 + 海氷 | 122 | 226 |
+| 気温教師 / 湿度教師 | 122 | 139 |
+| 2D | 0 | 37 |
+| Moon / Mars | 93 | 66 |
+
+The default — what opens — is balanced. The two peaks belong to different
+modes and never coincide with each other's opposite panel, so no single state
+puts more than about a quarter of the screen under one panel. Row height is
+27 px and the panel gap 1 px, tightened in this pass for exactly that reason.
+
+No horizontal scroll, nothing clipped at 412 px, the planet-settings overlay
+fully on screen, and no console errors in any state.
+
 ## 10. Next development, unordered
 
 Written down so that nothing half-lands in the code:

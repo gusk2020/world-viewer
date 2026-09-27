@@ -132,9 +132,7 @@ async function main() {
     // The 天体 row stays reachable in 2D -- picking Mars from there is
     // meaningful, and switching away from Earth forces the view back to 3D.
     // The axis and graticule are 3D-only, so that row goes with the panel.
-    // Hidden for now at the user's request. The tilt and graticule still work
-    // and applyAxis/applyGraticule still run; only the row is off screen.
-    axisRow.hidden = true;
+    axisRow.hidden = mode !== "3d";
     // The nav row stays in 2D -- that is where the 2D/3D button lives now --
     // so the panel itself does not hide; only its 3D-only rows do.
     // The preview paints the 3D globe, so it goes away with the 3D view --
@@ -203,7 +201,9 @@ async function main() {
     const sets = globe3d && globe3d.supportsClimate ? globe3d.climateSets : [];
     const showsClimate = surfaceMode === "climate" && Boolean(globe3d && globe3d.supportsClimate);
     climateSetRow.hidden = !showsClimate || sets.length < 2;
-    climateTempRow.hidden = true; // hidden for now, see loadWorld
+    // The mean temperature drives the climate colouring and nothing else, so
+    // it belongs with it -- same rule as the set row above.
+    climateTempRow.hidden = !showsClimate;
     applyClimateScore();
     applyClimateCompareLine(climateSetRow.hidden ? null : globe3d.getClimateSet());
   }
@@ -1278,10 +1278,9 @@ async function main() {
     climateV1Readout.hidden = true;
     buildClimateSetButtons();
     applySurfaceButtons();
-    // Hidden for now at the user's request -- not removed. They come back
-    // when the standard conditions reproduce the real Earth well enough for
-    // adjusting them to mean something.
-    seabedRow.hidden = true;
+    // The seabed ramp repaints a photograph, so it only exists on a body
+    // that has one -- the same test the 2D toggle uses just below.
+    seabedRow.hidden = !hasPhoto;
     toggleButton.hidden = !hasPhoto;
     // Say plainly that these oceans are not real. The point of the slider on
     // an airless body is "if there were water up to here, where would the

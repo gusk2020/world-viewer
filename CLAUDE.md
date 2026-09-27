@@ -2977,6 +2977,21 @@ balance. The self-forming-ice-sheet track is a separate branch run separately.
    frame earlier is stale** — re-measured at the stabilization commit and at
    its unmodified parent, both give `1e2a09adcdc7`.
 
+### The UI is fully exposed again (stable-UI pass)
+
+Every *display* control is reachable: 海面の高さ, 海の濃さ, 海底の色 (only
+where there is a photograph), 平均気温 (with 陸地塗り分け) and 軸/線 were
+un-hidden, which also brings the scale bar back. `js/main.js` no longer forces
+any row hidden unconditionally — each row is governed by the condition that
+makes it meaningful. **Nothing experimental was newly exposed**: land ET, eddy
+diffusion, Hadley/Gill, recycling and the land-sea coupling change physics
+rather than the view, so they stay off the production UI.
+
+Panels at 412x892: **122 px top / 95 px bottom by default**, peaks of 210
+(陸地塗り分け) and 226 (Climate v1 + 季節 + 海氷) in modes that do not
+coincide. Row height 27 px, panel gap 1 px. Full table in
+`docs/climate-v1-status.md` section 9a.
+
 ### Known limitations, in one line each
 
 No longitudinal SST structure (sea temperature is exactly f(latitude)); no
