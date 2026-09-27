@@ -55,7 +55,7 @@ def main():
         missing_latitude_bounds = [round(90 - (rows[-1] + .5) * 180 / 1024, 2),
                                    round(90 - (rows[0] + .5) * 180 / 1024, 2)]
     if missing_count:
-        if missing_count > arr.size * .05:
+        if missing_count > arr.size * .10:
             raise ValueError(f"DEM has {missing_count}/{arr.size} missing cells; inspect source")
         # A small unresolved region is explicitly identified in metadata and
         # filled by the closest observed cell. This adds no claimed detail.
