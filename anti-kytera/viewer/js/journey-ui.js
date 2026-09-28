@@ -66,17 +66,23 @@ export function createJourneyUI(host) {
   const JOURNEY_FIELDS = ["bed", "T_fit", "P_fit", "E_fit", "H_fit", "veg_fit", "seaice"];
   let worker = null, workerSeq = 0;
   const pending = new Map();
+  // in the page: the same code, blocking while it runs (runs use the page's
+  // copy of the environment, which rebuild() always keeps)
+  function local(kind, payload) {
+    if (kind === "env") return { env: J.buildEnvironment(payload.inputs) };
+    return { journey: J.runJourney(env, payload.cell, payload.seed) };
+  }
   try {
     worker = new Worker(new URL("./journey-worker.js", import.meta.url), { type: "module" });
     worker.onmessage = ({ data }) => { const p = pending.get(data.id); if (!p) return; pending.delete(data.id); data.error ? p.reject(new Error(data.error)) : p.resolve(data); };
-    worker.onerror = () => { worker = null; for (const p of pending.values()) p.reject(new Error("worker failed")); pending.clear(); };
+    worker.onerror = () => {                                    // e.g. workers not allowed here: finish what was asked in the page
+      worker = null;
+      const left = [...pending.values()]; pending.clear();
+      for (const p of left) { try { p.resolve(local(p.kind, p.payload)); } catch (e) { p.reject(e); } }
+    };
   } catch { worker = null; }
-  let localEnv = null;
   function calc(kind, payload) {
-    if (!worker) {                                            // in the page (no worker): same results, blocks while it runs
-      if (kind === "env") { localEnv = J.buildEnvironment(payload.inputs); return Promise.resolve({ env: localEnv }); }
-      return Promise.resolve({ journey: J.runJourney(localEnv, payload.cell, payload.seed) });
-    }
+    if (!worker) { try { return Promise.resolve(local(kind, payload)); } catch (e) { return Promise.reject(e); } }
     const id = ++workerSeq;
     let msg = { id, kind, ...payload };
     if (kind === "env") {
@@ -84,7 +90,7 @@ export function createJourneyUI(host) {
       for (const k of JOURNEY_FIELDS) if (F[k]) fields[k] = { data: F[k].slice(), meta: F[k].meta };   // copy just this field, not the buffer it views
       msg = { id, kind, inputs: { ...payload.inputs, fields } };
     }
-    return new Promise((resolve, reject) => { pending.set(id, { resolve, reject }); worker.postMessage(msg); });
+    return new Promise((resolve, reject) => { pending.set(id, { resolve, reject, kind, payload }); worker.postMessage(msg); });
   }
 
   let rebuildToken = 0, runToken = 0;
