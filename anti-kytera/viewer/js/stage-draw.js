@@ -41,7 +41,7 @@ const WATER = [47, 111, 168];          // v1s's sea colour (0x2f6fa8), for the 2
 const RESPONDING_KEYS = ["T_fit", "E_fit", "P_fit", "H_fit", "veg_fit", "snow", "seaice"];
 const STAGE_ID = { bed: 0, sea: 1, t2m: 2, hum: 2, precip: 2, ice: 3, veg: 4, journey: 5, twopop: 6 };
 // 二集団（試作）: the colours of the two populations and of Neanderthal ancestry (0 -> 10%)
-export const TWOPOP_RGB = { sapiens: [232, 112, 28], neanderthal: [38, 112, 230], ancestryLo: [255, 236, 190], ancestryHi: [120, 10, 40] };
+export const TWOPOP_RGB = { sapiens: [232, 112, 28], neanderthal: [138, 70, 210], ancestryLo: [255, 236, 190], ancestryHi: [120, 10, 40] };
 export const JOURNEY_PASSED = [255, 246, 214];   // reached, not settled: a pale wash
 const JOURNEY_NEVER = 1e9;
 

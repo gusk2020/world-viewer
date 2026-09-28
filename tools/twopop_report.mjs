@@ -60,7 +60,7 @@ const grid = TP.buildTwoPopGrid(env, tpParams);
 console.log(`earth sea ${sea} m, ${TEMP} C: environment ${tEnv} ms, 1-degree grid ${Date.now() - t0} ms, ${grid.la.length} links`);
 const sites = JSON.parse(fs.readFileSync(V + "twopop/initial_sites_earth.json"));
 const obs = JSON.parse(fs.readFileSync(V + "twopop/observations.json"));
-const fittedPath = V + "twopop/fitted.json";
+const fittedPath = V + "twopop/fitted.json", fittedOut = process.env.FITTED_OUT || fittedPath;   // FITTED_OUT: write a sensitivity fit elsewhere
 const fitted = fs.existsSync(fittedPath) ? JSON.parse(fs.readFileSync(fittedPath)) : {};
 const pct = (x) => (isFinite(x) ? (100 * x).toFixed(2) + "%" : String(x));
 function run(condition, weakLanguage, h) {
@@ -95,6 +95,6 @@ for (const condition of CONDS) for (const weakLanguage of [false, true]) {
   console.log("   " + tot);
 }
 if (process.env.FIT) {
-  fs.writeFileSync(fittedPath, JSON.stringify({ _what: "各条件の交雑率（1世代あたり、接触量あたり）。F1（非アフリカ集団 約2.2%）に合わせた値。tools/twopop_report.mjs を FIT=1 で実行すると作り直す。", conditions: { sea: SEA, tempC: TEMP }, ...out }, null, 1));
-  console.log("wrote", fittedPath);
+  fs.writeFileSync(fittedOut, JSON.stringify({ _what: "各条件の交雑率（1世代あたり、接触量あたり）。F1（非アフリカ集団 約2.2%）に合わせた値。tools/twopop_report.mjs を FIT=1 で実行すると作り直す。", conditions: { sea: SEA, tempC: TEMP }, ...out }, null, 1));
+  console.log("wrote", fittedOut);
 }
