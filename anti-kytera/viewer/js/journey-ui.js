@@ -61,7 +61,33 @@ export function createJourneyUI(host) {
     }
     return bedrockCache.get(spec.url);
   }
-  let rebuildToken = 0;
+  // The model runs in a worker (journey-worker.js) when the browser allows it,
+  // else here; either way the same journey.js. calc(kind, payload) -> result.
+  const JOURNEY_FIELDS = ["bed", "T_fit", "P_fit", "E_fit", "H_fit", "veg_fit", "seaice"];
+  let worker = null, workerSeq = 0;
+  const pending = new Map();
+  try {
+    worker = new Worker(new URL("./journey-worker.js", import.meta.url), { type: "module" });
+    worker.onmessage = ({ data }) => { const p = pending.get(data.id); if (!p) return; pending.delete(data.id); data.error ? p.reject(new Error(data.error)) : p.resolve(data); };
+    worker.onerror = () => { worker = null; for (const p of pending.values()) p.reject(new Error("worker failed")); pending.clear(); };
+  } catch { worker = null; }
+  let localEnv = null;
+  function calc(kind, payload) {
+    if (!worker) {                                            // in the page (no worker): same results, blocks while it runs
+      if (kind === "env") { localEnv = J.buildEnvironment(payload.inputs); return Promise.resolve({ env: localEnv }); }
+      return Promise.resolve({ journey: J.runJourney(localEnv, payload.cell, payload.seed) });
+    }
+    const id = ++workerSeq;
+    let msg = { id, kind, ...payload };
+    if (kind === "env") {
+      const F = payload.inputs.fields, fields = {};
+      for (const k of JOURNEY_FIELDS) if (F[k]) fields[k] = { data: F[k].slice(), meta: F[k].meta };   // copy just this field, not the buffer it views
+      msg = { id, kind, inputs: { ...payload.inputs, fields } };
+    }
+    return new Promise((resolve, reject) => { pending.set(id, { resolve, reject }); worker.postMessage(msg); });
+  }
+
+  let rebuildToken = 0, runToken = 0;
   async function rebuild() {                 // new environment (conditions or body changed)
     const stages = host.stages(), globe = host.globe(), config = host.worldConfig();
     if (!stages || !globe || !config) return;
@@ -72,12 +98,18 @@ export function createJourneyUI(host) {
     try { fine = await bedrockFor(config); }
     catch { if (token === rebuildToken) { message = "岩盤の地形を読み込めませんでした。通信状況を確認してください。"; render(); } return; }
     if (token !== rebuildToken || host.stages() !== stages) return;      // superseded
-    env = J.buildEnvironment({ ...stages.journeyInputs(), fine });
+    message = "旅の環境を計算中…"; render();
+    let built;
+    try { built = await calc("env", { inputs: { ...stages.journeyInputs(), fine } }); }
+    catch { if (token === rebuildToken) { message = "旅の環境を計算できませんでした。"; render(); } return; }
+    if (token !== rebuildToken || host.stages() !== stages) return;
+    env = built.env;
     message = "";
-    run();
+    return run();
   }
-  function run() {
+  async function run() {
     pause();
+    const token = ++runToken;
     journey = null; start = null; t = 0; arrows = [];
     host.stages()?.setJourney(null);
     if (!env) return;
@@ -87,11 +119,17 @@ export function createJourneyUI(host) {
       message = `選んだ地点（${r.reason}）の近くに定住できる陸がありません。地図をタップして別の出発点を選んでください。`;
       armed = true; render(); return;
     }
-    start = r;
-    message = r.movedKm > 0
+    const moved = r.movedKm > 0
       ? `選んだ地点は${r.reason}のため、${r.direction}へ${Math.round(r.movedKm).toLocaleString("ja-JP")} km の定住できる陸へ移しました。`
       : "";
-    journey = J.runJourney(env, r.cell, seed);
+    message = "旅を計算中…"; render();
+    const runEnv = env;
+    let done;
+    try { done = await calc("run", { cell: r.cell, seed }); }
+    catch { if (token === runToken) { message = "旅を計算できませんでした。"; render(); } return; }
+    if (token !== runToken || env !== runEnv) return;                       // superseded
+    start = r; message = moved;
+    journey = done.journey;
     arrows = journeyArrows(journey);
     host.stages().setJourney(journey);
     setTime(0);
@@ -233,8 +271,8 @@ export function createJourneyUI(host) {
     rebuild, onTap, readout, legend, draw2d, show, pause, play, setTime,
     worldChanged: () => { lastOverlayKey = ""; },
     state: () => ({ seed, requested, start, t, playing, endYear: journey?.endYear ?? null, armed, message, arrows: arrows.length, shown: shownCount(arrows, t), display: DISPLAYS[display][0], triangles: arrowMesh?.triangles ?? 0 }),
-    startAt: (lng, lat) => { requested = { lng, lat }; armed = false; persist(); run(); },
-    setSeed: (s) => { seed = s; persist(); run(); },
+    startAt: (lng, lat) => { requested = { lng, lat }; armed = false; persist(); return run(); },
+    setSeed: (s) => { seed = s; persist(); return run(); },
     journey: () => journey,
     env: () => env,
   };
