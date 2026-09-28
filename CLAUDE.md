@@ -348,6 +348,20 @@ open water (`crossKm` in journey.js, `CROSSING_KM`). Earth ~1,140 -> ~570
 shown; `tools/journey_arrows_report.mjs` checks coverage and per-region
 first-arrival arrows. UI toggle 矢印 整理/全部.
 
+**Two populations prototype (branch `claude/anti-kytera-v2-two-populations`,
+Draft PR on top of the arrow-merge PR).** Third start mode 二集団（試作）, Earth
+only. `js/twopop.js` (DOM-free, runs in journey-worker.js): 1-deg grid from the
+journey env (`habitBase` added to journey.js), per-population independent
+params (dispersal, sea hop, cold shift, density, growth, Allee), LV
+competition and absorption-type hybridisation into sapiens with ancestry
+tracking. Hypotheses are switches (weak language; hybrid-only = no
+competition). Initial distribution is DATA (`twopop/initial_sites_earth.json`),
+not rules. `twopop/observations.json` splits fit (F1, non-African ~2.2%, used
+to fit h per condition -> `twopop/fitted.json`) from independent checks
+(I1-I5); `js/twopop-eval.js` holds evaluation-only regions. Read
+`anti-kytera/viewer/TWOPOP.md`; `node tools/twopop_report.mjs` (FIT=1, TP=,
+FITTED_OUT=). No condition reproduces I4/I5.
+
 ## Architecture (Three.js for 3D, OpenLayers for 2D, one page, toggle button)
 
 **Three.js** for the 3D globe, **OpenLayers** for the 2D map, both mounted
