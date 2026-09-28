@@ -4,66 +4,19 @@
 // shader (stage-draw.js, stage "journey"), so 3D and 2D share it exactly; in
 // the default "arrows only" display it is not filled at all.
 //
-// Each arrow is one ~1000-year period in one 6x6-degree bin (journey.js):
-// its direction is the land-area-weighted mean direction of the first-arrival
-// steps started in that bin, its thickness the LAND area newly reached (km2),
-// relative to this journey's largest, and its colour the era of that first
-// arrival (discrete bins, the same colours in 3D, 2D and the legend). Every
-// arrow stays once its period has come -- none is dropped or thinned -- so
-// the picture at time t is the whole route so far. Never a head count.
+// Which arrows, their colours and widths come from journey-arrows.js (the
+// era colours, and the display-time merge of nearby same-era arrows); this
+// file only draws them. Every shown arrow stays once it has appeared -- none
+// is dropped or thinned -- so the picture at time t is the whole route so
+// far. Never a head count.
 import * as THREE from "three";
-import { ARROW_YEARS } from "./journey.js";
 import { lngLatToDirection } from "./geoConvert.js";
 
+export { eras, journeyArrows, shownCount, maxShownArea } from "./journey-arrows.js";
+import { shownCount } from "./journey-arrows.js";
+
 const LENGTH_DEG = 3.6, HEAD_SHARE = 0.35;
-const WIDTH_MIN_DEG = 0.2, WIDTH_MAX_DEG = 1.1;
 const OUTLINE_RGB = [20, 20, 28], OUTLINE_ALPHA = 0.75, OUTLINE_DEG = 0.12;   // a dark rim: readable on any background
-
-// the largest newly reached land area of any arrow (km2): the thickest arrow
-export const maxArrowArea = (journey) => journey.arrows.reduce((m, a) => Math.max(m, a.area), 1);
-
-// ------------------------------------------------------------ eras
-// A few equal eras over the journey, on a round step, coloured along an
-// ordered dark-to-light ramp (plasma-like; the dark rim keeps the light end
-// readable). eras(endYear) -> [{ from, to, rgb }]
-const ERA_STEPS = [500, 1000, 2000, 2500, 5000, 10000, 20000, 25000, 50000, 100000];
-const ERA_RAMP = [[0, [13, 8, 135]], [0.1, [65, 4, 157]], [0.2, [106, 0, 168]], [0.3, [143, 13, 164]], [0.4, [177, 42, 144]], [0.5, [204, 71, 120]],
-  [0.6, [225, 100, 98]], [0.7, [242, 132, 75]], [0.8, [252, 166, 54]], [0.9, [252, 206, 37]], [1, [240, 249, 33]]];
-function rampAt(f) {
-  for (let i = 1; i < ERA_RAMP.length; i++) {
-    const [f1, c1] = ERA_RAMP[i], [f0, c0] = ERA_RAMP[i - 1];
-    if (f <= f1) { const u = (f - f0) / (f1 - f0); return c0.map((x, j) => Math.round(x + (c1[j] - x) * u)); }
-  }
-  return ERA_RAMP[ERA_RAMP.length - 1][1];
-}
-export function eras(endYear) {
-  const end = Math.max(endYear, ARROW_YEARS);
-  const step = ERA_STEPS.find((s) => Math.ceil(end / s) <= 8) || ERA_STEPS[ERA_STEPS.length - 1];
-  const n = Math.ceil(end / step), out = [];
-  for (let b = 0; b < n; b++) out.push({ from: b * step, to: (b + 1) * step, rgb: rampAt(n > 1 ? b / (n - 1) : 0.5) });
-  return out;
-}
-const eraOf = (list, years) => list[Math.min(list.length - 1, Math.floor(years / list[0].to))];
-
-// Every arrow of a journey, oldest first (so the newest draw on top), with
-// its width (degrees), era colour and the time it appears (start of its
-// period). Computed once per journey.
-export function journeyArrows(journey) {
-  if (!journey) return [];
-  const aMax = maxArrowArea(journey), list = eras(journey.endYear);
-  return journey.arrows.map((a) => ({
-    ...a,
-    appears: a.m * ARROW_YEARS,
-    width: WIDTH_MIN_DEG + (WIDTH_MAX_DEG - WIDTH_MIN_DEG) * Math.sqrt(a.area / aMax),
-    rgb: eraOf(list, a.m * ARROW_YEARS + ARROW_YEARS / 2).rgb,
-  })).sort((x, y) => x.m - y.m || x.area - y.area);
-}
-// how many of those (a prefix) are on screen at time t
-export function shownCount(arrows, t) {
-  let lo = 0, hi = arrows.length;
-  while (lo < hi) { const m = (lo + hi) >> 1; if (arrows[m].appears <= t) lo = m + 1; else hi = m; }
-  return lo;
-}
 
 // Points along the arrow, as [lng, lat] on the great circle through its start.
 function arrowPath(a) {

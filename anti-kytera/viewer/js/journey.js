@@ -21,6 +21,7 @@ export const GRID_W = 720, GRID_H = 360;          // 0.5 deg, south-first rows
 export const NEVER = 1e9;                          // "not reached" in the float arrays
 export const ARROW_YEARS = 1000;                   // one arrow set per this many years
 export const ARROW_BIN_DEG = 6;                    // arrows aggregate moves over 6 x 6 deg bins
+export const CROSSING_KM = 20;                     // this much open water since the last land counts as a sea crossing (arrows keep it)
 
 // Model constants (JOURNEY.md, "独自の仮定"). Constant ability: no learning,
 // no cold or sea adaptation in this version.
@@ -373,16 +374,21 @@ export function runJourney(env, startCell, seed) {
   // arrival in a sea cell adds no land and is not recorded.
   const dLng = 2 * Math.PI / W;
   const cellArea = (k) => { const j = Math.floor(k / W); return R * R * dLng * (Math.sin(rowLat(j, H) + Math.PI / H / 2) - Math.sin(rowLat(j, H) - Math.PI / H / 2)); };
+  // crossKm[k]: open water crossed since the last land by the label that
+  // first reaches land cell k (km), set whenever a better time is found
+  const crossKm = new Float32Array(N);
   function recordMove(from, to, t) {
     const w = land[to] ? cellArea(to) * env.landFrac[to] : 0;
     if (!(w > 0)) return;
+    const overWater = crossKm[to] >= CROSSING_KM;                 // this land was first reached across a sea crossing
     const a = cellCentre(from), b = cellCentre(to);
     let dl = b.lng - a.lng; if (dl > 180) dl -= 360; if (dl < -180) dl += 360;
     const ex = dl * Math.cos(a.lat * Math.PI / 180), ny = b.lat - a.lat, len = Math.hypot(ex, ny) || 1;
     const bin = Math.min(nby - 1, Math.floor((a.lat + 90) / ARROW_BIN_DEG)) * nbx + Math.min(nbx - 1, Math.floor((a.lng + 180) / ARROW_BIN_DEG));
     const key = Math.floor(t / ARROW_YEARS) * nBins + bin;
     let r = arrows.get(key);
-    if (!r) { r = { m: Math.floor(t / ARROW_YEARS), n: 0, area: 0, ex: 0, ny: 0, x: 0, y: 0, z: 0 }; arrows.set(key, r); }
+    if (!r) { r = { m: Math.floor(t / ARROW_YEARS), n: 0, area: 0, ex: 0, ny: 0, x: 0, y: 0, z: 0, water: 0 }; arrows.set(key, r); }
+    if (overWater) r.water++;
     const cl = Math.cos(a.lat * Math.PI / 180);
     r.n++; r.area += w; r.ex += w * ex / len; r.ny += w * ny / len;
     r.x += w * cl * Math.cos(a.lng * Math.PI / 180); r.y += w * Math.sin(a.lat * Math.PI / 180); r.z += w * cl * Math.sin(a.lng * Math.PI / 180);
@@ -420,12 +426,13 @@ export function runJourney(env, startCell, seed) {
       if (land[k] && !ice[k] && !good(k)) h2 -= landKm * (1 - habit[k] / Hs);
       else if (land[k] && ice[k]) h2 -= landKm;                     // bare edge of an ice cell: fully hostile
       if (h2 < 0 || s2 < 0) continue;
+      const crossed = s - water;                                    // sea budget left on arrival, before landing refills it
       if (land[k]) s2 = Bs;                                         // landed
       const vLand = land[k] ? speed[k] : seaSpeed;
       if (!(vLand > 0)) continue;
       const base = landKm / vLand + water / seaSpeed + iceKm / iceSpeed;
       const t2 = t + base * Math.exp(params.randomSpread * rnd.normal() - params.randomSpread ** 2 / 2);
-      if (t2 < best[k] && !done[k]) { best[k] = t2; push(t2, k, h2, s2, c); }
+      if (t2 < best[k] && !done[k]) { best[k] = t2; crossKm[k] = Bs - crossed; push(t2, k, h2, s2, c); }
       // A later label with more budget left can still matter -- except in a
       // habitable cell, where both budgets refill on arrival, so only the
       // earliest label there can ever lead anywhere.
@@ -441,7 +448,7 @@ export function runJourney(env, startCell, seed) {
     if (mag < 0.35) continue;                                   // moves in all directions: no clear arrow
     const l = Math.hypot(r.x, r.y, r.z);
     list.push({ m: r.m, n: r.n, area: r.area, lng: Math.atan2(r.z, r.x) * 180 / Math.PI, lat: Math.asin(r.y / l) * 180 / Math.PI,
-      east: r.ex / r.area / mag, north: r.ny / r.area / mag });
+      east: r.ex / r.area / mag, north: r.ny / r.area / mag, water: r.water });
   }
   list.sort((a, b) => a.m - b.m || b.area - a.area);
   return { seed, startCell, arrival, settleStart, settleEnd, parent, arrows: list, endYear: lastT, reachedLand };
