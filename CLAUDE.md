@@ -273,6 +273,14 @@ GLSL colour function shared by 3D and 2D) and `stage-panel.js` (legend and
 centre readout), assembled by `stages.js`. The 3D globe is not drawn while 2D
 is showing (hidden-canvas frames piled up on the GPU and stalled 2D redraws).
 
+**Sliders drive the stages (branch `claude/anti-kytera-v2-responsive-sliders`,
+Draft PR on top of #19).** `anti-kytera/viewer/js/stage-respond.js` updates the
+seven stages from the sea-level and mean-temperature sliders with one
+body-agnostic rule set (`rules/response_rules.json`, built from Earth's 地球適合
+fields by `tools/build_response_rules.py`), applied only as differences from
+each body's base; at sea 0 m / 14 C the adopted arrays are restored bit for bit.
+Read `anti-kytera/viewer/RESPONSE.md`.
+
 ## Architecture (Three.js for 3D, OpenLayers for 2D, one page, toggle button)
 
 **Three.js** for the 3D globe, **OpenLayers** for the 2D map, both mounted

@@ -161,11 +161,10 @@ float akNorm(float x) {
   if (akLog) { float l0 = log(max(akLo, 1e-6)); return (log(max(x, akLo)) - l0) / (log(akHi) - l0); }
   return (x - akLo) / (akHi - akLo);
 }
-// ice > sea (at the current sea level) > vegetation; -1 = seabed exposed by a lowered sea
+// ice > sea (at the current sea level) > vegetation
 int akVeg(sampler2D h, sampler2D v, vec2 ll, float z) {
   if (akBil(h, ll) > AK_ICE_MIN) return 1;
   if (z < akSeaLevel) return 0;
-  if (z < 0.0) return -1;
   int c = akCls(v, ll);
   return c == 0 ? 255 : c;
 }
@@ -187,7 +186,6 @@ vec3 akColour(vec2 ll, float z, out float relief) {
       int m = akVeg(akHM, akVM, ll, z), t = akVeg(akHT, akVT, ll, z);
       relief = sea ? 0.0 : 0.15;
       if (m == 0 && t == 0) return vec3(${AGREE.sea.join(",")});
-      if (m == -1) return vec3(${EXPOSED.join(",")});
       if (t == 255) return vec3(${AGREE.none.join(",")});
       if ((akVegSimple ? akVegGroup(m) == akVegGroup(t) : m == t)) return vec3(${AGREE.same.join(",")});
       return (m == 1 || t == 1) ? vec3(${AGREE.ice.join(",")}) : vec3(${AGREE.veg.join(",")});
@@ -195,7 +193,6 @@ vec3 akColour(vec2 ll, float z, out float relief) {
     int k = akSrc == 1 ? akVeg(akHT, akVT, ll, z) : akVeg(akHM, akVM, ll, z);
     relief = sea ? 0.0 : 0.2;
     if (k == 0) return akSeaC(z - akSeaLevel);
-    if (k == -1) return vec3(${EXPOSED.join(",")});
     return texelFetch(akPal, ivec2(k, 0), 0).rgb * 255.0;
   }
   float m = akBil(akFM, ll), t = akBil(akFT, ll);
@@ -363,5 +360,10 @@ void main() {
     U.akVM.value = T[`veg_${state.mode}`]; U.akVT.value = T.veg_teacher;
   }
 
-  return { createMaterial, createElevationMaterial, renderMercator, apply };
+  // After the condition responder rewrote the fields in place: re-upload them.
+  function refreshFields() {
+    for (const k of ["T_fit", "E_fit", "P_fit", "H_fit", "veg_fit"]) T[k].needsUpdate = true;
+  }
+
+  return { createMaterial, createElevationMaterial, renderMercator, apply, refreshFields };
 }

@@ -17,13 +17,13 @@
 // The ice > sea > vegetation judgement is written twice, once here in JS and
 // once in GLSL (stage-draw.js, akVeg): drawnComposite() is the shader's twin
 // (used to say when the screen and the raw cell disagree), rawComposite() is
-// the committed-data definition at a 0 m sea (the readout).
+// the cell definition at a given sea level (the readout).
 export const ICE_MIN_M = 10;          // the hand-off ice mask threshold
 export const POLAR_AVERAGE_LAT = 60;         // polarFootprint's window exceeds one cell poleward of this
 export const MODE_JA = { fit: "地球適合", holdout: "地域保留" };
 
-function polarFootprint(a, w, h) {
-  const out = new Float32Array(w * h), pre = new Float64Array(w + 1);
+export function polarFootprint(a, w, h, out = new Float32Array(w * h)) {
+  const pre = new Float64Array(w + 1);
   for (let j = 0; j < h; j++) {
     const lat = ((j + 0.5) / h - 0.5) * Math.PI;
     const half = Math.min((w >> 1) - 1, Math.max(0, Math.round((1 / Math.max(Math.cos(lat), 1e-6) - 1) / 2)));
@@ -88,13 +88,12 @@ export async function loadStageData(base, planetary = false) {
   function drawnComposite(which, lng, lat, seaLevel) {
     if (bilinear(`H_${which}`, lng, lat) > ICE_MIN_M) return 1;
     const z = bilinear("bed", lng, lat);
-    if (z < seaLevel) return 0;
-    if (z < 0) return -1;                                  // exposed seabed
+    if (z < seaLevel) return 0;                            // seabed a lower sea exposes carries its own estimate
     return cell(`veg_${which}`, lng, lat) || 255;
   }
-  function rawComposite(which, lng, lat) {
+  function rawComposite(which, lng, lat, seaLevel = 0) {
     if (cell(`H_${which}`, lng, lat) > ICE_MIN_M) return 1;
-    if (cell("bed", lng, lat) < 0) return 0;
+    if (cell("bed", lng, lat) < seaLevel) return 0;
     return cell(`veg_${which}`, lng, lat) || 255;
   }
   return { S, V, F, D, vcol, vlab, cell, bilinear, drawnComposite, rawComposite, hasTeacher: !planetary };
