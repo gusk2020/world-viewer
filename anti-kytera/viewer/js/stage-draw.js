@@ -24,6 +24,8 @@ const RAMP_ROWS = Object.keys(RAMPS);
 export const BED_LO = -8000, BED_HI = 6000;
 export const AGREE = { same: [70, 170, 90], veg: [215, 70, 60], ice: [120, 150, 220], none: [90, 90, 90], sea: [20, 40, 70] };
 export const EXPOSED = [150, 140, 125];      // seabed above a lowered sea: no vegetation estimate exists there
+export const SNOW = [212, 214, 222];         // seasonal snow (drawn by its share of the year)
+export const SEA_ICE = [150, 198, 224];      // sea ice (the same); land ice keeps the vegetation palette's white
 export const SIMPLE_VEG = [
   { codes: [11, 12, 13, 14, 15, 16, 17, 18], ja: "森林", rgb: [36, 122, 65] },
   { codes: [19, 20], ja: "サバンナ・草原", rgb: [100, 170, 70] },
@@ -64,6 +66,7 @@ export function createStageDraw(ctx) {
     return t;
   }
   for (const k of Object.keys(S.fields)) T[k] = floatTex(D[k], D[k].meta.w, D[k].meta.h);
+  for (const k of ["snow", "seaice"]) T[k] = floatTex(D[k], D[k].meta.w, D[k].meta.h);   // stage-respond.js
   for (const k of ["veg_fit", "veg_holdout", "veg_teacher"]) {
     const t = new THREE.DataTexture(F[k], F[k].meta.w, F[k].meta.h, THREE.RedFormat, THREE.UnsignedByteType);
     t.minFilter = t.magFilter = THREE.NearestFilter; t.generateMipmaps = false; t.unpackAlignment = 1; t.needsUpdate = true;
@@ -113,6 +116,7 @@ export function createStageDraw(ctx) {
   const U = {
     akBed: { value: T.bed }, akNrm: { value: T.normal }, akFM: { value: T.T_fit }, akFT: { value: T.T_teacher },
     akHM: { value: T.H_fit }, akHT: { value: T.H_teacher }, akVM: { value: T.veg_fit }, akVT: { value: T.veg_teacher },
+    akSN: { value: T.snow }, akSI: { value: T.seaice },
     akRamp: { value: T.ramp }, akPal: { value: T.pal },
     akStage: { value: 0 }, akSrc: { value: 0 }, akRampRow: { value: 0 }, akNRamps: { value: RAMP_ROWS.length },
     akLo: { value: 0 }, akHi: { value: 1 }, akLog: { value: false }, akSeaLevel: { value: 0 }, akVegSimple: { value: false },
@@ -120,7 +124,7 @@ export function createStageDraw(ctx) {
   };
 
   const GLSL = /* glsl */`
-uniform sampler2D akBed, akNrm, akFM, akFT, akHM, akHT, akVM, akVT, akRamp, akPal;
+uniform sampler2D akBed, akNrm, akFM, akFT, akHM, akHT, akVM, akVT, akRamp, akPal, akSN, akSI;
 uniform int akStage, akSrc, akRampRow, akNRamps;
 uniform float akLo, akHi, akSeaLevel;
 uniform bool akLog, akVegSimple;
@@ -168,6 +172,9 @@ int akVeg(sampler2D h, sampler2D v, vec2 ll, float z) {
   int c = akCls(v, ll);
   return c == 0 ? 255 : c;
 }
+// seasonal snow over land and sea ice over the sea, by their share of the year
+vec3 akSnow(vec3 c, vec2 ll) { return mix(c, vec3(${SNOW.join(",")}), 0.85 * clamp(akBil(akSN, ll), 0.0, 1.0)); }
+vec3 akSeaIce(vec3 c, vec2 ll) { return mix(c, vec3(${SEA_ICE.join(",")}), 0.9 * clamp(akBil(akSI, ll), 0.0, 1.0)); }
 vec2 akLngLat(vec3 p) {
   vec3 d = normalize(p);
   float lat = degrees(asin(clamp(d.y, -1.0, 1.0)));
@@ -192,15 +199,17 @@ vec3 akColour(vec2 ll, float z, out float relief) {
     }
     int k = akSrc == 1 ? akVeg(akHT, akVT, ll, z) : akVeg(akHM, akVM, ll, z);
     relief = sea ? 0.0 : 0.2;
-    if (k == 0) return akSeaC(z - akSeaLevel);
-    return texelFetch(akPal, ivec2(k, 0), 0).rgb * 255.0;
+    if (k == 0) return akSrc == 0 ? akSeaIce(akSeaC(z - akSeaLevel), ll) : akSeaC(z - akSeaLevel);
+    vec3 v = texelFetch(akPal, ivec2(k, 0), 0).rgb * 255.0;
+    return akSrc == 0 && k != 1 ? akSnow(v, ll) : v;
   }
   float m = akBil(akFM, ll), t = akBil(akFT, ll);
   float x = akSrc == 2 ? m - t : akSrc == 0 ? m : t;
   if (akStage == 3) {
     bool show = akSrc == 2 ? abs(x) >= 1.0 : x > AK_ICE_MIN;
     if (show) { relief = 0.15; return akRampC(akRampRow, akNorm(x)); }
-    return sea ? akSeaC(z - akSeaLevel) * 0.8 : akRock(z) * 0.85;
+    if (akSrc != 0) return sea ? akSeaC(z - akSeaLevel) * 0.8 : akRock(z) * 0.85;
+    return sea ? akSeaIce(akSeaC(z - akSeaLevel) * 0.8, ll) : akSnow(akRock(z) * 0.85, ll);
   }
   relief = sea ? 0.0 : 0.2;
   return akRampC(akRampRow, akNorm(x));
@@ -362,7 +371,7 @@ void main() {
 
   // After the condition responder rewrote the fields in place: re-upload them.
   function refreshFields() {
-    for (const k of ["T_fit", "E_fit", "P_fit", "H_fit", "veg_fit"]) T[k].needsUpdate = true;
+    for (const k of ["T_fit", "E_fit", "P_fit", "H_fit", "veg_fit", "snow", "seaice"]) T[k].needsUpdate = true;
   }
 
   return { createMaterial, createElevationMaterial, renderMercator, apply, refreshFields };

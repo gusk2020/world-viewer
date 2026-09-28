@@ -3,7 +3,7 @@
 // arrays (F) through cell(); the drawing copies are consulted only to say
 // when the screen and the raw cell disagree.
 import { ICE_MIN_M, POLAR_AVERAGE_LAT, MODE_JA } from "./stage-data.js";
-import { ramp, seaColour, AGREE, SIMPLE_VEG, simpleVeg } from "./stage-draw.js";
+import { ramp, seaColour, AGREE, SIMPLE_VEG, simpleVeg, SNOW, SEA_ICE } from "./stage-draw.js";
 
 // The terrain's missing-data record (config.json terrain.processing), in the
 // same words wherever it is shown: the score line (always visible) carries
@@ -42,7 +42,8 @@ export function createStagePanel(ctx) {
           const iou = teacherHere() ? sc.iou[String(c.code)] : null;
           items.push([c.rgb, c.ja, state.src === "model" && iou != null ? Math.round(iou * 100) : null]);
         }
-        items.push([vcol[1], "陸氷"], [seaColour(-3000), "海"]);
+        items.push([vcol[1], "陸氷（氷床・氷河）"], [seaColour(-3000), "海"]);
+        if (state.src === "model") items.push([SNOW, "積雪（1年の積もる割合で濃く）"], [SEA_ICE, "海氷（1年の凍る割合で濃く）"]);
         if (state.src === "teacher") items.push([vcol[255], "教師なし"]);
       }
       out.classes = items;
@@ -71,6 +72,8 @@ export function createStagePanel(ctx) {
       }
     }
     if (!hasTeacher) out.note = "探査機の地形に地球で学習した規則を当てた試験表示。実際の天体環境ではない。教師なし。" + (gapNote(ctx.processing) ? " " + gapNote(ctx.processing) : "");
+    if ((state.v === "ice" || veg) && state.src === "model")
+      out.note += " 陸氷（氷床・氷河、厚さあり）と、季節の積雪（陸の上、灰白）・海氷（海の上、水色）は別物。積雪と海氷は1年のうち覆われる割合で濃さを変えた通年の代表的な姿で、共通の簡易規則による推定（教師なし）。";
     if (moved()) out.note = RESPONSE_NOTE + " " + out.note;
     if (gapNote(ctx.processing)) out.score += `・${gapShort(ctx.processing)}`;
     out.note += " 画面の色：緯度60°より極側は、極付近の細いセルの筋を抑えるため東西に平均した値で描く（描画だけ）。" +
@@ -81,6 +84,15 @@ export function createStagePanel(ctx) {
 
   // ------------------------------------------------ the centre readout: raw data values
   const SEA_JA = (z) => (z < 0 ? "海" : "陸");
+  // Land ice, seasonal snow and sea ice are three different things; the
+  // readout names whichever of the last two applies here (model only).
+  function cryo(lng, lat) {
+    if (state.v !== "veg" && state.v !== "ice") return "";
+    const onLand = cell("bed", lng, lat) >= state.seaLevel, pc = (x) => `${Math.round(100 * Math.max(0, x))}%`;
+    if (cell("H_fit", lng, lat) > ICE_MIN_M && onLand) return `<br><span class="k">積雪・海氷</span> 陸氷の上（積雪は別に数えない）`;
+    return onLand ? `<br><b class="m">積雪</b> 1年の ${pc(cell("snow", lng, lat))} を覆う（陸氷とは別）　<b class="t">教師なし</b>`
+      : `<br><b class="m">海氷</b> 1年の ${pc(cell("seaice", lng, lat))} を覆う（陸氷とは別）　<b class="t">教師なし</b>`;
+  }
   function readout(lng, lat) {
     const pos = `中央 ${Math.abs(lat).toFixed(1)}°${lat >= 0 ? "N" : "S"} ${Math.abs(lng).toFixed(1)}°${lng >= 0 ? "E" : "W"}`;
     const polar = Math.abs(lat) >= POLAR_AVERAGE_LAT ? "（この緯度の画面の色は東西平均）" : "";
@@ -95,11 +107,11 @@ export function createStagePanel(ctx) {
         return `${head}<br><b class="m">${ground}</b> ${z.toFixed(0)} m${state.v === "sea" ? `・${z < sl ? (hasTeacher ? "海" : "仮想海") : "陸"}（海面 ${sl > 0 ? "+" : ""}${sl} m）` : ""}${none}`;
       if (state.v === "veg") {
         const c = rawComposite("fit", lng, lat, sl);
-        return `${head}<br><b class="m">モデル値</b> ${state.vegStyle === "simple" ? simpleVeg(c)?.ja || vlab[c] : vlab[c] || "推定なし"}${none}`;
+        return `${head}<br><b class="m">モデル値</b> ${state.vegStyle === "simple" ? simpleVeg(c)?.ja || vlab[c] : vlab[c] || "推定なし"}${none}${cryo(lng, lat)}`;
       }
       const key = vm().key, value = cell(`${key}_fit`, lng, lat);
-      const label = state.v === "ice" && value <= ICE_MIN_M ? "氷なし" : `${value.toFixed(vm().digits)} ${vm().unit}`;
-      return `${head}<br><b class="m">モデル値</b> ${label}${none}`;
+      const label = state.v === "ice" ? (value <= ICE_MIN_M ? "陸氷なし" : `陸氷 ${value.toFixed(0)} m`) : `${value.toFixed(vm().digits)} ${vm().unit}`;
+      return `${head}<br><b class="m">モデル値</b> ${label}${none}${cryo(lng, lat)}`;
     }
     const warn = (drawn, raw) => drawn === raw ? "" :
       `<br><span class="w">※画面の塗りは「${drawn}」、元データのセルは「${raw}」（境界付近の補間・平均による差）</span>`;
@@ -125,7 +137,7 @@ export function createStagePanel(ctx) {
           : warn(dc(drawnComposite(shown, lng, lat)), vlab[shown === "teacher" ? t : m]);
       }
       const label = (c) => state.vegStyle === "simple" && simpleVeg(c) ? `${simpleVeg(c).ja}（元: ${vlab[c]}）` : vlab[c];
-      return `${head}<br><b class="m">${tag}</b> ${label(m)}　<b class="t">教師</b> ${label(t)}${w}${seaNote}`;
+      return `${head}<br><b class="m">${tag}</b> ${label(m)}　<b class="t">教師</b> ${label(t)}${w}${seaNote}${state.src === "model" ? cryo(lng, lat) : ""}`;
     }
     const m0 = vm(), key = m0.key;
     const mod = cell(`${key}_${state.mode}`, lng, lat), tea = cell(`${key}_teacher`, lng, lat);
@@ -140,7 +152,7 @@ export function createStagePanel(ctx) {
       const ice = (x) => (x > ICE_MIN_M ? "氷" : "氷なし");
       w = warn(ice(bilinear(`H_${which}`, lng, lat)), ice(which === "teacher" ? tea : mod));
     }
-    return `${head}<br><b class="m">${tag}</b> ${mv}　<b class="t">教師</b> ${tv}${dv}${w}${seaNote}`;
+    return `${head}<br><b class="m">${tag}</b> ${mv}　<b class="t">教師</b> ${tv}${dv}${w}${seaNote}${state.src === "model" ? cryo(lng, lat) : ""}`;
   }
 
   return { legend, readout };

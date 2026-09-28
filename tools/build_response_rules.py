@@ -27,6 +27,28 @@ AK = ROOT / "anti-kytera"
 T_LO, T_STEP, T_N = -60.0, 2.0, 50          # -60 .. +40 C
 P_LO, P_STEP, P_N = 1.0, 0.1, 30            # log10 mm/yr: 10 .. 10000
 ICE_MIN_M = 10
+# The cryosphere rules (stage-respond.js). The seasonal range (fit to ERA5
+# July-January 2 m temperature, land RMSE 6.2 K, sea 3.6 K) and the snow and
+# sea-ice thresholds (area within 6% of ERA5) are set against ERA5 2015
+# (tools/build_cryo_reference.py), a reanalysis, used for the base look only;
+# the glacier constants are chosen so that a colder world grows ice in the
+# order the last glacial maximum did (see RESPONSE.md) -- a scale, not a
+# teacher.
+CRYO = {
+    "polarAmplification": 0.8,     # dT x (1 + 0.8 (sin^2 lat - 1/3)); area mean = dT
+    "rangePerWm2": 0.085,           # warmest-minus-coldest month per W/m2 of solstice insolation range
+    "rangeCoastShare": 0.45,       # share of that range kept right at the coast
+    "rangeCoastKm": 500,
+    "rangeSeaPerWm2": 0.0175,
+    "glacierSummerC": 4.0,         # warmest month a glacier survives at 500 mm/yr
+    "glacierPerDoublingC": 1.5,    # warmer per doubling of precipitation
+    "glacierMarginC": 3.0,         # a cell must cool this far below its own base summer
+    "glacierMinPrecipMm": 150,
+    "glacierMinM": 300, "glacierPerDegreeM": 200, "glacierMaxM": 3000,
+    "snowAirC": -2.0,              # snow lies while the air is colder than this
+    "snowPrecipMm": 200,           # snow cover scales with precipitation up to this
+    "seaIceAirC": -5.0,            # sea ice while the air is colder than this
+}
 
 
 def fields(meta_path, bin_path):
@@ -97,6 +119,7 @@ def main():
         "vegClass": vtab.astype(int).tolist(),
         "vegShare": np.round(share, 3).tolist(),
         "vegCodes": list(range(11, 26)),
+        "cryo": CRYO,
         "physics": {
             "humidityPerK": 0.064, "precipPerK": 0.02, "coastScaleKm": 1000,
             "moistureFactorRange": [0.25, 2.5],

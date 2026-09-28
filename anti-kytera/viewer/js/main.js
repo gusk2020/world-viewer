@@ -310,7 +310,8 @@ async function main() {
       nextStages = config.globeTexture || config.antiKyTerraStages
         ? entry.id === "kasoku-sekai" ? await earthStages() :
           await loadStages(`./worlds/${entry.id}/`, true, {
-            bedRange: config.display.reliefColourRangeMetres, processing: config.terrain.processing })
+            bedRange: config.display.reliefColourRangeMetres, processing: config.terrain.processing,
+            obliquity: config.body.axialTiltDegrees })
         : null;
       next = await initGlobe3D("app", config, onFrame);
     } catch (err) {

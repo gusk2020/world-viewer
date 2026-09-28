@@ -19,13 +19,13 @@ import { createResponder, loadRules } from "./stage-respond.js";
 
 // options.bedRange: the relief colour range for 岩盤/海/標高色 (Earth keeps
 // -8000..6000); options.processing: the terrain record from config.json.
-export async function loadStages(base, planetary = false, { bedRange = [BED_LO, BED_HI], processing = null, rulesUrl = "./rules/response_rules.json" } = {}) {
+export async function loadStages(base, planetary = false, { bedRange = [BED_LO, BED_HI], processing = null, obliquity = 23.44, rulesUrl = "./rules/response_rules.json" } = {}) {
   const [data, rules] = await Promise.all([loadStageData(base, planetary), loadRules(rulesUrl)]);
   // dT: mean temperature minus the base 14 C; landShare: set when off base.
   const state = { v: "bed", src: "model", mode: "fit", seaLevel: 0, dT: 0, opacity: 0.4, vegStyle: "detailed", landShare: null };
   // Must come before the drawing: it swaps the fields for writable copies
   // that the textures and the readout then share.
-  const responder = createResponder(data, rules, data.S.bodyRadiusMetres || 6.371e6);
+  const responder = createResponder(data, rules, data.S.bodyRadiusMetres || 6.371e6, obliquity);
   const ctx = {
     ...data,
     state,
