@@ -316,8 +316,12 @@ sampled every ~4 km along the line between the cells' land centroids on
 BEDROCK (Earth: `terrain.journeyBedrock` = GEBCO sub-ice 2048x1024; never the
 ice-surface display terrain), and its water length is charged to the sea
 budget, so corner-touching land cells and sub-cell straits no longer count as
-land. Arrows weigh newly reached cells by their km2 area. Relabel cap 3 -> 10
-(3 lost budget-feasible paths). Consequence at -120 m / 8 C: the Americas are
+land. Arrows weigh newly reached LAND by km2 (cell area x landFrac; sea
+arrivals add nothing), direction included. Relabel cap 3 -> 10 (3 lost
+budget-feasible paths); 10 is NOT final: at 12 C Sahul reach is
+seed-dependent for any cap, caused by the +20 km sea / +50 km hardship
+re-search margin -- the proposed fix (margins 1/1, no cap) is in JOURNEY.md,
+not applied. Consequence at -120 m / 8 C: the Americas are
 no longer reached, because the stage cryosphere ices Chukotka/Kamchatka (they
 open at >= 12 C); `CHECK=1` in `tools/journey_report.mjs` runs the strait
 checkpoints.

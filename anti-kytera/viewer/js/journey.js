@@ -352,12 +352,15 @@ export function runJourney(env, startCell, seed) {
   const good = (k) => land[k] && !ice[k] && habit[k] >= Hs;
   const arrows = new Map();       // key: millennium * nBins + bin
   const nbx = Math.round(360 / ARROW_BIN_DEG), nby = Math.round(180 / ARROW_BIN_DEG), nBins = nbx * nby;
-  // Area of a cell in km2 on this body: the arrows weigh each newly reached
-  // cell by its ground area, so a polar cell (or a small body's cell) counts
-  // for what it covers, not for 1.
+  // Land area newly reached, km2 on this body: a cell's ground area times
+  // its land share, so a polar cell (or a small body's cell) counts for what
+  // it covers, not for 1, and a coastal cell only for its land. A first
+  // arrival in a sea cell adds no land and is not recorded.
   const dLng = 2 * Math.PI / W;
   const cellArea = (k) => { const j = Math.floor(k / W); return R * R * dLng * (Math.sin(rowLat(j, H) + Math.PI / H / 2) - Math.sin(rowLat(j, H) - Math.PI / H / 2)); };
   function recordMove(from, to, t) {
+    const w = land[to] ? cellArea(to) * env.landFrac[to] : 0;
+    if (!(w > 0)) return;
     const a = cellCentre(from), b = cellCentre(to);
     let dl = b.lng - a.lng; if (dl > 180) dl -= 360; if (dl < -180) dl += 360;
     const ex = dl * Math.cos(a.lat * Math.PI / 180), ny = b.lat - a.lat, len = Math.hypot(ex, ny) || 1;
@@ -365,7 +368,7 @@ export function runJourney(env, startCell, seed) {
     const key = Math.floor(t / ARROW_YEARS) * nBins + bin;
     let r = arrows.get(key);
     if (!r) { r = { m: Math.floor(t / ARROW_YEARS), n: 0, area: 0, ex: 0, ny: 0, x: 0, y: 0, z: 0 }; arrows.set(key, r); }
-    const cl = Math.cos(a.lat * Math.PI / 180), w = cellArea(to);
+    const cl = Math.cos(a.lat * Math.PI / 180);
     r.n++; r.area += w; r.ex += w * ex / len; r.ny += w * ny / len;
     r.x += w * cl * Math.cos(a.lng * Math.PI / 180); r.y += w * Math.sin(a.lat * Math.PI / 180); r.z += w * cl * Math.sin(a.lng * Math.PI / 180);
   }
@@ -408,7 +411,7 @@ export function runJourney(env, startCell, seed) {
     }
   }
   // arrows: area-weighted mean start point and direction per (millennium,
-  // bin). `area` (km2 newly reached) sets the thickness; `n` (cells) is kept
+  // bin). `area` (km2 of land newly reached) sets the thickness; `n` (land cells) is kept
   // only for reference. Neither is a number of people.
   const list = [];
   for (const r of arrows.values()) {
