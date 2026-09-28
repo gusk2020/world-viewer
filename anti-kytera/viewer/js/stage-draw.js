@@ -19,6 +19,8 @@ export const RAMPS = {
            [0.8, 30, 120, 170], [1, 40, 30, 120]],
   ice: [[0, 235, 245, 255], [0.3, 150, 200, 240], [0.7, 50, 110, 200], [1, 20, 30, 110]],
   diff: [[0, 30, 60, 170], [0.5, 245, 245, 245], [1, 180, 30, 30]],
+  // グレートジャーニー: first arrival, early (dark red) to late (pale yellow)
+  journey: [[0, 110, 10, 60], [0.3, 200, 40, 40], [0.65, 245, 140, 40], [1, 250, 232, 120]],
 };
 const RAMP_ROWS = Object.keys(RAMPS);
 export const BED_LO = -8000, BED_HI = 6000;
@@ -37,7 +39,9 @@ export const simpleVeg = (code) => SIMPLE_VEG.find((g) => g.codes.includes(code)
 const WATER = [47, 111, 168];          // v1s's sea colour (0x2f6fa8), for the 2D map
 // the arrays stage-respond.js rewrites in place
 const RESPONDING_KEYS = ["T_fit", "E_fit", "P_fit", "H_fit", "veg_fit", "snow", "seaice"];
-const STAGE_ID = { bed: 0, sea: 1, t2m: 2, hum: 2, precip: 2, ice: 3, veg: 4 };
+const STAGE_ID = { bed: 0, sea: 1, t2m: 2, hum: 2, precip: 2, ice: 3, veg: 4, journey: 5 };
+export const JOURNEY_PASSED = [255, 246, 214];   // reached, not settled: a pale wash
+const JOURNEY_NEVER = 1e9;
 
 export function ramp(name, x) {
   const r = RAMPS[name];
@@ -115,6 +119,11 @@ export function createStageDraw(ctx) {
     T.pal.needsUpdate = true;
   }
 
+  // グレートジャーニー: first arrival and settlement year per 0.5-deg cell
+  // (journey.js), filled by setJourney(); NEVER until a journey has run.
+  T.jArrive = floatTex(new Float32Array(720 * 360).fill(JOURNEY_NEVER), 720, 360);
+  T.jSettle = floatTex(new Float32Array(720 * 360).fill(JOURNEY_NEVER), 720, 360);
+
   // Shared uniform objects: the 3D material and the 2D renderer read the same ones.
   const U = {
     akBed: { value: T.bed }, akNrm: { value: T.normal }, akFM: { value: T.T_fit }, akFT: { value: T.T_teacher },
@@ -124,6 +133,7 @@ export function createStageDraw(ctx) {
     akStage: { value: 0 }, akSrc: { value: 0 }, akRampRow: { value: 0 }, akNRamps: { value: RAMP_ROWS.length },
     akLo: { value: 0 }, akHi: { value: 1 }, akLog: { value: false }, akSeaLevel: { value: 0 }, akVegSimple: { value: false },
     akBedLo: { value: ctx.bedRange[0] }, akBedHi: { value: ctx.bedRange[1] },
+    akJA: { value: T.jArrive }, akJS: { value: T.jSettle }, akJT: { value: 0 }, akJMax: { value: 1 },
   };
 
   const GLSL = /* glsl */`
@@ -132,8 +142,10 @@ uniform int akStage, akSrc, akRampRow, akNRamps;
 uniform float akLo, akHi, akSeaLevel;
 uniform bool akLog, akVegSimple;
 uniform float akBedLo, akBedHi;   // the relief colour range: Earth -8000..6000, each other body its own
+uniform sampler2D akJA, akJS;     // journey: first arrival / settlement year per cell
+uniform float akJT, akJMax;       // journey: the time shown, and the last arrival (colour scale)
 const float AK_ICE_MIN = ${ICE_MIN_M.toFixed(1)};
-const int AK_ROCK = ${RAMP_ROWS.indexOf("rock")}, AK_SEA = ${RAMP_ROWS.indexOf("sea")};
+const int AK_ROCK = ${RAMP_ROWS.indexOf("rock")}, AK_SEA = ${RAMP_ROWS.indexOf("sea")}, AK_JOURNEY = ${RAMP_ROWS.indexOf("journey")};
 float akBil(sampler2D t, vec2 ll) {
   ivec2 sz = textureSize(t, 0);
   float fx = (ll.x + 180.0) / 360.0 * float(sz.x) - 0.5, fy = (ll.y + 90.0) / 180.0 * float(sz.y) - 0.5;
@@ -181,10 +193,29 @@ vec2 akLngLat(vec3 p) {
   if (phi < 0.0) phi += 6.283185307179586;
   return vec2(degrees(phi) - 180.0, lat);
 }
+float akCell(sampler2D t, vec2 ll) {   // nearest cell of a float grid
+  ivec2 sz = textureSize(t, 0);
+  int x = int(mod(floor((ll.x + 180.0) / 360.0 * float(sz.x)), float(sz.x)));
+  int y = clamp(int(floor((ll.y + 90.0) / 180.0 * float(sz.y))), 0, sz.y - 1);
+  return texelFetch(t, ivec2(x, y), 0).r;
+}
+// グレートジャーニー: the environment of the trip (the vegetation stage at the
+// trip's conditions, muted) under the reached range. Settled cells take the
+// colour of their first arrival; cells only passed through a pale wash.
+vec3 akJourney(vec2 ll, float z, bool sea) {
+  int k = akVeg(akHM, akVM, ll, z);
+  vec3 bg = k == 0 ? akSeaIce(akSeaC(z - akSeaLevel), ll) : texelFetch(akPal, ivec2(k, 0), 0).rgb * 255.0;
+  if (k != 0) bg = mix(vec3(dot(bg, vec3(0.3, 0.59, 0.11))), bg, 0.45) * 0.92;
+  float a = akCell(akJA, ll), s = akCell(akJS, ll);
+  if (a > akJT) return bg;
+  if (s <= akJT) return mix(bg, akRampC(AK_JOURNEY, a / max(akJMax, 1.0)), sea ? 0.55 : 0.8);
+  return mix(bg, vec3(${JOURNEY_PASSED.join(",")}), sea ? 0.35 : 0.6);
+}
 // sRGB 0-255. relief: how strongly relief shading may modulate it on the flat map.
 vec3 akColour(vec2 ll, float z, out float relief) {
   bool sea = z < akSeaLevel;
   relief = sea ? 0.0 : 1.0;
+  if (akStage == 5) { relief = sea ? 0.0 : 0.25; return akJourney(ll, z, sea); }
   if (akStage == 0) { relief = 1.0; return akRock(z); }
   if (akStage == 1) return sea ? akSeaC(z - akSeaLevel) : akRock(z);
   if (akStage == 4) {
@@ -362,5 +393,15 @@ void main() {
     for (const k of RESPONDING_KEYS) T[k].needsUpdate = true;
   }
 
-  return { createMaterial, createElevationMaterial, renderMercator, apply, refreshFields };
+  // グレートジャーニー: upload a finished journey (or clear it with null), and
+  // move the time shown. Only uniforms change while it plays.
+  function setJourney(journey) {
+    T.jArrive.image.data.set(journey ? journey.arrival : new Float32Array(720 * 360).fill(JOURNEY_NEVER));
+    T.jSettle.image.data.set(journey ? journey.settleStart : new Float32Array(720 * 360).fill(JOURNEY_NEVER));
+    T.jArrive.needsUpdate = T.jSettle.needsUpdate = true;
+    U.akJMax.value = journey ? Math.max(1, journey.endYear) : 1;
+  }
+  function setJourneyTime(t) { U.akJT.value = t; }
+
+  return { createMaterial, createElevationMaterial, renderMercator, apply, refreshFields, setJourney, setJourneyTime };
 }

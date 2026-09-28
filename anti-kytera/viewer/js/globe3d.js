@@ -448,16 +448,17 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
     if (graticule) graticule.dispose();
     texture.dispose();
     if (stageMesh) { stageMesh.geometry.dispose(); stageMesh.material.dispose(); }
+    setOverlay(null);
     renderer.dispose();
     renderer.domElement.remove();
   }
 
-  // Where the crosshair (screen centre) meets the unit sphere, in the body's
-  // own frame (so the axis tilt is accounted for).
+  // Where a screen point meets the unit sphere, in the body's own frame (so
+  // the axis tilt is accounted for). ndc: -1..1 across the canvas.
   const _ray = new THREE.Raycaster();
   const _q = new THREE.Quaternion();
-  function getCentre() {
-    _ray.setFromCamera(new THREE.Vector2(0, 0), camera);
+  function pickNdc(x, y) {
+    _ray.setFromCamera(new THREE.Vector2(x, y), camera);
     const d = _ray.ray.direction, o = _ray.ray.origin;
     const b = o.dot(d), c = o.dot(o) - 1, disc = b * b - c;
     if (disc < 0) return null;
@@ -465,6 +466,24 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
     p.applyQuaternion(_q.copy(body3d.quaternion).invert());
     return directionToLngLat(p.x, p.y, p.z);
   }
+  const getCentre = () => pickNdc(0, 0);          // the crosshair
+  function pick(clientX, clientY) {                // a tap
+    const r = renderer.domElement.getBoundingClientRect();
+    return pickNdc(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
+  }
+
+  // One overlay object (the journey's arrows) carried on the body, drawn
+  // after the sea. Replacing it disposes the old one.
+  let overlay = null;
+  function setOverlay(object) {
+    if (overlay) { body3d.remove(overlay); overlay.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); }); }
+    overlay = object;
+    if (overlay) { overlay.renderOrder = 2; body3d.add(overlay); }
+  }
+  // The radius the visible surface has at a point: the stage bedrock when a
+  // stage is showing (else the display terrain), or the sea above it.
+  const surfaceRadiusAt = (lng, lat) =>
+    radiusForMetres(Math.max(showingStage ? stageApi.bedMetresAt(lng, lat) : metresAt(lng, lat), seaLevelMetres));
 
   return {
     getView,
@@ -481,6 +500,9 @@ export async function initGlobe3D(containerId, worldConfig, onFrame = null) {
     setGraticuleColor,
     getMetresPerPixel,
     getCentre,
+    pick,
+    setOverlay,
+    surfaceRadiusAt,
     renderer,
     // The photo (after v1s's gamma lift and polar low-pass) and the GEBCO
     // ice-surface grid, so the 2D map can draw the same 標準 view.

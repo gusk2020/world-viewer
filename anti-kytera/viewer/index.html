@@ -68,6 +68,32 @@
       <span id="climate-temp-readout">14℃</span>
     </div>
     <p id="ak-condition" hidden></p>
+    <!-- グレートジャーニー mode (journey-ui.js) -->
+    <div id="journey-panel" hidden>
+      <div class="control-row" id="journey-time-row">
+        <button type="button" id="journey-play" class="pill">▶ 再生</button>
+        <input type="range" id="journey-time" min="0" max="1000" step="100" value="0" aria-label="出発からの年" />
+        <span id="journey-time-readout">出発から 0年</span>
+      </div>
+      <div class="control-row" id="journey-start-row">
+        <span id="journey-start">出発点 未選択</span>
+        <button type="button" id="journey-pick" class="pill">出発点を選ぶ</button>
+      </div>
+      <div class="control-row" id="journey-seed-row">
+        <span id="journey-seed">乱数の種 –</span>
+        <button type="button" id="journey-reseed" class="pill">別の旅を試す</button>
+        <button type="button" id="journey-arrows" class="pill">矢印 直近</button>
+      </div>
+      <p id="journey-status" hidden></p>
+    </div>
+  </div>
+  <!-- chosen at start: 気候 (the seven stages) or グレートジャーニー -->
+  <div id="mode-chooser" hidden>
+    <div class="mode-box">
+      <div class="mode-title">Anti-KyTerra v2　表示を選んでください</div>
+      <button type="button" data-app-mode="climate">気候<small>7段階の推定と、海面・気温への追従</small></button>
+      <button type="button" data-app-mode="journey">グレートジャーニー<small>地形と気候から人の拡散を試す比較実験</small></button>
+    </div>
   </div>
   <div id="bottom-controls">
     <div id="ak-info" class="panel" hidden>
@@ -85,6 +111,7 @@
       <div class="control-row" id="nav-row">
         <label for="world-select">天体</label><select id="world-select" class="pill" aria-label="天体を選択"></select>
         <button type="button" id="view-toggle" class="pill">2Dに切替</button>
+        <button type="button" id="mode-button" class="pill">モード</button>
       </div>
       <div class="control-row" id="axis-row">
         <button type="button" id="axis-toggle" class="pill">軸 垂直</button>
