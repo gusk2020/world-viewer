@@ -14,7 +14,8 @@
 // Output, per 0.5-deg cell: first arrival (years from departure), settlement
 // start and settlement end (end is always Infinity in this version -- the
 // slot exists so abandonment can be added without changing the format), and
-// the parent it was reached from, aggregated into ~1000-year direction arrows.
+// the parent it was reached from, aggregated into ~1000-year direction arrows
+// whose weight is the ground area newly reached (km2), not a head count.
 
 export const GRID_W = 720, GRID_H = 360;          // 0.5 deg, south-first rows
 export const NEVER = 1e9;                          // "not reached" in the float arrays
@@ -49,9 +50,51 @@ const ICE_MIN_M = 10;
 const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const rowLat = (j, h) => ((j + 0.5) / h - 0.5) * Math.PI;
 
+// The four step directions stored per cell ([dj, di]); the other four are
+// these taken from the neighbour, backwards.
+const FORWARD = [[0, 1], [1, 1], [1, 0], [1, -1]];
+// All 8 steps out of cell k: { to, len, water, ice, blocked }.
+export function stepsFrom(env, k) {
+  const { W, H } = env, N = W * H, j = Math.floor(k / W), i = k - j * W, out = [];
+  for (let dj = -1; dj <= 1; dj++) {
+    const jj = j + dj; if (jj < 0 || jj >= H) continue;
+    for (let di = -1; di <= 1; di++) {
+      if (!dj && !di) continue;
+      const to = jj * W + (i + di + W) % W;
+      let d = FORWARD.findIndex(([a, b]) => a === dj && b === di), at = k;
+      if (d < 0) { d = FORWARD.findIndex(([a, b]) => a === -dj && b === -di); at = to; }
+      const e = d * N + at;
+      out.push({ to, len: env.stepLen[e], water: env.stepWater[e], ice: env.stepIce[e], blocked: env.stepBlocked[e] });
+    }
+  }
+  return out;
+}
+// for the strait checks in tools/journey_report.mjs
+export const neighbourSteps = (env, k) => stepsFrom(env, k).map((s) => [s.to, s.water, s.blocked || (env.land[s.to] && env.ice[s.to])]);
+
+// bilinear samplers of metres at (lng, lat): a north-first fine grid, or the
+// stages' south-first bedrock
+function fineSampler({ width: fw, height: fh, metres }) {
+  return (lng, lat) => {
+    const fx = ((lng + 180) / 360) * fw - 0.5, fy = ((90 - lat) / 180) * fh - 0.5;
+    const y0 = Math.max(0, Math.min(fh - 1, Math.floor(fy))), y1 = Math.min(fh - 1, y0 + 1), wy = Math.max(0, Math.min(1, fy - y0));
+    let x0 = Math.floor(fx); const wx = fx - x0; x0 = ((x0 % fw) + fw) % fw; const x1 = (x0 + 1) % fw;
+    return (metres[y0 * fw + x0] * (1 - wx) + metres[y0 * fw + x1] * wx) * (1 - wy) + (metres[y1 * fw + x0] * (1 - wx) + metres[y1 * fw + x1] * wx) * wy;
+  };
+}
+function stageSampler(bed) {
+  const w = bed.meta.w, h = bed.meta.h;
+  return (lng, lat) => {
+    const fx = ((lng + 180) / 360) * w - 0.5, fy = ((lat + 90) / 180) * h - 0.5;
+    const y0 = Math.max(0, Math.min(h - 1, Math.floor(fy))), y1 = Math.min(h - 1, y0 + 1), wy = Math.max(0, Math.min(1, fy - y0));
+    let x0 = Math.floor(fx); const wx = fx - x0; x0 = ((x0 % w) + w) % w; const x1 = (x0 + 1) % w;
+    return (bed[y0 * w + x0] * (1 - wx) + bed[y0 * w + x1] * wx) * (1 - wy) + (bed[y1 * w + x0] * (1 - wx) + bed[y1 * w + x1] * wx) * wy;
+  };
+}
+
 // ------------------------------------------------------------ environment
 // fields: { bed, T_fit, P_fit, E_fit, H_fit, veg_fit, seaice } (meta on each),
-// fine: optional { width, height, metres } north-first display terrain.
+// fine: optional { width, height, metres } north-first BEDROCK (no ice surface).
 export function buildEnvironment({ fields: F, radiusMetres, seaLevel, fine = null, params = JOURNEY_PARAMS }) {
   const W = GRID_W, H = GRID_H, N = W * H, R = radiusMetres / 1000;
   const bed = F.bed, BW = bed.meta.w, fb = BW / W;             // 2 bedrock cells per grid cell
@@ -63,35 +106,38 @@ export function buildEnvironment({ fields: F, radiusMetres, seaLevel, fine = nul
     return (a[y0 * W2 + x0] * (1 - wx) + a[y0 * W2 + x1] * wx) * (1 - wy) + (a[y1 * W2 + x0] * (1 - wx) + a[y1 * W2 + x1] * wx) * wy;
   };
   const land = new Uint8Array(N), ice = new Uint8Array(N), permIce = new Uint8Array(N);
-  const zMean = new Float32Array(N), rough = new Float32Array(N);
+  const landFrac = new Float32Array(N), zMean = new Float32Array(N), rough = new Float32Array(N);
+  const anchorLng = new Float32Array(N), anchorLat = new Float32Array(N);
   const habit = new Float32Array(N), speed = new Float32Array(N), coastKm = new Float32Array(N);
   const T = new Float32Array(N), P = new Float32Array(N);
+  // The terrain that decides land and water: the finest BEDROCK the body has
+  // (Earth: GEBCO sub-ice bedrock, never the ice-surface display terrain),
+  // bilinear, else the stages' own 0.25-deg bedrock.
+  const zAt = fine ? fineSampler(fine) : stageSampler(bed);
+  const SUB = 4;                                                // 4 x 4 samples per cell
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
     const k = j * W + i;
-    let n = 0, s = 0, s2 = 0, sl = 0;
-    for (let b = 0; b < fb; b++) for (let a = 0; a < fb; a++) {
-      const z = bed[(j * fb + b) * BW + i * fb + a];
-      s += z; s2 += z * z; if (z >= seaLevel) { n++; sl += z; }
-    }
-    const m = fb * fb;
-    zMean[k] = n ? sl / n : s / m;
-    rough[k] = Math.sqrt(Math.max(0, s2 / m - (s / m) ** 2));
-    land[k] = n > 0 ? 1 : 0;
-    ice[k] = F.H_fit[k] > ICE_MIN_M ? 1 : 0;
-    T[k] = up(T2, j, i); P[k] = up(F.P_fit, j, i);
-  }
-  // Islands and straits finer than 0.25 deg: any display-terrain pixel above
-  // the sea inside the cell keeps it land (an island to land on).
-  if (fine) {
-    const { width: fw, height: fh, metres } = fine;
-    for (let y = 0; y < fh; y++) {
-      const j = Math.min(H - 1, Math.floor((1 - (y + 0.5) / fh) * H));   // fine grid is north-first
-      for (let x = 0; x < fw; x++) {
-        if (metres[y * fw + x] < seaLevel) continue;
-        const k = j * W + Math.min(W - 1, Math.floor((x + 0.5) / fw * W));
-        if (!land[k]) { land[k] = 1; zMean[k] = Math.max(seaLevel, 0); }
+    let n = 0, s = 0, s2 = 0, sl = 0, ax = 0, ay = 0, az = 0;
+    for (let b = 0; b < SUB; b++) for (let a = 0; a < SUB; a++) {
+      const lng = -180 + (i + (a + 0.5) / SUB) * 360 / W, lat = -90 + (j + (b + 0.5) / SUB) * 180 / H;
+      const z = zAt(lng, lat);
+      s += z; s2 += z * z;
+      if (z >= seaLevel) {
+        n++; sl += z;
+        const cl = Math.cos(lat * Math.PI / 180);
+        ax += cl * Math.cos(lng * Math.PI / 180); ay += Math.sin(lat * Math.PI / 180); az += cl * Math.sin(lng * Math.PI / 180);
       }
     }
+    const m = SUB * SUB;
+    landFrac[k] = n / m;
+    land[k] = n > 0 ? 1 : 0;                                    // any land at all: somewhere to land and rest
+    zMean[k] = n ? sl / n : s / m;
+    rough[k] = Math.sqrt(Math.max(0, s2 / m - (s / m) ** 2));
+    // where a party stands in this cell: the middle of its land, else the cell centre
+    if (n) { const l = Math.hypot(ax, ay, az); anchorLng[k] = Math.atan2(az, ax) * 180 / Math.PI; anchorLat[k] = Math.asin(ay / l) * 180 / Math.PI; }
+    else { anchorLng[k] = -180 + (i + 0.5) * 360 / W; anchorLat[k] = -90 + (j + 0.5) * 180 / H; }
+    ice[k] = F.H_fit[k] > ICE_MIN_M ? 1 : 0;
+    T[k] = up(T2, j, i); P[k] = up(F.P_fit, j, i);
   }
   for (let k = 0; k < N; k++) if (!land[k] && F.seaice[k] >= params.permanentSeaIce) permIce[k] = 1;
   // relief between neighbouring cells also counts as rough ground
@@ -105,6 +151,41 @@ export function buildEnvironment({ fields: F, radiusMetres, seaLevel, fine = nul
       d += Math.abs(zMean[kk] - zMean[k]); c++;
     }
     rough2[k] = Math.hypot(rough[k], c ? d / c / 2 : 0);
+  }
+  // Every step between neighbouring cells, measured along the real line from
+  // one cell's standing point to the other's: its length, how much of it is
+  // open water, how much is permanent sea ice, and whether it crosses land
+  // ice. A diagonal step between two land cells that only touch at a corner
+  // now pays for the water at that corner, and a strait narrower than a
+  // cell still has to be crossed by water. Stored for 4 directions; the other
+  // 4 are the same steps taken backwards.
+  const stepLen = new Float32Array(4 * N), stepWater = new Float32Array(4 * N), stepIce = new Float32Array(4 * N);
+  const stepBlocked = new Uint8Array(4 * N);
+  const SAMPLE_KM = 4;                                         // well under the ~20 km bedrock grid
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    const k = j * W + i;
+    for (let d = 0; d < 4; d++) {
+      const [dj, di] = FORWARD[d], jj = j + dj;
+      if (jj < 0 || jj >= H) { stepBlocked[d * N + k] = 1; continue; }
+      const kk = jj * W + (i + di + W) % W;
+      let lng0 = anchorLng[k], lat0 = anchorLat[k], lng1 = anchorLng[kk], lat1 = anchorLat[kk];
+      if (lng1 - lng0 > 180) lng1 -= 360; if (lng1 - lng0 < -180) lng1 += 360;
+      const len = greatCircleKm(R, { lng: lng0, lat: lat0 }, { lng: lng1, lat: lat1 });
+      stepLen[d * N + k] = len;
+      if (!land[k] && !land[kk]) {                               // open sea (or sea ice) on both sides
+        if (permIce[k] && permIce[kk]) stepIce[d * N + k] = len; else stepWater[d * N + k] = len;
+        continue;
+      }
+      const n = Math.max(2, Math.ceil(len / SAMPLE_KM));
+      let water = 0, iceKm = 0, blocked = 0;
+      for (let q = 0; q < n; q++) {
+        const f = (q + 0.5) / n, lng = lng0 + (lng1 - lng0) * f, lat = lat0 + (lat1 - lat0) * f;
+        const c = cellOf(((lng + 540) % 360) - 180, lat);
+        if (zAt(lng, lat) < seaLevel) { if (permIce[c]) iceKm += len / n; else water += len / n; }
+        else if (land[c] && ice[c]) blocked = 1;
+      }
+      stepWater[d * N + k] = water; stepIce[d * N + k] = iceKm; stepBlocked[d * N + k] = blocked;
+    }
   }
   // km to the nearest sea cell over land (two-pass chamfer, longitude wraps)
   const dy = Math.PI * R / H, dxRow = new Float64Array(H);
@@ -130,6 +211,7 @@ export function buildEnvironment({ fields: F, radiusMetres, seaLevel, fine = nul
     speed[k] = params.speedKmPerYear * (0.4 + 0.6 * habit[k]) / (1 + rough2[k] / params.roughnessM)
       * (1 + params.coastSpeedBoost * Math.exp(-coastKm[k] / 60));
   }
+  const stepEnv = { W, H, stepLen, stepWater, stepIce, stepBlocked };
   // size (cells) of each connected patch of settleable land, so a start is
   // never moved onto a speck from which nobody could go anywhere
   const patch = new Int32Array(N);
@@ -141,12 +223,15 @@ export function buildEnvironment({ fields: F, radiusMetres, seaLevel, fine = nul
     while (sp) {
       const k = stack[--sp]; members[n++] = k;
       const j = Math.floor(k / W), i = k - j * W;
-      for (let dj = -1; dj <= 1; dj++) { const jj = j + dj; if (jj < 0 || jj >= H) continue;
-        for (let di = -1; di <= 1; di++) { const kk = jj * W + (i + di + W) % W; if (!patch[kk] && ok(kk)) { patch[kk] = -1; stack[sp++] = kk; } } }
+      for (const st of stepsFrom(stepEnv, k)) {                   // joined by dry land only
+        const kk = st.to;
+        if (!patch[kk] && ok(kk) && !st.blocked && st.water === 0 && st.ice === 0) { patch[kk] = -1; stack[sp++] = kk; }
+      }
     }
     for (let m = 0; m < n; m++) patch[members[m]] = n;
   }
-  return { W, H, R, seaLevel, land, ice, permIce, habit, speed, coastKm, T, P, zMean, rough: rough2, dxRow, dy, patch, params };
+  return { W, H, R, seaLevel, land, landFrac, ice, permIce, habit, speed, coastKm, T, P, zMean, rough: rough2, dxRow, dy, patch,
+    anchorLng, anchorLat, stepLen, stepWater, stepIce, stepBlocked, params };
 }
 
 export const cellOf = (lng, lat) => {
@@ -225,9 +310,10 @@ export const newSeed = () => (Math.floor(Math.random() * 900000) + 100000);
 // habitable cell; hostile land spends the hardship budget, open water the
 // sea budget, and permanent sea ice the hardship budget. Land ice is closed.
 export function runJourney(env, startCell, seed) {
-  const { W, H, R, land, ice, permIce, habit, speed, dxRow, dy, params } = env;
+  const { W, H, R, land, ice, habit, speed, params } = env;
   const N = W * H, rnd = makeRandom(seed);
   const Hs = params.settleHabitability, Bh = params.hardshipBudgetKm, Bs = params.seaBudgetKm;
+  const seaSpeed = params.speedKmPerYear * (1 + params.coastSpeedBoost), iceSpeed = params.speedKmPerYear * 0.6;
   const best = new Float64Array(N).fill(NEVER);                  // float64 while searching (float32 rounding would lose pops)
   const arrival = new Float32Array(N).fill(NEVER), settleStart = new Float32Array(N).fill(NEVER);
   const settleEnd = new Float32Array(N).fill(NEVER);          // abandonment: reserved, never set yet
@@ -266,6 +352,11 @@ export function runJourney(env, startCell, seed) {
   const good = (k) => land[k] && !ice[k] && habit[k] >= Hs;
   const arrows = new Map();       // key: millennium * nBins + bin
   const nbx = Math.round(360 / ARROW_BIN_DEG), nby = Math.round(180 / ARROW_BIN_DEG), nBins = nbx * nby;
+  // Area of a cell in km2 on this body: the arrows weigh each newly reached
+  // cell by its ground area, so a polar cell (or a small body's cell) counts
+  // for what it covers, not for 1.
+  const dLng = 2 * Math.PI / W;
+  const cellArea = (k) => { const j = Math.floor(k / W); return R * R * dLng * (Math.sin(rowLat(j, H) + Math.PI / H / 2) - Math.sin(rowLat(j, H) - Math.PI / H / 2)); };
   function recordMove(from, to, t) {
     const a = cellCentre(from), b = cellCentre(to);
     let dl = b.lng - a.lng; if (dl > 180) dl -= 360; if (dl < -180) dl += 360;
@@ -273,10 +364,10 @@ export function runJourney(env, startCell, seed) {
     const bin = Math.min(nby - 1, Math.floor((a.lat + 90) / ARROW_BIN_DEG)) * nbx + Math.min(nbx - 1, Math.floor((a.lng + 180) / ARROW_BIN_DEG));
     const key = Math.floor(t / ARROW_YEARS) * nBins + bin;
     let r = arrows.get(key);
-    if (!r) { r = { m: Math.floor(t / ARROW_YEARS), n: 0, ex: 0, ny: 0, x: 0, y: 0, z: 0 }; arrows.set(key, r); }
-    const cl = Math.cos(a.lat * Math.PI / 180);
-    r.n++; r.ex += ex / len; r.ny += ny / len;
-    r.x += cl * Math.cos(a.lng * Math.PI / 180); r.y += Math.sin(a.lat * Math.PI / 180); r.z += cl * Math.sin(a.lng * Math.PI / 180);
+    if (!r) { r = { m: Math.floor(t / ARROW_YEARS), n: 0, area: 0, ex: 0, ny: 0, x: 0, y: 0, z: 0 }; arrows.set(key, r); }
+    const cl = Math.cos(a.lat * Math.PI / 180), w = cellArea(to);
+    r.n++; r.area += w; r.ex += w * ex / len; r.ny += w * ny / len;
+    r.x += w * cl * Math.cos(a.lng * Math.PI / 180); r.y += w * Math.sin(a.lat * Math.PI / 180); r.z += w * cl * Math.sin(a.lng * Math.PI / 180);
   }
 
   best[startCell] = 0;
@@ -297,41 +388,37 @@ export function runJourney(env, startCell, seed) {
     }
     if (good(c)) { h = Bh; s = Bs; }
     procH[c] = Math.max(procH[c], h); procS[c] = Math.max(procS[c], s);
-    const j = Math.floor(c / W), i = c - j * W;
-    for (let dj = -1; dj <= 1; dj++) {
-      const jj = j + dj; if (jj < 0 || jj >= H) continue;
-      for (let di = -1; di <= 1; di++) {
-        if (!dj && !di) continue;
-        const k = jj * W + (i + di + W) % W;
-        if (land[k] && ice[k]) continue;                              // land ice is closed
-        const dx = (dxRow[j] + dxRow[jj]) / 2 * Math.abs(di), dist = Math.hypot(dx, dy * Math.abs(dj));
-        let h2 = h, s2 = s, v;
-        if (land[k]) {
-          s2 = Bs;
-          if (!good(k)) h2 -= dist * (1 - habit[k] / Hs);
-          v = speed[k];
-        } else if (permIce[k]) {
-          h2 -= dist; v = params.speedKmPerYear * 0.6;
-        } else {
-          s2 -= dist; v = speed[k];
-        }
-        if (h2 < 0 || s2 < 0 || !(v > 0)) continue;
-        const t2 = t + dist / v * Math.exp(params.randomSpread * rnd.normal() - params.randomSpread ** 2 / 2);
-        if (t2 < best[k] && !done[k]) { best[k] = t2; push(t2, k, h2, s2, c); }
-        else if ((h2 > procH[k] + 50 || s2 > procS[k] + 20) && relabels[k] < 3) { relabels[k]++; push(t2, k, h2, s2, c); }
-      }
+    for (const st of stepsFrom(env, c)) {
+      const k = st.to;
+      if (st.blocked || (land[k] && ice[k])) continue;              // land ice is closed
+      // A step is walked on its land part, rowed or waded on its water part
+      // (the sea budget counts water since the last land), and walked on its
+      // permanent-sea-ice part (hardship).
+      const landKm = Math.max(0, st.len - st.water - st.ice);
+      let h2 = h - st.ice, s2 = s - st.water;
+      if (land[k] && !good(k)) h2 -= landKm * (1 - habit[k] / Hs);
+      if (h2 < 0 || s2 < 0) continue;
+      if (land[k]) s2 = Bs;                                         // landed
+      const vLand = land[k] ? speed[k] : seaSpeed;
+      if (!(vLand > 0)) continue;
+      const base = landKm / vLand + st.water / seaSpeed + st.ice / iceSpeed;
+      const t2 = t + base * Math.exp(params.randomSpread * rnd.normal() - params.randomSpread ** 2 / 2);
+      if (t2 < best[k] && !done[k]) { best[k] = t2; push(t2, k, h2, s2, c); }
+      else if ((h2 > procH[k] + 50 || s2 > procS[k] + 20) && relabels[k] < 10) { relabels[k]++; push(t2, k, h2, s2, c); }
     }
   }
-  // arrows: mean start point and mean direction per (millennium, bin)
+  // arrows: area-weighted mean start point and direction per (millennium,
+  // bin). `area` (km2 newly reached) sets the thickness; `n` (cells) is kept
+  // only for reference. Neither is a number of people.
   const list = [];
   for (const r of arrows.values()) {
-    const mag = Math.hypot(r.ex, r.ny) / r.n;
+    const mag = Math.hypot(r.ex, r.ny) / r.area;
     if (mag < 0.35) continue;                                   // moves in all directions: no clear arrow
     const l = Math.hypot(r.x, r.y, r.z);
-    list.push({ m: r.m, n: r.n, lng: Math.atan2(r.z, r.x) * 180 / Math.PI, lat: Math.asin(r.y / l) * 180 / Math.PI,
-      east: r.ex / r.n / mag, north: r.ny / r.n / mag });
+    list.push({ m: r.m, n: r.n, area: r.area, lng: Math.atan2(r.z, r.x) * 180 / Math.PI, lat: Math.asin(r.y / l) * 180 / Math.PI,
+      east: r.ex / r.area / mag, north: r.ny / r.area / mag });
   }
-  list.sort((a, b) => a.m - b.m || b.n - a.n);
+  list.sort((a, b) => a.m - b.m || b.area - a.area);
   return { seed, startCell, arrival, settleStart, settleEnd, parent, arrows: list, endYear: lastT, reachedLand };
 }
 

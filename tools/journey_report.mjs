@@ -12,7 +12,7 @@ const ROOT = new URL("..", import.meta.url).pathname;
 const V = ROOT + "anti-kytera/viewer/";
 const { polarFootprint } = await import(V + "js/stage-data.js");
 const { createResponder, BASE_MEAN_C } = await import(V + "js/stage-respond.js");
-const J = await import(V + "js/journey.js");
+const J = await import(process.env.JOURNEY_MODULE || V + "js/journey.js");
 globalThis.performance ??= { now: () => Date.now() };
 
 const body = process.argv[2] || "earth";
@@ -40,8 +40,11 @@ const step = SEA < 0 ? config.display.seaLevel.downStepMetres : config.display.s
 const sea = Math.round(SEA / step) * step;
 resp.update(sea, TEMP - BASE_MEAN_C);
 
-// the display terrain level the globe loads (2048 wide)
-const level = config.terrain.levels.filter((l) => l.width <= 2048).reduce((a, b) => (b.width > a.width ? b : a));
+// the terrain that decides land and water: the body's declared bedrock
+// (Earth: sub-ice), else the display level the globe loads (2048 wide).
+// FINE=display forces the display terrain (how PR #23 did it).
+const level = config.terrain.journeyBedrock && process.env.FINE !== "display" ? config.terrain.journeyBedrock
+  : config.terrain.levels.filter((l) => l.width <= 2048).reduce((a, b) => (b.width > a.width ? b : a));
 const png = readPng(new URL(level.url, "file://" + V).pathname);
 const metres = new Float32Array(png.width * png.height), off = config.terrain.encoding.offsetMetres;
 for (let i = 0; i < metres.length; i++) metres[i] = png.data[i * png.channels] * 256 + png.data[i * png.channels + 1] - off;
@@ -122,4 +125,53 @@ if (process.env.ROUTES && earth) {
     }
   }
   console.log(tally);
+}
+
+
+// CHECK=1: strait checkpoints. For each, the smallest single open-water hop
+// (km) with which the model can get from side A to side B inside the box.
+// The boxes and points are test inputs only; the model never sees them.
+if (process.env.CHECK) {
+  const CHECKS = earth ? [
+    ["ジブラルタル", [-5.8, 35.3], [-5.8, 36.9], [-8, -3.5, 34.5, 37.8]],
+    ["紅海南端（バブ・エル・マンデブ）", [42.8, 12.0], [44.0, 13.4], [41.5, 45.5, 11.0, 14.5]],
+    ["スンダ→サフル", [114.5, -8.2], [131.0, -12.5], [113, 150, -16, 4]],
+    ["ベーリング陸橋", [-178, 64.5], [-160, 66], [175, 205, 60, 70]],
+  ] : [];
+  const HOPS = [0, 10, 20, 30, 40, 60, 80, 100, 120, 150, 200, 300];
+  const inBox = (k, [a, b, c, d]) => { const p = J.cellCentre(k), L = p.lng < a ? p.lng + 360 : p.lng; return L >= a && L <= b && p.lat >= c && p.lat <= d; };
+  for (const [name, A, B, box] of CHECKS) {
+    const ka = J.cellOf(A[0], A[1]), kb = J.cellOf(B[0], B[1]);
+    let need = null;
+    for (const hop of HOPS) {
+      // label-correcting search on remaining water budget, land (with land) resets it
+      const best = new Float32Array(env.W * env.H).fill(-1), q = [[ka, hop]];
+      best[ka] = hop;
+      while (q.length) {
+        const [k, s] = q.pop();
+        for (const [kk, water, blocked] of J.neighbourSteps(env, k)) {
+          if (blocked || !inBox(kk, box)) continue;
+          let s2 = s - water;
+          if (s2 < 0) continue;
+          if (env.land[kk]) s2 = hop;
+          if (s2 > best[kk]) { best[kk] = s2; q.push([kk, s2]); }
+        }
+      }
+      if (best[kb] >= 0) { need = hop; break; }
+    }
+    console.log(`  ${name}: 陸A ${env.land[ka] ? "陸" : "海"}・陸B ${env.land[kb] ? "陸" : "海"}、渡るのに要る1回の最大渡海 ${need == null ? "300 km超" : need + " km 以下"}`);
+  }
+}
+
+// MAPBOX=lng0,lng1,lat0,lat1: print a character map of the cells (. sea, # land, I land ice, ~ permanent sea ice, o settleable)
+if (process.env.MAPBOX) {
+  const [a, b, c, d] = process.env.MAPBOX.split(",").map(Number);
+  for (let lat = d; lat >= c; lat -= 0.5) {
+    let row = `${lat.toFixed(1).padStart(6)} `;
+    for (let lng = a; lng <= b; lng += 0.5) {
+      const k = J.cellOf(((lng + 540) % 360) - 180 + 0.01, lat + 0.01);
+      row += !env.land[k] ? (env.permIce[k] ? "~" : ".") : env.ice[k] ? "I" : J.settleable(env, k) ? "o" : "#";
+    }
+    console.log(row);
+  }
 }

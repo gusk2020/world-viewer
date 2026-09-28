@@ -310,6 +310,18 @@ same model headless and reports Earth's broad-region arrivals. Known
 deviation: from West Africa most runs reach Europe via the Atlantic coast and
 Gibraltar, and Europe before South Asia.
 
+**Journey audit fix (branch `claude/anti-kytera-v2-journey-fix`, Draft PR on top
+of #23).** Water is measured per step: each move between neighbouring cells is
+sampled every ~4 km along the line between the cells' land centroids on
+BEDROCK (Earth: `terrain.journeyBedrock` = GEBCO sub-ice 2048x1024; never the
+ice-surface display terrain), and its water length is charged to the sea
+budget, so corner-touching land cells and sub-cell straits no longer count as
+land. Arrows weigh newly reached cells by their km2 area. Relabel cap 3 -> 10
+(3 lost budget-feasible paths). Consequence at -120 m / 8 C: the Americas are
+no longer reached, because the stage cryosphere ices Chukotka/Kamchatka (they
+open at >= 12 C); `CHECK=1` in `tools/journey_report.mjs` runs the strait
+checkpoints.
+
 ## Architecture (Three.js for 3D, OpenLayers for 2D, one page, toggle button)
 
 **Three.js** for the 3D globe, **OpenLayers** for the 2D map, both mounted
