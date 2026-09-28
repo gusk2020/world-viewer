@@ -11,6 +11,7 @@ import { ramp } from "./stage-draw.js";
 import { gapShort, gapNote, centreText } from "./stage-panel.js";
 import { BASE_MEAN_C } from "./stage-respond.js";
 import { createJourneyUI, JOURNEY_DEFAULT } from "./journey-ui.js";
+import { createTwoPopUI, TWOPOP_DEFAULT } from "./twopop-ui.js";
 
 const WORLD_INDEX_URL = "./worlds/index.json";
 const AK_BASE = "../";                 // anti-kytera/, where results/ and veg/results/ live
@@ -51,9 +52,12 @@ async function main() {
   // to モデル on every world switch (the model side is always 地球適合).
   let surface = "standard", src = "model", vegStyle = "detailed";
   let legendOpen = true;
-  // "climate" (the seven stages) or "journey" (グレートジャーニー), chosen at start
+  // "climate" (the seven stages), "journey" (グレートジャーニー) or "twopop"
+  // (二集団・試作), chosen at start
   let appMode = null;
   const inJourney = () => appMode === "journey";
+  const inTwoPop = () => appMode === "twopop";
+  const inSpecial = () => inJourney() || inTwoPop();
 
   const isEarth = () => world?.entry.id === "kasoku-sekai";
   const hasStages = () => Boolean(world && globe3d && globe3d.supportsStages && stages);
@@ -62,6 +66,12 @@ async function main() {
     $, stages: () => stages, globe: () => globe3d, worldConfig: () => world?.config, map2d: () => map2d, is2d: () => mode === "2d" && Boolean(map2d),
     refresh2d: () => refresh2d(),
     refreshLegend: () => { if (inJourney()) renderLegend(); lastReadout = ""; },
+    conditions: () => ({ sea: seaLevelMetres(), temp: Number(tempSlider.value) }),
+  });
+  const twopopUI = createTwoPopUI({
+    $, stages: () => stages, globe: () => globe3d, worldConfig: () => world?.config, isEarth: () => isEarth(),
+    is2d: () => mode === "2d" && Boolean(map2d), refresh2d: () => refresh2d(),
+    refreshLegend: () => { if (inTwoPop()) renderLegend(); lastReadout = ""; },
     conditions: () => ({ sea: seaLevelMetres(), temp: Number(tempSlider.value) }),
   });
   for (const [name, entries] of [["惑星", index.worlds.filter(e => e.id !== "moon")], ["衛星", index.worlds.filter(e => e.id === "moon")]]) {
@@ -123,6 +133,7 @@ async function main() {
     window.__akConditionMs = r.ms;
     applySurface();
     if (inJourney()) journeyUI.rebuild();   // new conditions: a new journey from 0
+    if (inTwoPop()) twopopUI.rebuild();
   }
   function applyWaterOpacity() {
     const percent = Number(waterOpacitySlider.value);
@@ -138,7 +149,7 @@ async function main() {
   }
   // Say what follows the sliders the moment they leave the base conditions.
   function updateCondition() {
-    if (!hasStages() || inJourney()) { condition.hidden = true; return; }
+    if (!hasStages() || inSpecial()) { condition.hidden = true; return; }
     const sea = seaLevelMetres(), temp = Number(tempSlider.value);
     const moved = sea !== 0 || temp !== BASE_MEAN_C;
     condition.hidden = !moved;
@@ -154,15 +165,17 @@ async function main() {
   }
   function applySurface() {
     if (inJourney()) surface = "journey";
-    else if (surface === "journey") surface = "standard";
+    else if (inTwoPop()) surface = "twopop";
+    else if (surface === "journey" || surface === "twopop") surface = "standard";
     selectButtons("#surface-mode button", "surface", surface);
     selectButtons("#stage-src button", "src", src);
     selectButtons("#veg-style button", "vegStyle", vegStyle);
     $("veg-style-row").hidden = surface !== "veg";
-    surfaceRow.hidden = !globe3d?.supportsStages || inJourney();   // the journey has its own panel
+    surfaceRow.hidden = !globe3d?.supportsStages || inSpecial();   // the journey and 二集団 have their own panels
     journeyUI.show(inJourney() && hasStages());
-    const teacherHere = isEarth() && stages?.atBase() && !inJourney();
-    srcRow.hidden = !teacherHere || !inStage() || surface === "bed" || surface === "sea" || surface === "journey";
+    twopopUI.show(inTwoPop() && hasStages());
+    const teacherHere = isEarth() && stages?.atBase() && !inSpecial();
+    srcRow.hidden = !teacherHere || !inStage() || surface === "bed" || surface === "sea" || surface === "journey" || surface === "twopop";
     if (!teacherHere) src = "model";   // no teacher here or under changed conditions; never draw an empty one
     document.getElementById("cross").hidden = !hasStages();
     if (!hasStages()) { globe3d.setStage(null); info.hidden = true; return; }
@@ -198,7 +211,7 @@ async function main() {
       else $("ak-note").textContent = "標準：地球の衛星画像。";
       return;
     }
-    const L = inJourney() ? journeyUI.legend() : stages.legend();
+    const L = inJourney() ? journeyUI.legend() : inTwoPop() ? twopopUI.legend() : stages.legend();
     $("ak-score").textContent = L.score;
     $("ak-note").textContent = L.note;
     if (L.bar) {
@@ -238,7 +251,7 @@ async function main() {
     if (!c) html = "中央: 地球の外";
     else if (!inStage()) {
       html = `${centreText(c.lng, c.lat)}　<span class="k">${surface === "elevation" ? "標高色" : "標準画像"}</span><br><b class="m">地表</b> 標高 ${globe3d.sampleElevation(c.lng, c.lat).toFixed(0)} m　<b class="t">教師</b> なし`;
-    } else html = inJourney() ? journeyUI.readout(c.lng, c.lat) : stages.readout(c.lng, c.lat);
+    } else html = inJourney() ? journeyUI.readout(c.lng, c.lat) : inTwoPop() ? twopopUI.readout(c.lng, c.lat) : stages.readout(c.lng, c.lat);
     if (html !== lastReadout) { $("ak-readout").innerHTML = html; lastReadout = html; }
   }
 
@@ -348,9 +361,9 @@ async function main() {
     seaLevelLabel.textContent = sea.label;
     seaLevelSlider.min = String(Math.round(sea.downToMetres / sea.downStepMetres));
     seaLevelSlider.max = String(Math.round(sea.upToMetres / sea.upStepMetres));
-    seaLevelSlider.value = inJourney() ? String(journeySeaSteps(config)) : "0";
+    seaLevelSlider.value = inJourney() ? String(journeySeaSteps(config)) : inTwoPop() ? String(seaSteps(config, TWOPOP_DEFAULT.seaMetres)) : "0";
     const enabled = globe3d.supportsStages;
-    surfaceRow.hidden = !enabled || inJourney();
+    surfaceRow.hidden = !enabled || inSpecial();
     tempRow.hidden = !enabled;
     toggleButton.hidden = !enabled;
     virtualNote.hidden = isEarth();
@@ -367,6 +380,7 @@ async function main() {
     applySurface();
     applyMode();
     if (inJourney()) { journeyUI.worldChanged(); journeyUI.rebuild(); }
+    if (inTwoPop()) twopopUI.rebuild();
     loading.classList.add("hidden");
     window.__akReady = true;
     if (!appMode) $("mode-chooser").hidden = false;
@@ -410,10 +424,11 @@ async function main() {
   // this body's slider steps) and 8 C -- a fixed background borrowed from
   // about 20,000 years ago for a comparison, not the conditions of the
   // dispersal period itself (the panel says so).
-  function journeySeaSteps(config) {
+  function seaSteps(config, metres) {
     const sea = config.display.seaLevel;
-    return Math.max(Math.round(sea.downToMetres / sea.downStepMetres), Math.round(JOURNEY_DEFAULT.seaMetres / sea.downStepMetres));
+    return Math.max(Math.round(sea.downToMetres / sea.downStepMetres), Math.round(metres / sea.downStepMetres));
   }
+  const journeySeaSteps = (config) => seaSteps(config, JOURNEY_DEFAULT.seaMetres);
   function setAppMode(next) {
     $("mode-chooser").hidden = true;
     if (next === appMode) return;
@@ -422,6 +437,9 @@ async function main() {
     if (inJourney()) {
       seaLevelSlider.value = String(journeySeaSteps(world.config));
       tempSlider.value = String(JOURNEY_DEFAULT.tempC);
+    } else if (inTwoPop()) {
+      seaLevelSlider.value = String(seaSteps(world.config, TWOPOP_DEFAULT.seaMetres));
+      tempSlider.value = String(TWOPOP_DEFAULT.tempC);
     } else {
       seaLevelSlider.value = "0";
       tempSlider.value = String(BASE_MEAN_C);
@@ -432,6 +450,7 @@ async function main() {
     if (stages) stages.setConditions(seaLevelMetres(), Number(tempSlider.value) - BASE_MEAN_C);
     applySurface();
     if (inJourney() && stages) journeyUI.rebuild();
+    if (inTwoPop() && stages) twopopUI.rebuild();
   }
   document.querySelectorAll("#mode-chooser [data-app-mode]").forEach((b) =>
     b.addEventListener("click", () => setAppMode(b.dataset.appMode)));
@@ -457,6 +476,7 @@ async function main() {
     mode: () => mode,
     appMode: (m) => (m ? setAppMode(m) : appMode),
     journey: journeyUI,
+    twopop: twopopUI,
   };
 
   const first = index.worlds.find((e) => e.id === index.default) || index.worlds[0];

@@ -69,5 +69,7 @@ export async function loadStages(base, planetary = false, { bedRange = [BED_LO, 
     setJourney: draw.setJourney,
     setJourneyTime: draw.setJourneyTime,
     setJourneyFill: draw.setJourneyFill,
+    setTwoPopFrame: draw.setTwoPopFrame,
+    setTwoPopLayer: draw.setTwoPopLayer,
   };
 }

@@ -279,6 +279,15 @@ html, body {
 #journey-pick.active { background: #ffd98a; color: #222; }
 #journey-status { margin: 0 2px 1px; font-size: 0.72rem; font-weight: 500; line-height: 1.3; color: #ffd98a; }
 #journey-status[hidden] { display: none; }
+/* ---- 二集団（試作） mode (twopop-ui.js) ---- */
+#twopop-panel { display: flex; flex-direction: column; gap: 1px; }
+#twopop-panel[hidden] { display: none; }
+#twopop-play { flex: 0 0 auto; padding: 0 8px; min-width: 4.8em; }
+#twopop-time-readout { min-width: 7.2em; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 0.8rem; }
+#twopop-cond-row .pill, #twopop-opt-row .pill { flex: 1 1 0; padding: 0 6px; font-size: 0.8rem; }
+#twopop-panel .pill.selected { background: #ffd98a; color: #222; }
+#twopop-status { margin: 0 2px 1px; font-size: 0.7rem; font-weight: 500; line-height: 1.3; color: #ffd98a; }
+#twopop-status[hidden] { display: none; }
 #mode-chooser { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center;
   background: rgba(0, 0, 0, 0.55); font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
 #mode-chooser[hidden] { display: none; }
