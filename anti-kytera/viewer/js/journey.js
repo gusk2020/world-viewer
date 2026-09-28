@@ -124,6 +124,7 @@ export function buildEnvironment({ fields: F, radiusMetres, seaLevel, fine = nul
   const landFrac = new Float32Array(N), zMean = new Float32Array(N), rough = new Float32Array(N);
   const anchorLng = new Float32Array(N), anchorLat = new Float32Array(N);
   const habit = new Float32Array(N), speed = new Float32Array(N), coastKm = new Float32Array(N);
+  const habitBase = new Float32Array(N);        // habitability before the cold limit (habit = min(1, thermal * habitBase)); twopop.js applies its own cold limits
   const T = new Float32Array(N), P = new Float32Array(N);
   // The terrain that decides land and water: the finest BEDROCK the body has
   // (Earth: GEBCO sub-ice bedrock, never the ice-surface display terrain),
@@ -223,6 +224,7 @@ export function buildEnvironment({ fields: F, radiusMetres, seaLevel, fine = nul
     const alt = 1 - smooth(2500, 4500, zMean[k]);                   // high plateaus
     const coast = Math.exp(-coastKm[k] / 80);                       // coastal and marine foods
     habit[k] = Math.min(1, Math.max(0, veg * (0.5 + 0.5 * arid) * thermal * alt * humid + 0.25 * coast * thermal * alt));
+    habitBase[k] = Math.max(0, veg * (0.5 + 0.5 * arid) * alt * humid + 0.25 * coast * alt);
     speed[k] = params.speedKmPerYear * (0.4 + 0.6 * habit[k]) / (1 + rough2[k] / params.roughnessM)
       * (1 + params.coastSpeedBoost * Math.exp(-coastKm[k] / 60));
   }
@@ -245,7 +247,7 @@ export function buildEnvironment({ fields: F, radiusMetres, seaLevel, fine = nul
     }
     for (let m = 0; m < n; m++) patch[members[m]] = n;
   }
-  return { W, H, R, seaLevel, land, landFrac, ice, permIce, habit, speed, coastKm, T, P, zMean, rough: rough2, dxRow, dy, patch,
+  return { W, H, R, seaLevel, land, landFrac, ice, permIce, habit, habitBase, speed, coastKm, T, P, zMean, rough: rough2, dxRow, dy, patch,
     anchorLng, anchorLat, stepLen, stepWater, stepIce, stepBlocked, params };
 }
 
@@ -257,6 +259,7 @@ export const cellOf = (lng, lat) => {
 export const cellCentre = (k) => ({ lng: -180 + ((k % GRID_W) + 0.5) * 360 / GRID_W, lat: -90 + (Math.floor(k / GRID_W) + 0.5) * 180 / GRID_H });
 export const settleable = (env, k) => env.land[k] && !env.ice[k] && env.habit[k] >= env.params.settleHabitability;
 
+export { greatCircleKm as greatCircleKmExport };
 function greatCircleKm(R, a, b) {
   const p1 = a.lat * Math.PI / 180, p2 = b.lat * Math.PI / 180, dl = (b.lng - a.lng) * Math.PI / 180;
   const h = Math.sin((p2 - p1) / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;

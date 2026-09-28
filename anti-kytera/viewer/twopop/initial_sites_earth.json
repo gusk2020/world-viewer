@@ -1,0 +1,141 @@
+{
+ "_what": "二集団試作の初期分布（地球のみ）。化石・遺跡の位置から、出発時点でどこにいたかを置くための入力データで、移動規則ではない。モデルはこの表の地名を読まず、座標だけを使う。座標は各遺跡の公表位置の概略（誤差 約0.5°、1°格子より細かい精度は不要）。年代は参考で、モデルの時刻には使わない。",
+ "_assumption": "各遺跡から radiusKm 以内の、その集団が住めるセルに、収容力の半分の密度で置く。半径は仮定（資料ではない）。",
+ "sapiens": {
+  "radiusKm": 1500,
+  "sites": [
+   {
+    "name": "Jebel Irhoud",
+    "lng": -8.87,
+    "lat": 31.86,
+    "age_ka": "~315",
+    "ref": "Hublin et al. 2017 Nature 546:289; Richter et al. 2017 Nature 546:293"
+   },
+   {
+    "name": "Omo Kibish",
+    "lng": 35.95,
+    "lat": 5.4,
+    "age_ka": ">233",
+    "ref": "Vidal et al. 2022 Nature 601:579"
+   },
+   {
+    "name": "Herto",
+    "lng": 40.5,
+    "lat": 10.3,
+    "age_ka": "~160",
+    "ref": "White et al. 2003 Nature 423:742"
+   },
+   {
+    "name": "Klasies River",
+    "lng": 24.4,
+    "lat": -34.1,
+    "age_ka": "~110",
+    "ref": "Grine et al. 2017 J Hum Evol"
+   },
+   {
+    "name": "Blombos Cave",
+    "lng": 21.22,
+    "lat": -34.41,
+    "age_ka": "~100-70",
+    "ref": "Henshilwood et al. 2011 Science 334:219"
+   },
+   {
+    "name": "Border Cave",
+    "lng": 31.99,
+    "lat": -27.02,
+    "age_ka": "~74",
+    "ref": "Grün et al. 2003 J Hum Evol 45:155"
+   }
+  ]
+ },
+ "neanderthal": {
+  "radiusKm": 800,
+  "sites": [
+   {
+    "name": "Gorham's Cave",
+    "lng": -5.34,
+    "lat": 36.12,
+    "ref": "Finlayson et al. 2006 Nature 443:850"
+   },
+   {
+    "name": "El Sidrón",
+    "lng": -5.33,
+    "lat": 43.38,
+    "ref": "Rosas et al. 2006 PNAS 103:19266"
+   },
+   {
+    "name": "La Chapelle-aux-Saints",
+    "lng": 1.72,
+    "lat": 44.99,
+    "ref": "Rendu et al. 2014 PNAS 111:81"
+   },
+   {
+    "name": "Spy",
+    "lng": 4.67,
+    "lat": 50.48,
+    "ref": "Semal et al. 2009 Am J Phys Anthropol 138:421"
+   },
+   {
+    "name": "Feldhofer (Neanderthal 1)",
+    "lng": 6.95,
+    "lat": 51.23,
+    "ref": "Schmitz et al. 2002 PNAS 99:13342"
+   },
+   {
+    "name": "Krapina",
+    "lng": 15.87,
+    "lat": 46.17,
+    "ref": "Rink et al. 1995 J Archaeol Sci 22:365"
+   },
+   {
+    "name": "Vindija",
+    "lng": 16.08,
+    "lat": 46.3,
+    "ref": "Prüfer et al. 2017 Science 358:655"
+   },
+   {
+    "name": "Mezmaiskaya",
+    "lng": 40.0,
+    "lat": 44.17,
+    "ref": "Ovchinnikov et al. 2000 Nature 404:490"
+   },
+   {
+    "name": "Kebara",
+    "lng": 34.95,
+    "lat": 32.56,
+    "ref": "Bar-Yosef et al. 1992 Curr Anthropol 33:497"
+   },
+   {
+    "name": "Amud",
+    "lng": 35.5,
+    "lat": 32.87,
+    "ref": "Rak et al. 1994 Am J Phys Anthropol 95:47"
+   },
+   {
+    "name": "Shanidar",
+    "lng": 44.22,
+    "lat": 36.83,
+    "ref": "Pomeroy et al. 2020 Antiquity 94:11"
+   },
+   {
+    "name": "Teshik-Tash",
+    "lng": 67.33,
+    "lat": 38.25,
+    "ref": "Krause et al. 2007 Nature 449:902"
+   },
+   {
+    "name": "Chagyrskaya",
+    "lng": 83.16,
+    "lat": 51.44,
+    "ref": "Mafessoni et al. 2020 PNAS 117:15132"
+   },
+   {
+    "name": "Denisova Cave",
+    "lng": 84.68,
+    "lat": 51.4,
+    "ref": "Slon et al. 2018 Nature 561:113"
+   }
+  ]
+ },
+ "_refs": "文献は遺跡の特定のための参照（位置・年代の出典）。数値はモデルに入らない。引用前に原典で確認すること。"
+}

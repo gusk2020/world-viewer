@@ -39,7 +39,9 @@ export const simpleVeg = (code) => SIMPLE_VEG.find((g) => g.codes.includes(code)
 const WATER = [47, 111, 168];          // v1s's sea colour (0x2f6fa8), for the 2D map
 // the arrays stage-respond.js rewrites in place
 const RESPONDING_KEYS = ["T_fit", "E_fit", "P_fit", "H_fit", "veg_fit", "snow", "seaice"];
-const STAGE_ID = { bed: 0, sea: 1, t2m: 2, hum: 2, precip: 2, ice: 3, veg: 4, journey: 5 };
+const STAGE_ID = { bed: 0, sea: 1, t2m: 2, hum: 2, precip: 2, ice: 3, veg: 4, journey: 5, twopop: 6 };
+// 二集団（試作）: the colours of the two populations and of Neanderthal ancestry (0 -> 10%)
+export const TWOPOP_RGB = { sapiens: [232, 112, 28], neanderthal: [138, 70, 210], ancestryLo: [255, 236, 190], ancestryHi: [120, 10, 40] };
 export const JOURNEY_PASSED = [255, 246, 214];   // reached, not settled: a pale wash
 const JOURNEY_NEVER = 1e9;
 
@@ -123,6 +125,12 @@ export function createStageDraw(ctx) {
   // (journey.js), filled by setJourney(); NEVER until a journey has run.
   T.jArrive = floatTex(new Float32Array(720 * 360).fill(JOURNEY_NEVER), 720, 360);
   T.jSettle = floatTex(new Float32Array(720 * 360).fill(JOURNEY_NEVER), 720, 360);
+  // 二集団（試作）: one frame of the two-population run on its 1-degree grid
+  // (twopop.js): sapiens and Neanderthal density relative to their best land,
+  // and Neanderthal ancestry among sapiens (0-1 = 0-10%)
+  T.tpS = floatTex(new Float32Array(360 * 180), 360, 180);
+  T.tpN = floatTex(new Float32Array(360 * 180), 360, 180);
+  T.tpA = floatTex(new Float32Array(360 * 180), 360, 180);
 
   // Shared uniform objects: the 3D material and the 2D renderer read the same ones.
   const U = {
@@ -134,6 +142,7 @@ export function createStageDraw(ctx) {
     akLo: { value: 0 }, akHi: { value: 1 }, akLog: { value: false }, akSeaLevel: { value: 0 }, akVegSimple: { value: false },
     akBedLo: { value: ctx.bedRange[0] }, akBedHi: { value: ctx.bedRange[1] },
     akJA: { value: T.jArrive }, akJS: { value: T.jSettle }, akJT: { value: 0 }, akJMax: { value: 1 }, akJFill: { value: 0 },
+    akTpS: { value: T.tpS }, akTpN: { value: T.tpN }, akTpA: { value: T.tpA }, akTpLayer: { value: 0 },
   };
 
   const GLSL = /* glsl */`
@@ -145,6 +154,8 @@ uniform float akBedLo, akBedHi;   // the relief colour range: Earth -8000..6000,
 uniform sampler2D akJA, akJS;     // journey: first arrival / settlement year per cell
 uniform float akJT, akJMax;       // journey: the time shown, and the last arrival (colour scale)
 uniform float akJFill;            // journey: 1 = fill the reached range, 0 = arrows only (background alone)
+uniform sampler2D akTpS, akTpN, akTpA;   // 二集団: sapiens / Neanderthal relative density, ancestry (0-1 = 0-10%)
+uniform int akTpLayer;                   // 二集団: 0 = where each lives, 1 = Neanderthal ancestry among sapiens
 const float AK_ICE_MIN = ${ICE_MIN_M.toFixed(1)};
 const int AK_ROCK = ${RAMP_ROWS.indexOf("rock")}, AK_SEA = ${RAMP_ROWS.indexOf("sea")}, AK_JOURNEY = ${RAMP_ROWS.indexOf("journey")};
 float akBil(sampler2D t, vec2 ll) {
@@ -212,11 +223,33 @@ vec3 akJourney(vec2 ll, float z, bool sea) {
   if (s <= akJT) return mix(bg, akRampC(AK_JOURNEY, a / max(akJMax, 1.0)), sea ? 0.55 : 0.8);
   return mix(bg, vec3(${JOURNEY_PASSED.join(",")}), sea ? 0.35 : 0.6);
 }
+// 二集団（試作）: the trip's muted environment as for the journey, under
+// either where each population lives (orange sapiens, blue Neanderthals,
+// mixed where both are) or the Neanderthal ancestry carried by sapiens.
+vec3 akTwoPop(vec2 ll, float z, bool sea) {
+  int k = akVeg(akHM, akVM, ll, z);
+  vec3 bg = k == 0 ? akSeaIce(akSeaC(z - akSeaLevel), ll) : texelFetch(akPal, ivec2(k, 0), 0).rgb * 255.0;
+  if (k != 0) bg = mix(vec3(dot(bg, vec3(0.3, 0.59, 0.11))), bg, 0.35) * 0.9;
+  if (sea) return bg;
+  float s = clamp(akBil(akTpS, ll), 0.0, 1.0), n = clamp(akBil(akTpN, ll), 0.0, 1.0);
+  vec3 cs = vec3(${TWOPOP_RGB.sapiens.join(",")}), cn = vec3(${TWOPOP_RGB.neanderthal.join(",")});
+  if (akTpLayer == 1) {
+    if (s > 0.03) {
+      float a = clamp(akBil(akTpA, ll), 0.0, 1.0);
+      return mix(bg, mix(vec3(${TWOPOP_RGB.ancestryLo.join(",")}), vec3(${TWOPOP_RGB.ancestryHi.join(",")}), sqrt(a)), 0.9);
+    }
+    return n > 0.03 ? mix(bg, cn, 0.35) : bg;
+  }
+  float t = s + n;
+  if (t < 0.03) return bg;
+  return mix(bg, (cs * s + cn * n) / t, clamp(0.25 + 0.8 * max(s, n), 0.0, 0.88));
+}
 // sRGB 0-255. relief: how strongly relief shading may modulate it on the flat map.
 vec3 akColour(vec2 ll, float z, out float relief) {
   bool sea = z < akSeaLevel;
   relief = sea ? 0.0 : 1.0;
   if (akStage == 5) { relief = sea ? 0.0 : 0.25; return akJourney(ll, z, sea); }
+  if (akStage == 6) { relief = sea ? 0.0 : 0.25; return akTwoPop(ll, z, sea); }
   if (akStage == 0) { relief = 1.0; return akRock(z); }
   if (akStage == 1) return sea ? akSeaC(z - akSeaLevel) : akRock(z);
   if (akStage == 4) {
@@ -404,6 +437,16 @@ void main() {
   }
   function setJourneyTime(t) { U.akJT.value = t; }
   function setJourneyFill(on) { U.akJFill.value = on ? 1 : 0; }
+  // 二集団: one frame (Uint8Array of 3 x 360*180: sapiens, Neanderthals, ancestry), or null to clear
+  function setTwoPopFrame(frame) {
+    const M = 360 * 180;
+    for (const [t, o] of [[T.tpS, 0], [T.tpN, M], [T.tpA, 2 * M]]) {
+      const d = t.image.data;
+      if (!frame) d.fill(0); else for (let i = 0; i < M; i++) d[i] = frame[o + i] / 255;
+      t.needsUpdate = true;
+    }
+  }
+  function setTwoPopLayer(layer) { U.akTpLayer.value = layer === "ancestry" ? 1 : 0; }
 
-  return { createMaterial, createElevationMaterial, renderMercator, apply, refreshFields, setJourney, setJourneyTime, setJourneyFill };
+  return { createMaterial, createElevationMaterial, renderMercator, apply, refreshFields, setJourney, setJourneyTime, setJourneyFill, setTwoPopFrame, setTwoPopLayer };
 }

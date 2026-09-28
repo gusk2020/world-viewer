@@ -87,6 +87,24 @@
       </div>
       <p id="journey-status" hidden></p>
     </div>
+    <!-- 二集団（試作） mode (twopop-ui.js) -->
+    <div id="twopop-panel" hidden>
+      <div class="control-row" id="twopop-time-row">
+        <button type="button" id="twopop-play" class="pill">▶ 再生</button>
+        <input type="range" id="twopop-time" min="0" max="60000" step="500" value="0" aria-label="出発からの年" />
+        <span id="twopop-time-readout">出発から 0年</span>
+      </div>
+      <div class="control-row" id="twopop-cond-row">
+        <button type="button" data-tp-cond="compete" class="pill">競争のみ</button>
+        <button type="button" data-tp-cond="hybrid" class="pill">交雑のみ</button>
+        <button type="button" data-tp-cond="both" class="pill selected">両方</button>
+      </div>
+      <div class="control-row" id="twopop-opt-row">
+        <button type="button" id="twopop-lang" class="pill">言語差仮説 オフ</button>
+        <button type="button" id="twopop-layer" class="pill">表示 分布</button>
+      </div>
+      <p id="twopop-status" hidden></p>
+    </div>
   </div>
   <!-- chosen at start: 気候 (the seven stages) or グレートジャーニー -->
   <div id="mode-chooser" hidden>
@@ -94,6 +112,7 @@
       <div class="mode-title">Anti-KyTerra v2　表示を選んでください</div>
       <button type="button" data-app-mode="climate">気候<small>7段階の推定と、海面・気温への追従</small></button>
       <button type="button" data-app-mode="journey">グレートジャーニー<small>地形と気候から人の拡散を試す比較実験</small></button>
+      <button type="button" data-app-mode="twopop">二集団（試作）<small>サピエンスとネアンデルタール人の競争・交雑を仮説として比べる</small></button>
     </div>
   </div>
   <div id="bottom-controls">

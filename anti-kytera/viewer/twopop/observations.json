@@ -1,0 +1,29 @@
+{
+  "_what": "二集団試作の評価資料。fit は合わせ込み（交雑率を1つの条件ごとに合わせる）にだけ使い、independent は独立確認にだけ使う。領域の箱は評価のためだけで、モデルは読まない。モデルの時刻は『出発からの年』で、環境は固定のため、暦年（何万年前）とは直接比べない。",
+  "fit": [
+    { "id": "F1", "what": "現代の非アフリカ集団に残るネアンデルタール由来の割合", "measure": "nonAfricanAncestryEnd", "range": [0.018, 0.026], "target": 0.022,
+      "source": "Prüfer et al. 2017 Science 358:655（非アフリカ集団 1.8〜2.6%）" }
+  ],
+  "independent": [
+    { "id": "I1", "what": "ネアンデルタール人が消える", "measure": "neanderthalShareEnd", "max": 0.01,
+      "source": "Higham et al. 2014 Nature 512:306（化石・遺跡の年代：約4.1〜3.9万年前までに消える）" },
+    { "id": "I2", "what": "欧州で両者が共存した期間", "measure": "europeOverlapYears", "observed": [2600, 5400], "sameOrder": [1000, 15000],
+      "source": "Higham et al. 2014 Nature 512:306（2,600〜5,400年）", "note": "環境が固定なので、桁が合うか（1,000〜15,000年）だけを見る" },
+    { "id": "I3", "what": "サハラ以南アフリカ集団ではほぼ0", "measure": "subSaharanAncestryEnd", "max": 0.005,
+      "source": "Chen et al. 2020 Cell 180:677（アフリカ集団は平均約0.3%、主に後の逆流による）" },
+    { "id": "I4", "what": "非アフリカの地域差が小さい（東アジアが欧州よりやや多い程度）", "measure": "nonAfricanRegionRatio", "max": 1.4,
+      "source": "Prüfer et al. 2017 Science 358:655; Wall et al. 2013 Genetics 194:199" },
+    { "id": "I5", "what": "接触した頃の欧州のサピエンスは、後の時代より多く持つ（議論あり）", "measure": "europeEarlyToEndRatio", "min": 2,
+      "source": "Fu et al. 2015 Nature 524:216（Oase 1 で6〜9%）; Fu et al. 2016 Nature 534:200（減少）; Petr et al. 2019 PNAS 116:1639（選択以外の減少は小さいとする反論）", "contested": true }
+  ],
+  "regions": {
+    "_note": "評価用のみ [経度min, 経度max, 緯度min, 緯度max]",
+    "africa": [[-20, 35, -36, 37], [35, 52, -36, 12]],
+    "subSaharan": [[-18, 42, -35, 5]],
+    "europe": [[-10, 30, 38, 60]],
+    "southAsia": [[68, 90, 8, 28]],
+    "eastAsia": [[100, 125, 20, 45]],
+    "sahul": [[112, 155, -45, -10]],
+    "americas": [[-170, -35, -55, 70]]
+  }
+}
