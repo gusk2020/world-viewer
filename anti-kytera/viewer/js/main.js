@@ -59,7 +59,7 @@ async function main() {
   const hasStages = () => Boolean(world && globe3d && globe3d.supportsStages && stages);
   const inStage = () => surface !== "standard" && surface !== "elevation";
   const journeyUI = createJourneyUI({
-    $, stages: () => stages, globe: () => globe3d, map2d: () => map2d, is2d: () => mode === "2d" && Boolean(map2d),
+    $, stages: () => stages, globe: () => globe3d, worldConfig: () => world?.config, map2d: () => map2d, is2d: () => mode === "2d" && Boolean(map2d),
     refresh2d: () => refresh2d(),
     refreshLegend: () => { if (inJourney()) renderLegend(); lastReadout = ""; },
     conditions: () => ({ sea: seaLevelMetres(), temp: Number(tempSlider.value) }),

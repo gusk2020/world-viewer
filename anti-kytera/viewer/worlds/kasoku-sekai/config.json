@@ -50,6 +50,13 @@
     "width": 4096,
     "height": 2048
    }
-  ]
+  ],
+  "journeyBedrock": {
+   "url": "../data/gebco2026_subice_2048x1024.png",
+   "width": 2048,
+   "height": 1024,
+   "source": "GEBCO_2026 sub-ice topography/bathymetry, area-averaged to 2048x1024 (.github/workflows/anti-kytera-bed.yml)",
+   "_note": "グレートジャーニーの海陸判定と地形に使う岩盤。表示用の氷表面（levels）は混ぜない。"
+  }
  }
 }

@@ -4,10 +4,11 @@
 // shader (stage-draw.js, stage "journey"), so 3D and 2D share it exactly.
 //
 // Each arrow is one ~1000-year period in one 6x6-degree bin (journey.js):
-// its direction is the mean direction of the first-arrival steps started in
-// that bin, its thickness the number of cells newly reached -- a RELATIVE
-// amount of movement, never a head count. Sizes are in degrees, so an arrow
-// looks the same on every body whatever its radius.
+// its direction is the area-weighted mean direction of the first-arrival
+// steps started in that bin, its thickness the ground AREA newly reached
+// (km2, so polar cells and small bodies are not over-counted), relative to
+// this journey's largest. It is never a head count or a population. Sizes on
+// screen are in degrees, so an arrow looks the same on every body.
 import * as THREE from "three";
 import { ARROW_YEARS } from "./journey.js";
 import { lngLatToDirection } from "./geoConvert.js";
@@ -17,26 +18,29 @@ const WIDTH_MIN_DEG = 0.2, WIDTH_MAX_DEG = 1.1;
 const ARROW_RGB = [24, 24, 38];
 const MAX_ARROWS = 260;             // never cover the map
 
+// the largest newly reached area of any arrow (km2): the thickest arrow
+export const maxArrowArea = (journey) => journey.arrows.reduce((m, a) => Math.max(m, a.area), 1);
+
 // Which arrows to show at time t. style: "recent" = the last 5 periods,
 // "all" = every period so far (older ones thinner and fainter), "none".
 export function visibleArrows(journey, t, style) {
   if (!journey || style === "none") return [];
   const now = Math.floor(t / ARROW_YEARS);
-  const nMax = journey.arrows.reduce((m, a) => Math.max(m, a.n), 1);
-  const periodMax = new Map();                                  // the largest movement of each period
-  for (const a of journey.arrows) periodMax.set(a.m, Math.max(periodMax.get(a.m) || 0, a.n));
+  const aMax = maxArrowArea(journey);
+  const periodMax = new Map();                                  // the largest area of each period
+  for (const a of journey.arrows) periodMax.set(a.m, Math.max(periodMax.get(a.m) || 0, a.area));
   const out = [];
   for (const a of journey.arrows) {
     if (a.m > now) continue;
     const age = now - a.m;
     if (style === "recent" && age >= 5) continue;
-    if (age > 0 && a.n < 0.25 * periodMax.get(a.m)) continue;   // small movements of past periods drop out first
-    const rel = Math.sqrt(a.n / nMax);
+    if (age > 0 && a.area < 0.25 * periodMax.get(a.m)) continue;   // small areas of past periods drop out first
+    const rel = Math.sqrt(a.area / aMax);
     const width = (WIDTH_MIN_DEG + (WIDTH_MAX_DEG - WIDTH_MIN_DEG) * rel) * (age ? 0.7 : 1);
     const alpha = age ? Math.max(style === "all" ? 0.35 : 0.3, 0.8 * Math.pow(0.72, age)) : 0.95;
     out.push({ ...a, width, alpha, age });
   }
-  out.sort((x, y) => x.age - y.age || y.n - x.n);
+  out.sort((x, y) => x.age - y.age || y.area - x.area);
   return out.slice(0, MAX_ARROWS).reverse();     // oldest first, so the newest draw on top
 }
 

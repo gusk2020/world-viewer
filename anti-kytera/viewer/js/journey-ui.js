@@ -7,20 +7,22 @@
 // conditions when it started), one start cell and one seed. Changing the
 // conditions, the body, the start or the seed starts a new journey from 0.
 import * as J from "./journey.js";
-import { visibleArrows, buildArrowMesh, drawArrows2D, buildStartMarker } from "./journey-view.js";
+import { visibleArrows, buildArrowMesh, drawArrows2D, buildStartMarker, maxArrowArea } from "./journey-view.js";
 import { ramp, JOURNEY_PASSED } from "./stage-draw.js";
 import { centreText } from "./stage-panel.js";
+import { decodeElevationGrid } from "./elevation.js";
 
 export const JOURNEY_DEFAULT = { seaMetres: -120, tempC: 8 };
 const STORE = "akJourney";
 const ARROW_STYLES = [["recent", "矢印 直近"], ["all", "矢印 全期間"], ["none", "矢印 なし"]];
 const PLAY_SECONDS = 24;            // a whole journey plays in about this long
 const fmtYears = (y) => `${Math.round(y).toLocaleString("ja-JP")}年`;
+const fmtArea = (km2) => km2 >= 1e4 ? `${Math.round(km2 / 1e4).toLocaleString("ja-JP")}万km²` : `${Math.round(km2).toLocaleString("ja-JP")}km²`;
 
 function load() { try { return JSON.parse(localStorage.getItem(STORE)) || {}; } catch { return {}; } }
 function save(v) { try { localStorage.setItem(STORE, JSON.stringify(v)); } catch { /* private mode: fine */ } }
 
-// host: { $, stages(), globe(), map2d(), is2d(), refresh2d(), refreshLegend(), conditions() -> {sea, temp} }
+// host: { $, stages(), globe(), worldConfig(), map2d(), is2d(), refresh2d(), refreshLegend(), conditions() -> {sea, temp} }
 export function createJourneyUI(host) {
   const { $ } = host;
   const saved = load();
@@ -37,11 +39,38 @@ export function createJourneyUI(host) {
   };
 
   // ------------------------------------------------ running a journey
-  function rebuild() {                       // new environment (conditions or body changed)
-    const stages = host.stages(), globe = host.globe();
-    if (!stages || !globe) return;
-    const inputs = stages.journeyInputs();
-    env = J.buildEnvironment({ ...inputs, fine: globe.getElevation() });
+  // The terrain that decides land and water is bedrock: Earth declares its
+  // sub-ice bedrock (terrain.journeyBedrock), never the ice-surface display
+  // terrain; a body without ice sheets uses its probe DEM, which is the same
+  // source as its stage bedrock. Fetched once per URL.
+  const bedrockCache = new Map();
+  function bedrockFor(config) {
+    const spec = config.terrain.journeyBedrock;
+    if (!spec) return Promise.resolve(host.globe().getElevation());
+    if (!bedrockCache.has(spec.url)) {
+      bedrockCache.set(spec.url, new Promise((resolve, reject) => {
+        const image = new Image();
+        image.crossOrigin = "anonymous";
+        image.onload = () => resolve(decodeElevationGrid(image, config.terrain.encoding));
+        image.onerror = () => { bedrockCache.delete(spec.url); reject(new Error(`failed to load ${spec.url}`)); };
+        image.src = spec.url;
+      }));
+    }
+    return bedrockCache.get(spec.url);
+  }
+  let rebuildToken = 0;
+  async function rebuild() {                 // new environment (conditions or body changed)
+    const stages = host.stages(), globe = host.globe(), config = host.worldConfig();
+    if (!stages || !globe || !config) return;
+    const token = ++rebuildToken;
+    pause(); journey = null; env = null; stages.setJourney(null);
+    message = "地形を読み込み中…"; render();
+    let fine;
+    try { fine = await bedrockFor(config); }
+    catch { if (token === rebuildToken) { message = "岩盤の地形を読み込めませんでした。通信状況を確認してください。"; render(); } return; }
+    if (token !== rebuildToken || host.stages() !== stages) return;      // superseded
+    env = J.buildEnvironment({ ...stages.journeyInputs(), fine });
+    message = "";
     run();
   }
   function run() {
@@ -162,13 +191,13 @@ export function createJourneyUI(host) {
     return {
       bar: { colours: Array.from({ length: 256 }, (_, i) => ramp("journey", i / 255)), lo: "0", hi: fmtYears(end), unit: "（定住地の色＝初到達）" },
       classes: [[JOURNEY_PASSED, "通過のみ（定住なし）"], [[150, 150, 150], "未到達（下地は旅の条件の植生・海・陸氷）"],
-        [[24, 24, 38], "矢印：約1000年ごとの移動方向。太さは相対移動量（人数ではない）"]],
+        [[24, 24, 38], `矢印：約1000年ごとの移動方向。太さはその期間に新しく到達した土地の面積（最も太い矢印＝約${journey ? fmtArea(maxArrowArea(journey)) : "–"}）。人口や移動人数ではない`]],
       score: journey ? `出発から ${fmtYears(t)}${reach}・乱数の種 ${seed}` : "出発点を選ぶと旅が始まります",
       note: `旅の条件（旅の間は固定）：海面 ${c.sea > 0 ? "+" : ""}${c.sea} m・平均気温 ${c.temp}℃。` +
         (isDefault ? "約2万年前相当の固定背景を借りた比較実験で、人類拡散期の史実を再現した条件ではない。" : "") +
         " 条件・出発点・乱数の種・天体を変えると、旅は出発からやり直す。" +
         " 移動は0.5°格子の確率的な最短時間の広がり：歩く速さと住みやすさは標高・起伏・植生・気温・降水・湿度・陸氷・海までの距離から決め、" +
-        "住めない土地は約700 kmまで、海は1回約120 kmまで渡れる（通年の海氷の上は歩ける）。移動能力は一定で、寒さや渡海への適応は入っていない。" +
+        "住めない土地は約700 kmまで、海は1回約120 kmまで渡れる（通年の海氷の上は歩ける）。海と陸は一歩ごとに、その線上の岩盤（地球は氷床下の岩盤、約20 km格子）で測る。移動能力は一定で、寒さや渡海への適応は入っていない。" +
         "人の数は推定しない。地名・経度・天体名は使っていない。",
     };
   }
