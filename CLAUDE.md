@@ -340,6 +340,14 @@ reaches Beringia/Americas via Kamchatka's ice (sea 180 alone stops at the
 Kamchatka ice ~58.8N 150E). `PARAMS='{...}'` overrides constants in
 `tools/journey_report.mjs`.
 
+**Arrow merge (branch `claude/anti-kytera-v2-journey-arrow-merge`, Draft PR on
+top of #25).** Display-only: `js/journey-arrows.js` (no three/DOM) merges
+same-era arrows within 4.5 deg / ~35 deg turn (checked for every member),
+never merging arrows where >= 25% of new land was reached after >= 20 km of
+open water (`crossKm` in journey.js, `CROSSING_KM`). Earth ~1,140 -> ~570
+shown; `tools/journey_arrows_report.mjs` checks coverage and per-region
+first-arrival arrows. UI toggle 矢印 整理/全部.
+
 ## Architecture (Three.js for 3D, OpenLayers for 2D, one page, toggle button)
 
 **Three.js** for the 3D globe, **OpenLayers** for the 2D map, both mounted

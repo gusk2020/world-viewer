@@ -7,7 +7,7 @@
 // conditions when it started), one start cell and one seed. Changing the
 // conditions, the body, the start or the seed starts a new journey from 0.
 import * as J from "./journey.js";
-import { journeyArrows, shownCount, eras, buildArrowMesh, drawArrows2D, buildStartMarker, maxArrowArea } from "./journey-view.js";
+import { journeyArrows, shownCount, eras, maxShownArea, buildArrowMesh, drawArrows2D, buildStartMarker } from "./journey-view.js";
 import { ramp, JOURNEY_PASSED } from "./stage-draw.js";
 import { centreText } from "./stage-panel.js";
 import { decodeElevationGrid } from "./elevation.js";
@@ -17,6 +17,9 @@ const STORE = "akJourney";
 // what is drawn: arrows alone over the trip's background (the default), or
 // the reached/settled range filled in under them
 const DISPLAYS = [["arrows", "表示 矢印のみ"], ["fill", "表示 塗り＋矢印"]];
+// arrows as shown: nearby same-era arrows merged (the default), or every
+// recorded arrow on its own (for comparing the density)
+const DENSITIES = [["merged", "矢印 整理"], ["all", "矢印 全部"]];
 const PLAY_SECONDS = 24;            // a whole journey plays in about this long
 const fmtYears = (y) => `${Math.round(y).toLocaleString("ja-JP")}年`;
 const fmtArea = (km2) => km2 >= 1e4 ? `${Math.round(km2 / 1e4).toLocaleString("ja-JP")}万km²` : `${Math.round(km2).toLocaleString("ja-JP")}km²`;
@@ -31,14 +34,14 @@ export function createJourneyUI(host) {
   let seed = Number.isInteger(saved.seed) ? saved.seed : J.newSeed();
   let requested = saved.lng != null ? { lng: saved.lng, lat: saved.lat } : null;   // what the user chose
   let start = null, env = null, journey = null, t = 0, playing = false, armed = !requested;
-  let display = 0, message = "", lastOverlayKey = "", last2d = 0, lastLegend = 0;
+  let display = 0, density = 0, message = "", lastOverlayKey = "", last2d = 0, lastLegend = 0;
   let arrows = [], arrowMesh = null;           // every arrow of this journey, and its globe mesh
   const persist = () => save({ seed, lng: requested?.lng, lat: requested?.lat });
 
   const els = {
     panel: $("journey-panel"), play: $("journey-play"), time: $("journey-time"), timeText: $("journey-time-readout"),
     start: $("journey-start"), pick: $("journey-pick"), seed: $("journey-seed"), reseed: $("journey-reseed"),
-    display: $("journey-display"), status: $("journey-status"),
+    display: $("journey-display"), density: $("journey-density"), status: $("journey-status"),
   };
 
   // ------------------------------------------------ running a journey
@@ -136,7 +139,7 @@ export function createJourneyUI(host) {
     if (token !== runToken || env !== runEnv) return;                       // superseded
     start = r; message = moved;
     journey = done.journey;
-    arrows = journeyArrows(journey);
+    arrows = journeyArrows(journey, { merge: DENSITIES[density][0] === "merged" });
     host.stages().setJourney(journey);
     setTime(0);
     play();
@@ -173,7 +176,7 @@ export function createJourneyUI(host) {
     const globe = host.globe();
     if (!globe) return;
     host.stages()?.setJourneyFill(DISPLAYS[display][0] === "fill");
-    const key = journey ? `${journey.seed}|${journey.startCell}|${env?.seaLevel}|${journey.endYear}` : "none";
+    const key = journey ? `${journey.seed}|${journey.startCell}|${env?.seaLevel}|${journey.endYear}|${density}` : "none";
     if (key !== lastOverlayKey) {
       lastOverlayKey = key;
       arrowMesh = null;
@@ -197,6 +200,7 @@ export function createJourneyUI(host) {
     els.pick.textContent = armed ? "タップ待ち…" : "出発点を選ぶ";
     els.seed.textContent = `乱数の種 ${seed}`;
     els.display.textContent = DISPLAYS[display][1];
+    els.density.textContent = DENSITIES[density][1];
     els.status.textContent = message;
     els.status.hidden = !message;
     updateOverlay();
@@ -210,6 +214,11 @@ export function createJourneyUI(host) {
   els.pick.addEventListener("click", () => { armed = !armed; message = armed ? "地図をタップして出発点を選んでください。" : ""; render(); });
   els.reseed.addEventListener("click", () => { seed = J.newSeed(); persist(); run(); });
   els.display.addEventListener("click", () => { display = (display + 1) % DISPLAYS.length; render(); host.refreshLegend(); if (host.is2d()) host.refresh2d(); });
+  els.density.addEventListener("click", () => {
+    density = (density + 1) % DENSITIES.length;
+    if (journey) arrows = journeyArrows(journey, { merge: DENSITIES[density][0] === "merged" });
+    render(); host.refreshLegend(); if (host.is2d()) host.refresh2d();
+  });
 
   // A tap on the globe or the map, already turned into lng/lat.
   function onTap(lng, lat) {
@@ -246,7 +255,9 @@ export function createJourneyUI(host) {
     const eraList = eras(journey ? journey.endYear : 1);
     const k = (y) => y >= 1000 ? `${(y / 1000).toLocaleString("ja-JP")}千` : `${y}`;
     const eraClasses = eraList.map((e) => [e.rgb, `矢印 ${k(e.from)}〜${k(e.to)}年`]);
-    const arrowNote = `矢印：約1000年ごとの移動方向。色はその土地に初めて着いた時代、太さはその期間に新しく到達した土地の面積（最も太い矢印＝約${journey ? fmtArea(maxArrowArea(journey)) : "–"}）。過去の矢印は消さずに残す。人口や移動人数ではない。`;
+    const merged = DENSITIES[density][0] === "merged";
+    const count = journey ? (merged ? `矢印 ${arrows.length.toLocaleString("ja-JP")}本（記録 ${journey.arrows.length.toLocaleString("ja-JP")}本のうち、同じ時代で近くの同じ向きをまとめた）。` : `矢印 ${arrows.length.toLocaleString("ja-JP")}本（記録のまま全部）。`) : "";
+    const arrowNote = `${count}矢印：約1000年ごとの移動方向。色はその土地に初めて着いた時代、太さは新しく到達した土地の面積（最も太い矢印＝約${journey ? fmtArea(maxShownArea(arrows)) : "–"}）。過去の矢印は消さずに残す。まとめても到達の記録は消さず、渡海後の到達が多い矢印はまとめない。人口や移動人数ではない。`;
     return {
       bar: fill ? { colours: Array.from({ length: 256 }, (_, i) => ramp("journey", i / 255)), lo: "0", hi: fmtYears(end), unit: "（定住地の色＝初到達）" } : null,
       classes: fill ? [[JOURNEY_PASSED, "通過のみ"], [[150, 150, 150], "未到達"], ...eraClasses] : eraClasses,
@@ -276,7 +287,7 @@ export function createJourneyUI(host) {
   const api = {
     rebuild, onTap, readout, legend, draw2d, show, pause, play, setTime,
     worldChanged: () => { lastOverlayKey = ""; },
-    state: () => ({ seed, requested, start, t, playing, endYear: journey?.endYear ?? null, armed, message, arrows: arrows.length, shown: shownCount(arrows, t), display: DISPLAYS[display][0], triangles: arrowMesh?.triangles ?? 0 }),
+    state: () => ({ seed, requested, start, t, playing, endYear: journey?.endYear ?? null, armed, message, arrows: arrows.length, shown: shownCount(arrows, t), display: DISPLAYS[display][0], density: DENSITIES[density][0], recorded: journey?.arrows.length ?? 0, triangles: arrowMesh?.triangles ?? 0 }),
     startAt: (lng, lat) => { requested = { lng, lat }; armed = false; persist(); return run(); },
     setSeed: (s) => { seed = s; persist(); return run(); },
     journey: () => journey,
