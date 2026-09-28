@@ -15,12 +15,17 @@
 import { loadStageData } from "./stage-data.js";
 import { createStageDraw, colourScale, BED_LO, BED_HI } from "./stage-draw.js";
 import { createStagePanel } from "./stage-panel.js";
+import { createResponder, loadRules } from "./stage-respond.js";
 
 // options.bedRange: the relief colour range for 岩盤/海/標高色 (Earth keeps
 // -8000..6000); options.processing: the terrain record from config.json.
-export async function loadStages(base, planetary = false, { bedRange = [BED_LO, BED_HI], processing = null } = {}) {
-  const data = await loadStageData(base, planetary);
-  const state = { v: "bed", src: "model", mode: "fit", seaLevel: 0, opacity: 0.4, vegStyle: "detailed" };
+export async function loadStages(base, planetary = false, { bedRange = [BED_LO, BED_HI], processing = null, rulesUrl = "./rules/response_rules.json" } = {}) {
+  const [data, rules] = await Promise.all([loadStageData(base, planetary), loadRules(rulesUrl)]);
+  // dT: mean temperature minus the base 14 C; landShare: set when off base.
+  const state = { v: "bed", src: "model", mode: "fit", seaLevel: 0, dT: 0, opacity: 0.4, vegStyle: "detailed", landShare: null };
+  // Must come before the drawing: it swaps the fields for writable copies
+  // that the textures and the readout then share.
+  const responder = createResponder(data, rules, data.S.bodyRadiusMetres || 6.371e6);
   const ctx = {
     ...data,
     state,
@@ -30,6 +35,7 @@ export async function loadStages(base, planetary = false, { bedRange = [BED_LO, 
     isClimate: () => ["t2m", "hum", "precip", "ice"].includes(state.v),
     vm: () => data.S.vars[state.v],
     scale: () => colourScale(data.S, state),
+    atBase: () => responder.atBase(),
   };
   const draw = createStageDraw(ctx);
   const panel = createStagePanel(ctx);
@@ -39,6 +45,18 @@ export async function loadStages(base, planetary = false, { bedRange = [BED_LO, 
     processing,
     state,
     apply: draw.apply,
+    atBase: () => responder.atBase(),
+    // Move the stages to new conditions (sea level in m, mean temperature
+    // offset in K). Recomputes only when they actually changed.
+    setConditions(sea, dT) {
+      const c = responder.conditions();
+      if (c.sea === sea && c.dT === dT) return null;
+      const r = responder.update(sea, dT);
+      state.dT = dT; state.landShare = r.landShare;
+      draw.refreshFields();
+      draw.apply();
+      return r;
+    },
     createMaterial: draw.createMaterial,
     createElevationMaterial: draw.createElevationMaterial,
     renderMercator: draw.renderMercator,

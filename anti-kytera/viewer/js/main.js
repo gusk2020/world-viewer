@@ -12,7 +12,7 @@ import { gapShort, gapNote } from "./stage-panel.js";
 
 const WORLD_INDEX_URL = "./worlds/index.json";
 const AK_BASE = "../";                 // anti-kytera/, where results/ and veg/results/ live
-const PRESENT_MEAN_C = 14;             // the condition every estimate was made for (with a 0 m sea)
+const PRESENT_MEAN_C = 14;             // the base condition every adopted estimate was made for (with a 0 m sea)
 const GRATICULE_STATES = [
   { mode: "off", label: "なし" },
   { mode: "parallels", label: "緯度" },
@@ -94,6 +94,23 @@ async function main() {
     seaLevelReadout.textContent = metres === 0 ? "±0m" : `${metres > 0 ? "+" : ""}${metres}m`;
     if (stages) { stages.state.seaLevel = metres; stages.apply(); }
     updateCondition(); refresh2d(); lastReadout = "";
+    scheduleConditions();
+  }
+  // The seven stages follow both sliders (stage-respond.js). The work runs a
+  // moment after the finger stops, and at once on release, so a drag does
+  // not recompute every step.
+  let conditionTimer = null;
+  function scheduleConditions() {
+    clearTimeout(conditionTimer);
+    conditionTimer = setTimeout(applyConditions, 150);
+  }
+  function applyConditions() {
+    clearTimeout(conditionTimer);
+    if (!stages || !world) return;
+    const r = stages.setConditions(seaLevelMetres(), Number(tempSlider.value) - PRESENT_MEAN_C);
+    if (!r) return;
+    window.__akConditionMs = r.ms;
+    applySurface();
   }
   function applyWaterOpacity() {
     const percent = Number(waterOpacitySlider.value);
@@ -105,8 +122,9 @@ async function main() {
   function applyTemp() {
     tempReadout.textContent = `${tempSlider.value}℃`;
     updateCondition();
+    scheduleConditions();
   }
-  // The estimates are fixed at today's conditions; say so the moment a slider moves away from them.
+  // Say what follows the sliders the moment they leave the base conditions.
   function updateCondition() {
     if (!hasStages()) { condition.hidden = true; return; }
     const sea = seaLevelMetres(), temp = Number(tempSlider.value);
@@ -114,9 +132,8 @@ async function main() {
     condition.hidden = !moved;
     if (!moved) return;
     condition.textContent = inStage()
-      ? `${isEarth() ? "塗り分けは現在の条件" : "地球由来の試験的な塗り分けは基準条件"}（平均気温${PRESENT_MEAN_C}℃・海面0 m）の推定のままで、条件に追従しません。` +
-        (sea !== 0 ? "海面は操作どおりに表示し、塗り分けと食い違う所は海面を優先。" : "")
-      : `地形・画像は条件に追従しません。${sea !== 0 ? "海面だけが動きます。" : ""}`;
+      ? `7段階は海面・平均気温に追従（海陸→気温→湿度→降水→陸氷→植生を共通の簡易規則で更新、教師なし）。${isEarth() ? `教師・差と一致率は海面0 m・${PRESENT_MEAN_C}℃のときだけ。` : ""}`
+      : `${surface === "elevation" ? "標高色" : "標準画像"}は地形・画像が固定で、${sea !== 0 ? "海面だけが動く。" : "平均気温では変わらない。"}7段階（岩盤〜植生）は追従する。`;
   }
 
   // ------------------------------------------------ surface: 標準 or a stage
@@ -128,8 +145,9 @@ async function main() {
     selectButtons("#stage-src button", "src", src);
     selectButtons("#veg-style button", "vegStyle", vegStyle);
     $("veg-style-row").hidden = surface !== "veg";
-    srcRow.hidden = !isEarth() || !inStage() || surface === "bed" || surface === "sea";
-    if (!isEarth()) src = "model";   // no teacher exists here; never draw an empty one
+    const teacherHere = isEarth() && stages?.atBase();
+    srcRow.hidden = !teacherHere || !inStage() || surface === "bed" || surface === "sea";
+    if (!teacherHere) src = "model";   // no teacher here or under changed conditions; never draw an empty one
     document.getElementById("cross").hidden = !hasStages();
     if (!hasStages()) { globe3d.setStage(null); info.hidden = true; return; }
     info.hidden = false;
@@ -253,6 +271,8 @@ async function main() {
   seaLevelSlider.addEventListener("input", applySeaLevel);
   waterOpacitySlider.addEventListener("input", applyWaterOpacity);
   tempSlider.addEventListener("input", applyTemp);
+  seaLevelSlider.addEventListener("change", applyConditions);
+  tempSlider.addEventListener("change", applyConditions);
 
   // ------------------------------------------------ worlds (v1s's safe switch)
   let loadSequence = 0;
@@ -319,6 +339,8 @@ async function main() {
     src = "model";
     worldSelect.value = entry.id;
     applySeaLevel();
+    clearTimeout(conditionTimer);   // this body starts at the sliders' current conditions, before its first frame
+    if (stages) stages.setConditions(seaLevelMetres(), Number(tempSlider.value) - PRESENT_MEAN_C);
     applyWaterOpacity();
     applyAxis({ recentre: false });
     applyGraticule();

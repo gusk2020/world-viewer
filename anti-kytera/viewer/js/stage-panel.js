@@ -3,7 +3,7 @@
 // arrays (F) through cell(); the drawing copies are consulted only to say
 // when the screen and the raw cell disagree.
 import { ICE_MIN_M, POLAR_AVERAGE_LAT, MODE_JA } from "./stage-data.js";
-import { ramp, seaColour, AGREE, EXPOSED, SIMPLE_VEG, simpleVeg } from "./stage-draw.js";
+import { ramp, seaColour, AGREE, SIMPLE_VEG, simpleVeg } from "./stage-draw.js";
 
 // The terrain's missing-data record (config.json terrain.processing), in the
 // same words wherever it is shown: the score line (always visible) carries
@@ -21,6 +21,11 @@ export function gapNote(p) {
 export function createStagePanel(ctx) {
   const { S, V, vcol, vlab, state, cell, bilinear, drawnComposite, rawComposite, isClimate, vm, scale, hasTeacher, bedRange } = ctx;
   const [BED_LO, BED_HI] = bedRange;
+  // A teacher exists only for Earth at the base conditions (sea 0 m, 14 C).
+  const teacherHere = () => hasTeacher && ctx.atBase();
+  const moved = () => !ctx.atBase();
+  const RESPONSE_NOTE = "海面・平均気温の変更に合わせ、海陸→気温→湿度→降水→陸氷→植生を共通の簡易規則で更新した推定（教師なし）。干上がった海底も同じ規則で塗る。";
+  const movedScore = () => `条件変更後の推定（海面 ${state.seaLevel > 0 ? "+" : ""}${state.seaLevel} m・平均気温 ${14 + state.dT}℃）・教師なし`;
   // ------------------------------------------------ legend and notes
   const pct = (x) => (x * 100).toFixed(0) + "%";
   function legend() {
@@ -34,15 +39,14 @@ export function createStagePanel(ctx) {
           [AGREE.none, "教師なし"], [AGREE.sea, "海"]);
       } else {
         for (const c of state.vegStyle === "simple" ? SIMPLE_VEG : V.classes) {
-          const iou = hasTeacher ? sc.iou[String(c.code)] : null;
+          const iou = teacherHere() ? sc.iou[String(c.code)] : null;
           items.push([c.rgb, c.ja, state.src === "model" && iou != null ? Math.round(iou * 100) : null]);
         }
         items.push([vcol[1], "陸氷"], [seaColour(-3000), "海"]);
         if (state.src === "teacher") items.push([vcol[255], "教師なし"]);
       }
-      if (state.seaLevel < 0) items.push([EXPOSED, "干上がった海底（推定なし）"]);
       out.classes = items;
-      out.score = hasTeacher ? state.vegStyle === "simple" ? `${MODE_JA[state.mode]}：簡略5区分（表示用に統合・一致率未集計）` : `${MODE_JA[state.mode]}：15区分 一致 ${pct(sc.accuracy)}・κ ${sc.kappa.toFixed(2)}・大区分 ${pct(sc.group)}` : "地球で学習した規則による試験的な塗り分け・教師なし";
+      out.score = moved() ? movedScore() : hasTeacher ? state.vegStyle === "simple" ? `${MODE_JA[state.mode]}：簡略5区分（表示用に統合・一致率未集計）` : `${MODE_JA[state.mode]}：15区分 一致 ${pct(sc.accuracy)}・κ ${sc.kappa.toFixed(2)}・大区分 ${pct(sc.group)}` : "地球で学習した規則による試験的な塗り分け・教師なし";
       out.note = {
         model: "モデル：年平均の気温・降水・水蒸気圧（3〜5段階と同じ推定値）と岩盤地形から分類した、通年の代表的な自然植生。15区分の数字は種類ごとの一致度（%）。",
         teacher: "教師：Ramankutty & Foley (1999) 潜在自然植生（人の土地利用が無い場合）。南極は教師に区分が無い。",
@@ -56,16 +60,18 @@ export function createStagePanel(ctx) {
       for (let i = 0; i < 256; i++) colours.push(state.v === "sea" && BED_LO + (i / 255) * (BED_HI - BED_LO) < 0 ? seaColour(BED_LO + (i / 255) * (BED_HI - BED_LO)) : ramp(rp, i / 255));
       out.bar = { colours, lo, hi, unit: unit + (state.src === "diff" && isClimate() ? "（差）" : "") };
       if (!isClimate()) {
-        out.score = hasTeacher ? S.stages[state.v].score : `地形の標高 ${BED_LO}〜${BED_HI} m を色分け・教師なし`;
+        out.score = state.v === "sea" && state.landShare != null ? `陸の面積 ${(100 * state.landShare).toFixed(1)}%（海面 ${state.seaLevel > 0 ? "+" : ""}${state.seaLevel} m）・教師なし`
+          : hasTeacher && !moved() ? S.stages[state.v].score : `地形の標高 ${BED_LO}〜${BED_HI} m を色分け・教師なし`;
         out.note = S.stages[state.v].note;
       }
       else {
-        out.score = hasTeacher ? `${MODE_JA[state.mode]}：${vm().score[state.mode]}` : "地球で学習した規則による試験的な塗り分け・教師なし";
+        out.score = moved() ? movedScore() : hasTeacher ? `${MODE_JA[state.mode]}：${vm().score[state.mode]}` : "地球で学習した規則による試験的な塗り分け・教師なし";
         out.note = (state.src === "teacher" ? vm().teacherNote : state.src === "model" ? vm().modelNote : "差 = モデル − 教師。") +
           " " + S.modeNote[state.mode];
       }
     }
     if (!hasTeacher) out.note = "探査機の地形に地球で学習した規則を当てた試験表示。実際の天体環境ではない。教師なし。" + (gapNote(ctx.processing) ? " " + gapNote(ctx.processing) : "");
+    if (moved()) out.note = RESPONSE_NOTE + " " + out.note;
     if (gapNote(ctx.processing)) out.score += `・${gapShort(ctx.processing)}`;
     out.note += " 画面の色：緯度60°より極側は、極付近の細いセルの筋を抑えるため東西に平均した値で描く（描画だけ）。" +
       "海岸線・氷の縁は隣のセルとの間を補間した線。中央の数値は常に平均前の元データのセルの値。" +
@@ -78,20 +84,22 @@ export function createStagePanel(ctx) {
   function readout(lng, lat) {
     const pos = `中央 ${Math.abs(lat).toFixed(1)}°${lat >= 0 ? "N" : "S"} ${Math.abs(lng).toFixed(1)}°${lng >= 0 ? "E" : "W"}`;
     const polar = Math.abs(lat) >= POLAR_AVERAGE_LAT ? "（この緯度の画面の色は東西平均）" : "";
-    const head = `${pos}　<span class="k">元データ値</span>${polar}`;
+    const head = `${pos}　<span class="k">${moved() ? "条件変更後のモデル値" : "元データ値"}</span>${polar}`;
     const z = cell("bed", lng, lat);
     const tag = `モデル（${MODE_JA[state.mode]}）`;
-    if (!hasTeacher) {
-      const sl = state.seaLevel;
+    // Other bodies always, and Earth away from the base: model value only.
+    if (!teacherHere()) {
+      const sl = state.seaLevel, none = `　<b class="t">教師なし</b>`;
+      const ground = hasTeacher ? "岩盤" : "地形";
       if (state.v === "bed" || state.v === "sea")
-        return `${head}<br><b class="m">地形</b> ${z.toFixed(0)} m${state.v === "sea" ? `・${z < sl ? "仮想海" : "陸"}` : ""}　<b class="t">教師</b> なし`;
+        return `${head}<br><b class="m">${ground}</b> ${z.toFixed(0)} m${state.v === "sea" ? `・${z < sl ? (hasTeacher ? "海" : "仮想海") : "陸"}（海面 ${sl > 0 ? "+" : ""}${sl} m）` : ""}${none}`;
       if (state.v === "veg") {
-        const c = rawComposite("fit", lng, lat);
-        return `${head}<br><b class="m">モデル</b> ${state.vegStyle === "simple" ? simpleVeg(c)?.ja || vlab[c] : vlab[c] || "推定なし"}　<b class="t">教師</b> なし`;
+        const c = rawComposite("fit", lng, lat, sl);
+        return `${head}<br><b class="m">モデル値</b> ${state.vegStyle === "simple" ? simpleVeg(c)?.ja || vlab[c] : vlab[c] || "推定なし"}${none}`;
       }
       const key = vm().key, value = cell(`${key}_fit`, lng, lat);
       const label = state.v === "ice" && value <= ICE_MIN_M ? "氷なし" : `${value.toFixed(vm().digits)} ${vm().unit}`;
-      return `${head}<br><b class="m">モデル</b> ${label}　<b class="t">教師</b> なし`;
+      return `${head}<br><b class="m">モデル値</b> ${label}${none}`;
     }
     const warn = (drawn, raw) => drawn === raw ? "" :
       `<br><span class="w">※画面の塗りは「${drawn}」、元データのセルは「${raw}」（境界付近の補間・平均による差）</span>`;
