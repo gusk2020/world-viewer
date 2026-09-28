@@ -68,5 +68,6 @@ export async function loadStages(base, planetary = false, { bedRange = [BED_LO, 
     journeyInputs: () => ({ fields: data.F, radiusMetres: data.S.bodyRadiusMetres || 6.371e6, seaLevel: responder.conditions().sea }),
     setJourney: draw.setJourney,
     setJourneyTime: draw.setJourneyTime,
+    setJourneyFill: draw.setJourneyFill,
   };
 }

@@ -50,7 +50,9 @@ const metres = new Float32Array(png.width * png.height), off = config.terrain.en
 for (let i = 0; i < metres.length; i++) metres[i] = png.data[i * png.channels] * 256 + png.data[i * png.channels + 1] - off;
 
 let t0 = Date.now();
-const env = J.buildEnvironment({ fields: F, radiusMetres: radius, seaLevel: sea, fine: { width: png.width, height: png.height, metres } });
+// PARAMS='{"seaBudgetKm":150}': override model constants for a comparison run
+const params = process.env.PARAMS ? { ...J.JOURNEY_PARAMS, ...JSON.parse(process.env.PARAMS) } : J.JOURNEY_PARAMS;
+const env = J.buildEnvironment({ fields: F, radiusMetres: radius, seaLevel: sea, fine: { width: png.width, height: png.height, metres }, params });
 console.log(`${body} sea ${sea} m, ${TEMP} C: environment ${Date.now() - t0} ms; settleable land cells ${env.land.reduce((n, x, k) => n + (J.settleable(env, k) ? 1 : 0), 0)}`);
 const start = J.resolveStart(env, lng, lat);
 console.log("start", JSON.stringify(start));

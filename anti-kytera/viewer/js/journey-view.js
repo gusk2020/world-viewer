@@ -1,47 +1,68 @@
 // グレートジャーニー: drawing the movement arrows, on the globe (three.js
 // ribbons lying on the surface) and on the 2D map (canvas strokes on the
 // Mercator picture). The reached/settled range itself is drawn by the stage
-// shader (stage-draw.js, stage "journey"), so 3D and 2D share it exactly.
+// shader (stage-draw.js, stage "journey"), so 3D and 2D share it exactly; in
+// the default "arrows only" display it is not filled at all.
 //
 // Each arrow is one ~1000-year period in one 6x6-degree bin (journey.js):
-// its direction is the area-weighted mean direction of the first-arrival
-// steps started in that bin, its thickness the ground AREA newly reached
-// (km2, so polar cells and small bodies are not over-counted), relative to
-// this journey's largest. It is never a head count or a population. Sizes on
-// screen are in degrees, so an arrow looks the same on every body.
+// its direction is the land-area-weighted mean direction of the first-arrival
+// steps started in that bin, its thickness the LAND area newly reached (km2),
+// relative to this journey's largest, and its colour the era of that first
+// arrival (discrete bins, the same colours in 3D, 2D and the legend). Every
+// arrow stays once its period has come -- none is dropped or thinned -- so
+// the picture at time t is the whole route so far. Never a head count.
 import * as THREE from "three";
 import { ARROW_YEARS } from "./journey.js";
 import { lngLatToDirection } from "./geoConvert.js";
 
 const LENGTH_DEG = 3.6, HEAD_SHARE = 0.35;
 const WIDTH_MIN_DEG = 0.2, WIDTH_MAX_DEG = 1.1;
-const ARROW_RGB = [24, 24, 38];
-const MAX_ARROWS = 260;             // never cover the map
+const OUTLINE_RGB = [20, 20, 28], OUTLINE_ALPHA = 0.75, OUTLINE_DEG = 0.12;   // a dark rim: readable on any background
 
-// the largest newly reached area of any arrow (km2): the thickest arrow
+// the largest newly reached land area of any arrow (km2): the thickest arrow
 export const maxArrowArea = (journey) => journey.arrows.reduce((m, a) => Math.max(m, a.area), 1);
 
-// Which arrows to show at time t. style: "recent" = the last 5 periods,
-// "all" = every period so far (older ones thinner and fainter), "none".
-export function visibleArrows(journey, t, style) {
-  if (!journey || style === "none") return [];
-  const now = Math.floor(t / ARROW_YEARS);
-  const aMax = maxArrowArea(journey);
-  const periodMax = new Map();                                  // the largest area of each period
-  for (const a of journey.arrows) periodMax.set(a.m, Math.max(periodMax.get(a.m) || 0, a.area));
-  const out = [];
-  for (const a of journey.arrows) {
-    if (a.m > now) continue;
-    const age = now - a.m;
-    if (style === "recent" && age >= 5) continue;
-    if (age > 0 && a.area < 0.25 * periodMax.get(a.m)) continue;   // small areas of past periods drop out first
-    const rel = Math.sqrt(a.area / aMax);
-    const width = (WIDTH_MIN_DEG + (WIDTH_MAX_DEG - WIDTH_MIN_DEG) * rel) * (age ? 0.7 : 1);
-    const alpha = age ? Math.max(style === "all" ? 0.35 : 0.3, 0.8 * Math.pow(0.72, age)) : 0.95;
-    out.push({ ...a, width, alpha, age });
+// ------------------------------------------------------------ eras
+// A few equal eras over the journey, on a round step, coloured along an
+// ordered dark-to-light ramp (plasma-like; the dark rim keeps the light end
+// readable). eras(endYear) -> [{ from, to, rgb }]
+const ERA_STEPS = [500, 1000, 2000, 2500, 5000, 10000, 20000, 25000, 50000, 100000];
+const ERA_RAMP = [[0, [13, 8, 135]], [0.1, [65, 4, 157]], [0.2, [106, 0, 168]], [0.3, [143, 13, 164]], [0.4, [177, 42, 144]], [0.5, [204, 71, 120]],
+  [0.6, [225, 100, 98]], [0.7, [242, 132, 75]], [0.8, [252, 166, 54]], [0.9, [252, 206, 37]], [1, [240, 249, 33]]];
+function rampAt(f) {
+  for (let i = 1; i < ERA_RAMP.length; i++) {
+    const [f1, c1] = ERA_RAMP[i], [f0, c0] = ERA_RAMP[i - 1];
+    if (f <= f1) { const u = (f - f0) / (f1 - f0); return c0.map((x, j) => Math.round(x + (c1[j] - x) * u)); }
   }
-  out.sort((x, y) => x.age - y.age || y.area - x.area);
-  return out.slice(0, MAX_ARROWS).reverse();     // oldest first, so the newest draw on top
+  return ERA_RAMP[ERA_RAMP.length - 1][1];
+}
+export function eras(endYear) {
+  const end = Math.max(endYear, ARROW_YEARS);
+  const step = ERA_STEPS.find((s) => Math.ceil(end / s) <= 8) || ERA_STEPS[ERA_STEPS.length - 1];
+  const n = Math.ceil(end / step), out = [];
+  for (let b = 0; b < n; b++) out.push({ from: b * step, to: (b + 1) * step, rgb: rampAt(n > 1 ? b / (n - 1) : 0.5) });
+  return out;
+}
+const eraOf = (list, years) => list[Math.min(list.length - 1, Math.floor(years / list[0].to))];
+
+// Every arrow of a journey, oldest first (so the newest draw on top), with
+// its width (degrees), era colour and the time it appears (start of its
+// period). Computed once per journey.
+export function journeyArrows(journey) {
+  if (!journey) return [];
+  const aMax = maxArrowArea(journey), list = eras(journey.endYear);
+  return journey.arrows.map((a) => ({
+    ...a,
+    appears: a.m * ARROW_YEARS,
+    width: WIDTH_MIN_DEG + (WIDTH_MAX_DEG - WIDTH_MIN_DEG) * Math.sqrt(a.area / aMax),
+    rgb: eraOf(list, a.m * ARROW_YEARS + ARROW_YEARS / 2).rgb,
+  })).sort((x, y) => x.m - y.m || x.area - y.area);
+}
+// how many of those (a prefix) are on screen at time t
+export function shownCount(arrows, t) {
+  let lo = 0, hi = arrows.length;
+  while (lo < hi) { const m = (lo + hi) >> 1; if (arrows[m].appears <= t) lo = m + 1; else hi = m; }
+  return lo;
 }
 
 // Points along the arrow, as [lng, lat] on the great circle through its start.
@@ -58,31 +79,43 @@ function arrowPath(a) {
 }
 
 // ------------------------------------------------------------ 3D
+// One mesh for the whole journey: each arrow is a dark rim then its coloured
+// body, arrows in time order, so showing time t is only a draw range
+// (setTime) -- nothing is rebuilt while the journey plays.
 const dir = (lng, lat) => { const d = lngLatToDirection(lng, lat); return new THREE.Vector3(d.x, d.y, d.z); };
 export function buildArrowMesh(arrows, radiusAt) {
-  const pos = [], col = [];
+  const pos = [], col = [], ends = [];
   const LIFT = 0.004;
+  const tangent = new THREE.Vector3(), sideV = new THREE.Vector3();
   const put = (lng, lat, side, halfDeg, next) => {       // a point offset sideways from the path
     const p = dir(lng, lat), q = dir(next[0], next[1]);
-    const tangent = q.clone().sub(p).normalize();
-    const sideV = new THREE.Vector3().crossVectors(p, tangent).normalize().multiplyScalar(side * halfDeg * Math.PI / 180);
-    const v = p.clone().add(sideV).normalize();
-    return v.multiplyScalar(radiusAt(lng, lat) + LIFT);
+    tangent.copy(q).sub(p).normalize();
+    sideV.crossVectors(p, tangent).normalize().multiplyScalar(side * halfDeg * Math.PI / 180);
+    return p.add(sideV).normalize().multiplyScalar(radiusAt(lng, lat) + LIFT);
   };
-  for (const a of arrows) {
+  const STEPS = 4;
+  const shape = (a, grow, c) => {                          // shaft + head, `grow` degrees wider all round
     const { at, shaftEnd, tip } = arrowPath(a);
-    const c = [...ARROW_RGB.map((x) => x / 255), a.alpha];
     const tri = (A, B, C) => { for (const v of [A, B, C]) { pos.push(v.x, v.y, v.z); col.push(...c); } };
-    const STEPS = 4, hw = a.width / 2;
+    const hw = a.width / 2 + grow, s0 = -grow;
     for (let s = 0; s < STEPS; s++) {
-      const d0 = shaftEnd * s / STEPS, d1 = shaftEnd * (s + 1) / STEPS;
+      const d0 = s0 + (shaftEnd - s0) * s / STEPS, d1 = s0 + (shaftEnd - s0) * (s + 1) / STEPS;
       const p0 = at(d0), p1 = at(d1), p2 = at(d1 + 0.05);
       const l0 = put(p0[0], p0[1], 1, hw, p1), r0 = put(p0[0], p0[1], -1, hw, p1);
       const l1 = put(p1[0], p1[1], 1, hw, p2), r1 = put(p1[0], p1[1], -1, hw, p2);
       tri(l0, r0, l1); tri(r0, r1, l1);
     }
-    const b = at(shaftEnd), bn = at(shaftEnd + 0.05), tp = at(tip), tn = at(tip + 0.05);
-    tri(put(b[0], b[1], 1, hw * 2.4, bn), put(b[0], b[1], -1, hw * 2.4, bn), put(tp[0], tp[1], 0, 0, tn));
+    const b = at(shaftEnd - grow), bn = at(shaftEnd - grow + 0.05), tp = at(tip + grow * 1.8), tn = at(tip + grow * 1.8 + 0.05);
+    tri(put(b[0], b[1], 1, a.width / 2 * 2.4 + grow * 1.8, bn), put(b[0], b[1], -1, a.width / 2 * 2.4 + grow * 1.8, bn), put(tp[0], tp[1], 0, 0, tn));
+  };
+  // vertex colours are linear; the sRGB colours of the legend and the 2D map
+  // are converted so the globe shows the same colours
+  const lin = (rgb) => { const c = new THREE.Color().setRGB(rgb[0] / 255, rgb[1] / 255, rgb[2] / 255, THREE.SRGBColorSpace); return [c.r, c.g, c.b]; };
+  const rim = [...lin(OUTLINE_RGB), OUTLINE_ALPHA];
+  for (const a of arrows) {
+    shape(a, OUTLINE_DEG, rim);
+    shape(a, 0, [...lin(a.rgb), 1]);
+    ends.push(pos.length / 3);
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
@@ -90,7 +123,10 @@ export function buildArrowMesh(arrows, radiusAt) {
   const m = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide });
   const mesh = new THREE.Mesh(g, m);
   mesh.frustumCulled = false;
-  return mesh;
+  mesh.renderOrder = 2;
+  const setTime = (t) => { const n = shownCount(arrows, t); g.setDrawRange(0, n ? ends[n - 1] : 0); };
+  setTime(0);
+  return { mesh, setTime, triangles: pos.length / 9 };
 }
 
 // ------------------------------------------------------------ 2D
@@ -109,21 +145,28 @@ export function drawArrows2D(canvas, extent, arrows, startLngLat) {
   const shifts = [];
   for (let k = Math.floor((x0 / world) - 0.5); k <= Math.ceil((x1 / world) + 0.5); k++) shifts.push(k * 360);
   ctx.lineCap = "round"; ctx.lineJoin = "round";
+  const rimPx = OUTLINE_DEG * pxPerDeg;
   for (const a of arrows) {
-    const { at, shaftEnd, tip } = arrowPath(a);
-    const pts = [0, 0.25, 0.5, 0.75, 1].map((f) => at(shaftEnd * f));
+    const path = a.path2d || (a.path2d = (() => {             // lng/lat points, cached on the arrow
+      const { at, shaftEnd, tip } = arrowPath(a);
+      return { pts: [0, 0.25, 0.5, 0.75, 1].map((f) => at(shaftEnd * f)), tip: at(tip) };
+    })());
+    const base = path.pts[0][0], unwrap = (lng) => lng + (lng - base > 180 ? -360 : lng - base < -180 ? 360 : 0);
     for (const shift of shifts) {
       // keep the arrow on one side of the date line
-      const base = pts[0][0], P = pts.map(([lng, lat]) => toPx(lng + (lng - base > 180 ? -360 : lng - base < -180 ? 360 : 0), lat, shift));
+      const P = path.pts.map(([lng, lat]) => toPx(unwrap(lng), lat, shift));
       if (P.every(([x, y]) => x < -50 || x > w + 50 || y < -50 || y > h + 50)) continue;
-      ctx.strokeStyle = ctx.fillStyle = `rgba(${ARROW_RGB.join(",")},${a.alpha})`;
-      ctx.lineWidth = Math.max(1.2, a.width * pxPerDeg);
-      ctx.beginPath(); P.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.stroke();
-      const t = at(tip), b = P[P.length - 1];
-      let tl = t[0]; if (tl - base > 180) tl -= 360; if (tl - base < -180) tl += 360;
-      const T = toPx(tl, t[1], shift), dx = T[0] - b[0], dy = T[1] - b[1], L = Math.hypot(dx, dy) || 1;
-      const hw = Math.max(3, a.width * pxPerDeg * 1.2), nx = -dy / L * hw, ny = dx / L * hw;
-      ctx.beginPath(); ctx.moveTo(b[0] + nx, b[1] + ny); ctx.lineTo(b[0] - nx, b[1] - ny); ctx.lineTo(T[0], T[1]); ctx.closePath(); ctx.fill();
+      const b = P[P.length - 1], T = toPx(unwrap(path.tip[0]), path.tip[1], shift);
+      const dx = T[0] - b[0], dy = T[1] - b[1], L = Math.hypot(dx, dy) || 1, ux = dx / L, uy = dy / L;
+      const lw = Math.max(1.2, a.width * pxPerDeg), hw = Math.max(3, a.width * pxPerDeg * 1.2);
+      for (const [rgba, grow] of [[`rgba(${OUTLINE_RGB.join(",")},${OUTLINE_ALPHA})`, Math.max(1, rimPx)], [`rgb(${a.rgb.join(",")})`, 0]]) {
+        ctx.strokeStyle = ctx.fillStyle = rgba;
+        ctx.lineWidth = lw + 2 * grow;
+        ctx.beginPath(); P.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.stroke();
+        const g = grow * 1.8, nx = -uy * (hw + g), ny = ux * (hw + g);
+        const bx = b[0] - ux * grow, by = b[1] - uy * grow;
+        ctx.beginPath(); ctx.moveTo(bx + nx, by + ny); ctx.lineTo(bx - nx, by - ny); ctx.lineTo(T[0] + ux * g, T[1] + uy * g); ctx.closePath(); ctx.fill();
+      }
     }
   }
   if (startLngLat) for (const shift of shifts) {
