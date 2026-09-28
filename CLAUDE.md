@@ -281,6 +281,14 @@ fields by `tools/build_response_rules.py`), applied only as differences from
 each body's base; at sea 0 m / 14 C the adopted arrays are restored bit for bit.
 Read `anti-kytera/viewer/RESPONSE.md`.
 
+**Cryosphere (branch `claude/anti-kytera-v2-cryosphere`, Draft PR on top of #20).**
+Land ice under cooling now comes from the warmest month (annual T + half a
+seasonal range from obliquity/latitude/distance to sea), not the Earth ice
+table (which needed < -15 C annual means). Seasonal snow and sea ice are
+separate layers drawn by their share of the year; constants checked against
+ERA5 2015 (reanalysis, `rules/cryo_reference_2015.npz`), never shown as a score.
+See the last section of `anti-kytera/viewer/RESPONSE.md`.
+
 ## Architecture (Three.js for 3D, OpenLayers for 2D, one page, toggle button)
 
 **Three.js** for the 3D globe, **OpenLayers** for the 2D map, both mounted

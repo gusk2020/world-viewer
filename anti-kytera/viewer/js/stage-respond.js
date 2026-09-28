@@ -10,10 +10,16 @@
 //   P        base x exp(0.02 dT)                               x coast factor
 //            coast factor = exp(-(d_new - d_base) / 1000 km), d = distance
 //            to the nearest sea on the 2-degree grid, clamped to 0.25..2.5
-//   ice      the Earth-learnt table (rules/response_rules.json) gives the
-//            share of land carrying ice in a (T, P) climate; ice melts where
-//            that share falls below 0.5 by more than 0.2 from the base, and
-//            forms where it rises past 0.5 by more than 0.2
+//   T        ... with polar amplification: dT x (1 + 0.8 (sin^2 lat - 1/3))
+//   ice      glaciers from the warmest month: summer = T + range/2, the range
+//            from the solstice insolation contrast (obliquity, latitude) and
+//            the distance to the sea. Ice forms where the new summer is below
+//            what a glacier survives (4 C at 500 mm/yr, +1.5 C per doubling)
+//            and 3 C below the cell's own base summer; adopted ice melts in
+//            the mirror case. (The Earth-learnt ice table needed an annual
+//            mean below about -15 C, which a cooled Canada never reaches.)
+//   snow     share of the year below -2 C on ice-free land, x min(1, P/200)
+//   sea ice  share of the year the air over the sea is below -5 C
 //   veg      the same table gives each class's share; a cell keeps its
 //            adopted class until its share at the new climate drops below
 //            half its base share, then takes the new climate's top class
@@ -26,7 +32,7 @@
 // restored bit for bit, so the approved picture cannot drift.
 import { polarFootprint, ICE_MIN_M } from "./stage-data.js";
 
-export function createResponder(data, rules, radiusMetres) {
+export function createResponder(data, rules, radiusMetres, obliquityDeg = 23.44) {
   const { F, D } = data;
   const KEYS = ["T_fit", "E_fit", "P_fit", "H_fit"];
   const base = {};
@@ -38,8 +44,8 @@ export function createResponder(data, rules, radiusMetres) {
   const W2 = base.T_fit.meta.w, H2 = base.T_fit.meta.h;              // 180 x 90
   const WH = base.H_fit.meta.w, HH = base.H_fit.meta.h;              // 720 x 360
   const f2 = BW / W2, fh = BW / WH;
-  const { tBins, pBins, iceShare, iceThicknessM, vegClass, vegShare, physics } = rules;
-  const NV = rules.vegCodes.length, ICE_MARGIN = 0.2, VEG_MARGIN = 0.05;
+  const { tBins, pBins, vegClass, vegShare, physics } = rules;
+  const NV = rules.vegCodes.length, VEG_MARGIN = 0.05;
   const L = physics.coastScaleKm * 1000, [mLo, mHi] = physics.moistureFactorRange;
 
   // bedrock averaged onto the 0.5-degree grid (ice and vegetation cells)
@@ -79,6 +85,36 @@ export function createResponder(data, rules, radiusMetres) {
   }
   const d0 = seaDistance(land2(0));
 
+  // ---- the cryosphere: seasonal range, glaciation, snow and sea ice -------
+  // All from quantities every body has: latitude, obliquity, distance to the
+  // sea, annual temperature and precipitation. See RESPONSE.md.
+  const C = rules.cryo;
+  const obl = (Math.min(obliquityDeg, 180 - obliquityDeg) * Math.PI) / 180;
+  function insolationRange(latRad) {       // |summer - winter solstice| daily-mean top-of-atmosphere insolation, W/m2
+    const Q = (dec) => {
+      const h0 = Math.acos(Math.max(-1, Math.min(1, -Math.tan(latRad) * Math.tan(dec))));
+      return (1361 / Math.PI) * (h0 * Math.sin(latRad) * Math.sin(dec) + Math.cos(latRad) * Math.cos(dec) * Math.sin(h0));
+    };
+    return Math.abs(Q(obl) - Q(-obl));
+  }
+  const rowLat = (j, h) => ((j + 0.5) / h - 0.5) * Math.PI;
+  const dQh = Float64Array.from({ length: HH }, (_, j) => insolationRange(rowLat(j, HH)));
+  // Polar amplification of a mean-temperature change: its area mean is exactly dT.
+  const amp2 = Float64Array.from({ length: H2 }, (_, j) => 1 + C.polarAmplification * (Math.sin(rowLat(j, H2)) ** 2 - 1 / 3));
+  // warmest-minus-coldest-month range: stronger over land far from the sea
+  const landRange = (dQ, d) => C.rangePerWm2 * dQ * (C.rangeCoastShare + (1 - C.rangeCoastShare) * (1 - Math.exp(-d / (C.rangeCoastKm * 1000))));
+  const seaRange = (dQ) => C.rangeSeaPerWm2 * dQ;
+  // share of a sinusoidal year spent below a temperature
+  const coldShare = (T, range, thr) => range < 0.5 ? (T < thr ? 1 : 0)
+    : Math.acos(Math.max(-1, Math.min(1, (T - thr) / (range / 2)))) / Math.PI;
+  // the warmest month a glacier can survive, warmer where snowfall is heavier
+  const glacierSummer = (P) => C.glacierSummerC + C.glacierPerDoublingC * Math.log2(Math.max(P, 10) / 500);
+  const glacierThickness = (excess) => Math.min(C.glacierMaxM, C.glacierMinM + C.glacierPerDegreeM * Math.max(0, excess));
+  for (const k of ["snow", "seaice"]) {
+    const a = new Float32Array(WH * HH); a.meta = { w: WH, h: HH, dtype: "f32" }; F[k] = a;
+    const b = new Float32Array(WH * HH); b.meta = a.meta; D[k] = b;
+  }
+
   // bilinear 2-degree -> 0.5-degree cell centre (same convention as the shader)
   function up(a, j, i) {
     const fy = (j + 0.5) / HH * H2 - 0.5, fx = (i + 0.5) / WH * W2 - 0.5;
@@ -98,25 +134,39 @@ export function createResponder(data, rules, radiusMetres) {
     const t0 = performance.now();
     current = { sea, dT };
     let landShare = null;
-    if (sea === 0 && dT === 0) restore();
-    else {
-      const L1 = land2(sea), d1 = sea === 0 ? d0 : seaDistance(L1);
-      const cE = Math.exp(physics.humidityPerK * dT), cP = Math.exp(physics.precipPerK * dT);
+    const moved = !(sea === 0 && dT === 0);
+    if (!moved) restore();
+    const L1 = moved ? land2(sea) : null;
+    const d1 = !moved || sea === 0 ? d0 : seaDistance(L1);
+    if (moved) {
+      const cP = Math.exp(physics.precipPerK * dT);
       for (let k = 0; k < W2 * H2; k++) {
         const m = Math.min(mHi, Math.max(mLo, Math.exp(-(d1[k] - d0[k]) / L)));
-        F.T_fit[k] = base.T_fit[k] + dT;
-        F.E_fit[k] = base.E_fit[k] * cE * m;
+        const dTk = dT * amp2[Math.floor(k / W2)];
+        F.T_fit[k] = base.T_fit[k] + dTk;
+        F.E_fit[k] = base.E_fit[k] * Math.exp(physics.humidityPerK * dTk) * m;
         F.P_fit[k] = base.P_fit[k] * cP * m;
       }
-      for (let j = 0; j < HH; j++) for (let i = 0; i < WH; i++) {
-        const k = j * WH + i, z = bedH[k], land1 = z >= sea, exposed = land1 && z < 0;
-        const T0 = up(base.T_fit, j, i), T1 = T0 + dT, P0 = up(base.P_fit, j, i), P1 = up(F.P_fit, j, i);
+    }
+    for (let j = 0; j < HH; j++) for (let i = 0; i < WH; i++) {
+      const k = j * WH + i, z = bedH[k], land1 = z >= sea, exposed = land1 && z < 0;
+      const T1 = up(F.T_fit, j, i), P1 = up(F.P_fit, j, i), dist1 = up(d1, j, i);
+      let h1 = base.H_fit[k];
+      if (moved) {
+        const T0 = up(base.T_fit, j, i), P0 = up(base.P_fit, j, i);
         const a0 = tIdx(T0) * pBins.n + pIdx(P0), a1 = tIdx(T1) * pBins.n + pIdx(P1);
-        const s0 = iceShare[a0], s1 = iceShare[a1], h0 = base.H_fit[k];
-        let h1 = h0;
-        if (exposed) h1 = s1 >= 0.5 ? iceThicknessM[a1] : 0;
-        else if (h0 > ICE_MIN_M && s1 < 0.5 && s0 - s1 > ICE_MARGIN) h1 = 0;                        // melts
-        else if (land1 && h0 <= ICE_MIN_M && s1 >= 0.5 && s1 - s0 > ICE_MARGIN) h1 = iceThicknessM[a1]; // forms
+        const h0 = base.H_fit[k];
+        // Glaciers from the warmest month: ice forms where the new summer is
+        // colder than a glacier survives AND clearly colder than this cell's
+        // own base summer; adopted ice melts in the mirror case.
+        const Ts0 = T0 + landRange(dQh[j], up(d0, j, i)) / 2, Ts1 = T1 + landRange(dQh[j], dist1) / 2;
+        const g1 = glacierSummer(P1), wet = P1 >= C.glacierMinPrecipMm;
+        if (exposed) h1 = wet && Ts1 < g1 ? glacierThickness(g1 - Ts1) : 0;
+        else if (h0 > ICE_MIN_M && Ts1 > Math.max(g1, Ts0 + C.glacierMarginC)) h1 = 0;                  // melts
+        else if (land1 && h0 <= ICE_MIN_M && wet) {
+          const thr = Math.min(g1, Ts0 - C.glacierMarginC);
+          if (Ts1 < thr) h1 = glacierThickness(thr - Ts1);                                               // forms
+        }
         // Grounded ice that the new sea would float (water depth above 0.9 of
         // its thickness, and not already so at the base sea) is lost.
         if (h1 > ICE_MIN_M && sea - z > 0.9 * h1 && -z <= 0.9 * h0) h1 = 0;
@@ -133,13 +183,21 @@ export function createResponder(data, rules, radiusMetres) {
         }
         F.veg_fit[k] = v1;
       }
+      // Seasonal snow on ice-free land and sea ice on open sea, as the share
+      // of a sinusoidal year spent below snowAirC (sea: below seaIceAirC).
+      F.snow[k] = land1 && h1 <= ICE_MIN_M
+        ? coldShare(T1, landRange(dQh[j], dist1), C.snowAirC) * Math.min(1, P1 / C.snowPrecipMm) : 0;
+      F.seaice[k] = land1 ? 0 : coldShare(T1, seaRange(dQh[j]), C.seaIceAirC);
+    }
+    if (moved) {
       let a = 0, al = 0;
       for (let j = 0; j < H2; j++) { const w = Math.cos(((j + 0.5) / H2 - 0.5) * Math.PI); for (let i = 0; i < W2; i++) { a += w; if (L1[j * W2 + i]) al += w; } }
       landShare = al / a;
     }
-    for (const k of KEYS) polarFootprint(F[k], F[k].meta.w, F[k].meta.h, D[k]);
+    for (const k of [...KEYS, "snow", "seaice"]) polarFootprint(F[k], F[k].meta.w, F[k].meta.h, D[k]);
     return { ms: performance.now() - t0, landShare };
   }
+  update(0, 0);   // the base's own snow and sea ice
   return { update, atBase: () => current.sea === 0 && current.dT === 0, conditions: () => current, ICE_MIN_M };
 }
 
