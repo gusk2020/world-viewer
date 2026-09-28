@@ -4,7 +4,9 @@
 // Loads the committed results of PR #12 (results/display.json + fields.bin:
 // bed, temperature, humidity, precipitation, ice thickness, each fit /
 // holdout / teacher) and of the vegetation layer (veg/results/: 15 classes,
-// fit / holdout / teacher). Nothing is estimated here.
+// fit / holdout / teacher), or a planet's stages/ copy of the same. Nothing
+// is estimated here. 地球適合 (fit) is the adopted estimate; the hold-out
+// fields stay in the files but are neither drawn nor read.
 //
 // Two copies, kept apart on purpose:
 //   F  the committed arrays exactly as stored -- the centre readout reads
@@ -12,7 +14,8 @@
 //   D  drawing copies of the continuous fields, averaged east-west over an
 //      equal footprint poleward of 60 degrees (polarFootprint) -- 3D and 2D
 //      both draw from these, never the readout.
-// Vegetation classes exist only in F and are never averaged.
+// Vegetation classes exist only in F and are never averaged. stage-respond.js
+// later rewrites the fit fields of both copies (and adds snow and sea ice).
 //
 // The ice > sea > vegetation judgement is written twice, once here in JS and
 // once in GLSL (stage-draw.js, akVeg): drawnComposite() is the shader's twin
@@ -20,7 +23,7 @@
 // the cell definition at a given sea level (the readout).
 export const ICE_MIN_M = 10;          // the hand-off ice mask threshold
 export const POLAR_AVERAGE_LAT = 60;         // polarFootprint's window exceeds one cell poleward of this
-export const MODE_JA = { fit: "地球適合", holdout: "地域保留" };
+export const FIT_JA = "地球適合";            // the adopted estimate's name on screen
 
 export function polarFootprint(a, w, h, out = new Float32Array(w * h)) {
   const pre = new Float64Array(w + 1);
@@ -43,6 +46,9 @@ export function polarFootprint(a, w, h, out = new Float32Array(w * h)) {
   return out;
 }
 
+// the continuous fields that are drawn: every field but the hold-out ones
+export const DRAWN_KEYS = (S) => Object.keys(S.fields).filter((k) => !k.endsWith("_holdout"));
+
 export async function loadBin(path) { return (await fetch(path)).arrayBuffer(); }
 
 export async function loadStageData(base, planetary = false) {
@@ -62,8 +68,8 @@ export async function loadStageData(base, planetary = false) {
     }
   };
   view(S, sb, Object.keys(S.fields));
-  view(V, vb, ["veg_fit", "veg_holdout", "veg_teacher"]);
-  for (const k of Object.keys(S.fields)) { const m = F[k].meta; D[k] = polarFootprint(F[k], m.w, m.h); D[k].meta = m; }
+  view(V, vb, ["veg_fit", "veg_teacher"]);
+  for (const k of DRAWN_KEYS(S)) { const m = F[k].meta; D[k] = polarFootprint(F[k], m.w, m.h); D[k].meta = m; }
   const vcol = {}, vlab = {};
   for (const c of V.classes) { vcol[c.code] = c.rgb; vlab[c.code] = c.ja; }
   for (const [k, s2] of Object.entries(V.special)) { vcol[k] = s2.rgb; vlab[k] = s2.ja; }

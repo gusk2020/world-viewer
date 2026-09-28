@@ -2,35 +2,37 @@
 // the mean temperature moves away from the base (sea 0 m, 14 C).
 //
 // A deliberately simple, body-agnostic chain on top of each body's adopted
-// base fields -- no place or body names, the same rules everywhere:
+// base fields -- no place or body names, the same rules everywhere. The
+// constants live in rules/response_rules.json (tools/build_response_rules.py);
+// RESPONSE.md explains them.
 //
-//   sea      land = bedrock >= the chosen sea level (as before, per pixel)
-//   T        base + (mean temperature - 14)
-//   E        base x exp(0.064 dT)  (fixed relative humidity)  x coast factor
-//   P        base x exp(0.02 dT)                               x coast factor
-//            coast factor = exp(-(d_new - d_base) / 1000 km), d = distance
-//            to the nearest sea on the 2-degree grid, clamped to 0.25..2.5
-//   T        ... with polar amplification: dT x (1 + 0.8 (sin^2 lat - 1/3))
+//   sea      land = bedrock >= the chosen sea level (per pixel)
+//   T        base + dT x (1 + 0.8 (sin^2 lat - 1/3))   (polar amplification)
+//   E        base x exp(0.064 dT_local)  (fixed relative humidity)  x coast
+//   P        base x exp(0.02 dT)                                    x coast
+//            coast = exp(-(d_new - d_base) / 1000 km), d = distance to the
+//            nearest sea on the 2-degree grid, clamped to 0.25..2.5
 //   ice      glaciers from the warmest month: summer = T + range/2, the range
 //            from the solstice insolation contrast (obliquity, latitude) and
 //            the distance to the sea. Ice forms where the new summer is below
 //            what a glacier survives (4 C at 500 mm/yr, +1.5 C per doubling)
 //            and 3 C below the cell's own base summer; adopted ice melts in
-//            the mirror case. (The Earth-learnt ice table needed an annual
-//            mean below about -15 C, which a cooled Canada never reaches.)
+//            the mirror case. Grounded ice a higher sea would float (depth >
+//            0.9 x thickness, and not already so at the base) is removed.
 //   snow     share of the year below -2 C on ice-free land, x min(1, P/200)
 //   sea ice  share of the year the air over the sea is below -5 C
-//   veg      the same table gives each class's share; a cell keeps its
-//            adopted class until its share at the new climate drops below
-//            half its base share, then takes the new climate's top class
-//   exposed  seabed that a lower sea turns into land takes the tables'
-//            answers directly (there is no base value to keep)
-//   floating grounded ice that a higher sea would float (depth > 0.9 x
-//            thickness, and not already so at the base) is removed
+//   veg      a cell keeps its adopted class until the table's share for it at
+//            the new climate drops below half its base share, then takes the
+//            new climate's top class
+//   exposed  seabed that a lower sea turns into land takes the rules' answers
+//            directly (there is no base value to keep)
 //
-// At the base conditions nothing is computed and the adopted arrays are
-// restored bit for bit, so the approved picture cannot drift.
+// At the base conditions the adopted arrays are restored bit for bit, so the
+// approved picture cannot drift; only snow and sea ice (which have no adopted
+// value) are computed there.
 import { polarFootprint, ICE_MIN_M } from "./stage-data.js";
+
+export const BASE_MEAN_C = 14;   // the mean temperature every adopted estimate was made for (with a 0 m sea)
 
 export function createResponder(data, rules, radiusMetres, obliquityDeg = 23.44) {
   const { F, D } = data;
@@ -40,13 +42,14 @@ export function createResponder(data, rules, radiusMetres, obliquityDeg = 23.44)
     base[k] = F[k];                                   // the committed view, never written
     const copy = F[k].slice(); copy.meta = F[k].meta; F[k] = copy;   // what the screen and readout use
   }
-  const bed = F.bed, BW = bed.meta.w, BH = bed.meta.h;              // 1440 x 720, south-first
+  const bed = F.bed, BW = bed.meta.w;                               // 1440 x 720, south-first
   const W2 = base.T_fit.meta.w, H2 = base.T_fit.meta.h;              // 180 x 90
   const WH = base.H_fit.meta.w, HH = base.H_fit.meta.h;              // 720 x 360
   const f2 = BW / W2, fh = BW / WH;
   const { tBins, pBins, vegClass, vegShare, physics } = rules;
   const NV = rules.vegCodes.length, VEG_MARGIN = 0.05;
   const L = physics.coastScaleKm * 1000, [mLo, mHi] = physics.moistureFactorRange;
+  const rowLat = (j, h) => ((j + 0.5) / h - 0.5) * Math.PI;   // latitude (rad) of row j of a south-first grid
 
   // bedrock averaged onto the 0.5-degree grid (ice and vegetation cells)
   const bedH = new Float32Array(WH * HH);
@@ -67,7 +70,7 @@ export function createResponder(data, rules, radiusMetres, obliquityDeg = 23.44)
   function seaDistance(land) {               // metres to the nearest sea cell; chamfer with east-west wrap
     const d = new Float64Array(W2 * H2), dy = Math.PI * radiusMetres / H2;
     const dx = new Float64Array(H2);
-    for (let j = 0; j < H2; j++) dx[j] = Math.max(Math.cos(((j + 0.5) / H2 - 0.5) * Math.PI), 0.02) * 2 * Math.PI * radiusMetres / W2;
+    for (let j = 0; j < H2; j++) dx[j] = Math.max(Math.cos(rowLat(j, H2)), 0.02) * 2 * Math.PI * radiusMetres / W2;
     for (let k = 0; k < d.length; k++) d[k] = land[k] ? Infinity : 0;
     const relax = (j, i, jj, ii, w) => { if (jj < 0 || jj >= H2) return; const o = d[jj * W2 + ((ii + W2) % W2)] + w; if (o < d[j * W2 + i]) d[j * W2 + i] = o; };
     for (let pass = 0; pass < 3; pass++) {
@@ -97,7 +100,6 @@ export function createResponder(data, rules, radiusMetres, obliquityDeg = 23.44)
     };
     return Math.abs(Q(obl) - Q(-obl));
   }
-  const rowLat = (j, h) => ((j + 0.5) / h - 0.5) * Math.PI;
   const dQh = Float64Array.from({ length: HH }, (_, j) => insolationRange(rowLat(j, HH)));
   // Polar amplification of a mean-temperature change: its area mean is exactly dT.
   const amp2 = Float64Array.from({ length: H2 }, (_, j) => 1 + C.polarAmplification * (Math.sin(rowLat(j, H2)) ** 2 - 1 / 3));
@@ -126,16 +128,13 @@ export function createResponder(data, rules, radiusMetres, obliquityDeg = 23.44)
   const pIdx = (p) => Math.max(0, Math.min(pBins.n - 1, Math.floor((Math.log10(Math.max(p, 10)) - pBins.log10lo) / pBins.step)));
 
   let current = { sea: 0, dT: 0 };
-  function restore() {
-    for (const k of [...KEYS, "veg_fit"]) F[k].set(base[k]);
-  }
   // Recompute every stage for the given conditions; returns what changed.
   function update(sea, dT) {
     const t0 = performance.now();
     current = { sea, dT };
     let landShare = null;
     const moved = !(sea === 0 && dT === 0);
-    if (!moved) restore();
+    if (!moved) for (const k of [...KEYS, "veg_fit"]) F[k].set(base[k]);
     const L1 = moved ? land2(sea) : null;
     const d1 = !moved || sea === 0 ? d0 : seaDistance(L1);
     if (moved) {
@@ -191,20 +190,20 @@ export function createResponder(data, rules, radiusMetres, obliquityDeg = 23.44)
     }
     if (moved) {
       let a = 0, al = 0;
-      for (let j = 0; j < H2; j++) { const w = Math.cos(((j + 0.5) / H2 - 0.5) * Math.PI); for (let i = 0; i < W2; i++) { a += w; if (L1[j * W2 + i]) al += w; } }
+      for (let j = 0; j < H2; j++) { const w = Math.cos(rowLat(j, H2)); for (let i = 0; i < W2; i++) { a += w; if (L1[j * W2 + i]) al += w; } }
       landShare = al / a;
     }
     for (const k of [...KEYS, "snow", "seaice"]) polarFootprint(F[k], F[k].meta.w, F[k].meta.h, D[k]);
     return { ms: performance.now() - t0, landShare };
   }
   update(0, 0);   // the base's own snow and sea ice
-  return { update, atBase: () => current.sea === 0 && current.dT === 0, conditions: () => current, ICE_MIN_M };
+  return { update, atBase: () => current.sea === 0 && current.dT === 0, conditions: () => current };
 }
 
-// the flattened lookup tables, fetched once and shared by every body
+// the rules, fetched once and shared by every body (tables flattened)
 let rulesPromise = null;
 export function loadRules(url) {
   return (rulesPromise ??= fetch(url).then((r) => { if (!r.ok) throw Error(`Missing ${r.url}`); return r.json(); })
-    .then((r) => ({ ...r, iceShare: r.iceShare.flat(), iceThicknessM: r.iceThicknessM.flat(), vegClass: r.vegClass.flat(), vegShare: r.vegShare.flat(2) }))
+    .then((r) => ({ ...r, vegClass: r.vegClass.flat(), vegShare: r.vegShare.flat(2) }))
     .catch((e) => { rulesPromise = null; throw e; }));
 }
