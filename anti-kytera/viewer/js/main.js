@@ -1,18 +1,18 @@
 // v2 entry: loads the worlds, wires the on-screen controls, owns the 3D/2D
 // switch and puts the stage panel (legend, centre readout) on screen.
 //   3D view   globe3d.js      2D view   map2d.js
-//   stages    stages.js (-> stage-data / stage-draw / stage-panel)
+//   stages    stages.js (-> stage-data / stage-respond / stage-draw / stage-panel)
 // World loading, the 3D/2D switch, sea sliders, axis and graticule behave as
 // in v1s (climate-v1-stable-ui js/main.js).
 import { initGlobe3D } from "./globe3d.js";
 import { initMap2D } from "./map2d.js";
 import { loadStages } from "./stages.js";
 import { ramp } from "./stage-draw.js";
-import { gapShort, gapNote } from "./stage-panel.js";
+import { gapShort, gapNote, centreText } from "./stage-panel.js";
+import { BASE_MEAN_C } from "./stage-respond.js";
 
 const WORLD_INDEX_URL = "./worlds/index.json";
 const AK_BASE = "../";                 // anti-kytera/, where results/ and veg/results/ live
-const PRESENT_MEAN_C = 14;             // the base condition every adopted estimate was made for (with a 0 m sea)
 const GRATICULE_STATES = [
   { mode: "off", label: "なし" },
   { mode: "parallels", label: "緯度" },
@@ -46,10 +46,9 @@ async function main() {
   let mode = "3d";
   let globe3d = null, map2d = null, world = null;
   let axisUpright = true, graticuleIndex = 0, lineWhite = false;
-  // 地球適合 is the adopted estimate, so the mode is fixed; 教師 and 差 exist on
-  // Earth only and are put back to モデル on every world switch.
+  // 教師 and 差 exist on Earth at the base conditions only and are put back
+  // to モデル on every world switch (the model side is always 地球適合).
   let surface = "standard", src = "model", vegStyle = "detailed";
-  const vmode = "fit";
   let legendOpen = true;
 
   const isEarth = () => world?.entry.id === "kasoku-sekai";
@@ -107,7 +106,7 @@ async function main() {
   function applyConditions() {
     clearTimeout(conditionTimer);
     if (!stages || !world) return;
-    const r = stages.setConditions(seaLevelMetres(), Number(tempSlider.value) - PRESENT_MEAN_C);
+    const r = stages.setConditions(seaLevelMetres(), Number(tempSlider.value) - BASE_MEAN_C);
     if (!r) return;
     window.__akConditionMs = r.ms;
     applySurface();
@@ -128,11 +127,11 @@ async function main() {
   function updateCondition() {
     if (!hasStages()) { condition.hidden = true; return; }
     const sea = seaLevelMetres(), temp = Number(tempSlider.value);
-    const moved = sea !== 0 || temp !== PRESENT_MEAN_C;
+    const moved = sea !== 0 || temp !== BASE_MEAN_C;
     condition.hidden = !moved;
     if (!moved) return;
     condition.textContent = inStage()
-      ? `7段階は海面・平均気温に追従（海陸→気温→湿度→降水→陸氷→植生を共通の簡易規則で更新、教師なし）。${isEarth() ? `教師・差と一致率は海面0 m・${PRESENT_MEAN_C}℃のときだけ。` : ""}`
+      ? `7段階は海面・平均気温に追従（海陸→気温→湿度→降水→陸氷→植生を共通の簡易規則で更新、教師なし）。${isEarth() ? `教師・差と一致率は海面0 m・${BASE_MEAN_C}℃のときだけ。` : ""}`
       : `${surface === "elevation" ? "標高色" : "標準画像"}は地形・画像が固定で、${sea !== 0 ? "海面だけが動く。" : "平均気温では変わらない。"}7段階（岩盤〜植生）は追従する。`;
   }
 
@@ -152,7 +151,7 @@ async function main() {
     if (!hasStages()) { globe3d.setStage(null); info.hidden = true; return; }
     info.hidden = false;
     if (stages) {
-      Object.assign(stages.state, { v: inStage() ? surface : "bed", src, mode: vmode, vegStyle });
+      Object.assign(stages.state, { v: inStage() ? surface : "bed", src, vegStyle });
       stages.apply();
     }
     globe3d.setElevationMode(stages, surface === "elevation");
@@ -163,15 +162,18 @@ async function main() {
     refresh2d();
     lastReadout = "";
   }
+  // the colour bar: 256 colours and its end labels
+  function drawBar(colours, lo, hi, unit) {
+    const bc = $("ak-bar").getContext("2d");
+    colours.forEach((c, i) => { bc.fillStyle = `rgb(${c.map(Math.round).join(",")})`; bc.fillRect(i, 0, 1, 1); });
+    $("ak-lo").textContent = lo; $("ak-hi").textContent = hi; $("ak-unit").textContent = unit;
+  }
   function renderLegend() {
     const bar = $("ak-bar-wrap"), cls = $("ak-classes");
     if (!inStage() || !stages) {
       bar.hidden = surface !== "elevation"; cls.hidden = true;
-      if (surface === "elevation") {
-        const bc = $("ak-bar").getContext("2d");
-        for (let i = 0; i < 256; i++) { bc.fillStyle = `rgb(${ramp("rock", i / 255).map(Math.round).join(",")})`; bc.fillRect(i, 0, 1, 1); }
-        $("ak-lo").textContent = stages.bedRange[0]; $("ak-hi").textContent = stages.bedRange[1]; $("ak-unit").textContent = "m";
-      }
+      if (surface === "elevation")
+        drawBar(Array.from({ length: 256 }, (_, i) => ramp("rock", i / 255)), stages.bedRange[0], stages.bedRange[1], "m");
       const gap = gapShort(world?.config.terrain.processing);
       $("ak-score").textContent = (surface === "elevation" ? "標高色：地表の高さだけ（推定値ではない）" : "標準：探査画像・地球写真（推定値ではない）") + (gap ? `・${gap}` : "");
       if (surface === "elevation") $("ak-note").textContent = `標高色は地表の標高を着色（地球は現在の氷表面を含むGEBCO、他の天体は探査機の地形）。色の両端は ${stages.bedRange[0]}〜${stages.bedRange[1]} m。海面を変えても高さ自体は変わらない。` + (gap ? " " + gapNote(world.config.terrain.processing) : "");
@@ -184,10 +186,8 @@ async function main() {
     $("ak-note").textContent = L.note;
     if (L.bar) {
       cls.hidden = true; bar.hidden = !legendOpen;
-      const bc = $("ak-bar").getContext("2d");
-      L.bar.colours.forEach((c, i) => { bc.fillStyle = `rgb(${c.map(Math.round).join(",")})`; bc.fillRect(i, 0, 1, 1); });
       const fmt = (x) => Math.abs(x) >= 100 ? x.toFixed(0) : x.toFixed(Math.abs(x) >= 10 ? 0 : 1);
-      $("ak-lo").textContent = fmt(L.bar.lo); $("ak-hi").textContent = fmt(L.bar.hi); $("ak-unit").textContent = L.bar.unit;
+      drawBar(L.bar.colours, fmt(L.bar.lo), fmt(L.bar.hi), L.bar.unit);
     } else {
       bar.hidden = true; cls.hidden = !legendOpen;
       cls.innerHTML = "";
@@ -218,8 +218,7 @@ async function main() {
     let html;
     if (!c) html = "中央: 地球の外";
     else if (!inStage()) {
-      const pos = `中央 ${Math.abs(c.lat).toFixed(1)}°${c.lat >= 0 ? "N" : "S"} ${Math.abs(c.lng).toFixed(1)}°${c.lng >= 0 ? "E" : "W"}`;
-      html = `${pos}　<span class="k">${surface === "elevation" ? "標高色" : "標準画像"}</span><br><b class="m">地表</b> 標高 ${globe3d.sampleElevation(c.lng, c.lat).toFixed(0)} m　<b class="t">教師</b> なし`;
+      html = `${centreText(c.lng, c.lat)}　<span class="k">${surface === "elevation" ? "標高色" : "標準画像"}</span><br><b class="m">地表</b> 標高 ${globe3d.sampleElevation(c.lng, c.lat).toFixed(0)} m　<b class="t">教師</b> なし`;
     } else html = stages.readout(c.lng, c.lat);
     if (html !== lastReadout) { $("ak-readout").innerHTML = html; lastReadout = html; }
   }
@@ -341,7 +340,7 @@ async function main() {
     worldSelect.value = entry.id;
     applySeaLevel();
     clearTimeout(conditionTimer);   // this body starts at the sliders' current conditions, before its first frame
-    if (stages) stages.setConditions(seaLevelMetres(), Number(tempSlider.value) - PRESENT_MEAN_C);
+    if (stages) stages.setConditions(seaLevelMetres(), Number(tempSlider.value) - BASE_MEAN_C);
     applyWaterOpacity();
     applyAxis({ recentre: false });
     applyGraticule();

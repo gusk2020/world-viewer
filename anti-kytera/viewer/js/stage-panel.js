@@ -2,7 +2,8 @@
 // Text only -- main.js puts it on screen. The readout reads the committed
 // arrays (F) through cell(); the drawing copies are consulted only to say
 // when the screen and the raw cell disagree.
-import { ICE_MIN_M, POLAR_AVERAGE_LAT, MODE_JA } from "./stage-data.js";
+import { ICE_MIN_M, POLAR_AVERAGE_LAT, FIT_JA } from "./stage-data.js";
+import { BASE_MEAN_C } from "./stage-respond.js";
 import { ramp, seaColour, AGREE, SIMPLE_VEG, simpleVeg, SNOW, SEA_ICE } from "./stage-draw.js";
 
 // The terrain's missing-data record (config.json terrain.processing), in the
@@ -18,6 +19,11 @@ export function gapNote(p) {
     : "";
 }
 
+// "中央 12.3°N 45.6°E": the head of every centre readout (main.js uses it for 標準/標高色)
+export const centreText = (lng, lat) =>
+  `中央 ${Math.abs(lat).toFixed(1)}°${lat >= 0 ? "N" : "S"} ${Math.abs(lng).toFixed(1)}°${lng >= 0 ? "E" : "W"}`;
+const signedMetres = (m) => `${m > 0 ? "+" : ""}${m} m`;
+
 export function createStagePanel(ctx) {
   const { S, V, vcol, vlab, state, cell, bilinear, drawnComposite, rawComposite, isClimate, vm, scale, hasTeacher, bedRange } = ctx;
   const [BED_LO, BED_HI] = bedRange;
@@ -25,7 +31,7 @@ export function createStagePanel(ctx) {
   const teacherHere = () => hasTeacher && ctx.atBase();
   const moved = () => !ctx.atBase();
   const RESPONSE_NOTE = "海面・平均気温の変更に合わせ、海陸→気温→湿度→降水→陸氷→植生を共通の簡易規則で更新した推定（教師なし）。干上がった海底も同じ規則で塗る。";
-  const movedScore = () => `条件変更後の推定（海面 ${state.seaLevel > 0 ? "+" : ""}${state.seaLevel} m・平均気温 ${14 + state.dT}℃）・教師なし`;
+  const movedScore = () => `条件変更後の推定（海面 ${signedMetres(state.seaLevel)}・平均気温 ${BASE_MEAN_C + state.dT}℃）・教師なし`;
   // ------------------------------------------------ legend and notes
   const pct = (x) => (x * 100).toFixed(0) + "%";
   function legend() {
@@ -33,7 +39,7 @@ export function createStagePanel(ctx) {
     const out = { bar: null, classes: null, score: "", note: "" };
     if (veg) {
       const items = [];
-      const sc = V.scores[state.mode];
+      const sc = V.scores.fit;
       if (state.src === "diff") {
         items.push([AGREE.same, "一致"], [AGREE.veg, "植生が不一致"], [AGREE.ice, "氷の有無が不一致"],
           [AGREE.none, "教師なし"], [AGREE.sea, "海"]);
@@ -47,7 +53,7 @@ export function createStagePanel(ctx) {
         if (state.src === "teacher") items.push([vcol[255], "教師なし"]);
       }
       out.classes = items;
-      out.score = moved() ? movedScore() : hasTeacher ? state.vegStyle === "simple" ? `${MODE_JA[state.mode]}：簡略5区分（表示用に統合・一致率未集計）` : `${MODE_JA[state.mode]}：15区分 一致 ${pct(sc.accuracy)}・κ ${sc.kappa.toFixed(2)}・大区分 ${pct(sc.group)}` : "地球で学習した規則による試験的な塗り分け・教師なし";
+      out.score = moved() ? movedScore() : hasTeacher ? state.vegStyle === "simple" ? `${FIT_JA}：簡略5区分（表示用に統合・一致率未集計）` : `${FIT_JA}：15区分 一致 ${pct(sc.accuracy)}・κ ${sc.kappa.toFixed(2)}・大区分 ${pct(sc.group)}` : "地球で学習した規則による試験的な塗り分け・教師なし";
       out.note = {
         model: "モデル：年平均の気温・降水・水蒸気圧（3〜5段階と同じ推定値）と岩盤地形から分類した、通年の代表的な自然植生。15区分の数字は種類ごとの一致度（%）。",
         teacher: "教師：Ramankutty & Foley (1999) 潜在自然植生（人の土地利用が無い場合）。南極は教師に区分が無い。",
@@ -61,14 +67,14 @@ export function createStagePanel(ctx) {
       for (let i = 0; i < 256; i++) colours.push(state.v === "sea" && BED_LO + (i / 255) * (BED_HI - BED_LO) < 0 ? seaColour(BED_LO + (i / 255) * (BED_HI - BED_LO)) : ramp(rp, i / 255));
       out.bar = { colours, lo, hi, unit: unit + (state.src === "diff" && isClimate() ? "（差）" : "") };
       if (!isClimate()) {
-        out.score = state.v === "sea" && state.landShare != null ? `陸の面積 ${(100 * state.landShare).toFixed(1)}%（海面 ${state.seaLevel > 0 ? "+" : ""}${state.seaLevel} m）・教師なし`
+        out.score = state.v === "sea" && state.landShare != null ? `陸の面積 ${(100 * state.landShare).toFixed(1)}%（海面 ${signedMetres(state.seaLevel)}）・教師なし`
           : hasTeacher && !moved() ? S.stages[state.v].score : `地形の標高 ${BED_LO}〜${BED_HI} m を色分け・教師なし`;
         out.note = S.stages[state.v].note;
       }
       else {
-        out.score = moved() ? movedScore() : hasTeacher ? `${MODE_JA[state.mode]}：${vm().score[state.mode]}` : "地球で学習した規則による試験的な塗り分け・教師なし";
+        out.score = moved() ? movedScore() : hasTeacher ? `${FIT_JA}：${vm().score.fit}` : "地球で学習した規則による試験的な塗り分け・教師なし";
         out.note = (state.src === "teacher" ? vm().teacherNote : state.src === "model" ? vm().modelNote : "差 = モデル − 教師。") +
-          " " + S.modeNote[state.mode];
+          " " + S.modeNote.fit;
       }
     }
     if (!hasTeacher) out.note = "探査機の地形に地球で学習した規則を当てた試験表示。実際の天体環境ではない。教師なし。" + (gapNote(ctx.processing) ? " " + gapNote(ctx.processing) : "");
@@ -94,17 +100,17 @@ export function createStagePanel(ctx) {
       : `<br><b class="m">海氷</b> 1年の ${pc(cell("seaice", lng, lat))} を覆う（陸氷とは別）　<b class="t">教師なし</b>`;
   }
   function readout(lng, lat) {
-    const pos = `中央 ${Math.abs(lat).toFixed(1)}°${lat >= 0 ? "N" : "S"} ${Math.abs(lng).toFixed(1)}°${lng >= 0 ? "E" : "W"}`;
+    const pos = centreText(lng, lat);
     const polar = Math.abs(lat) >= POLAR_AVERAGE_LAT ? "（この緯度の画面の色は東西平均）" : "";
     const head = `${pos}　<span class="k">${moved() ? "条件変更後のモデル値" : "元データ値"}</span>${polar}`;
     const z = cell("bed", lng, lat);
-    const tag = `モデル（${MODE_JA[state.mode]}）`;
+    const tag = `モデル（${FIT_JA}）`;
     // Other bodies always, and Earth away from the base: model value only.
     if (!teacherHere()) {
       const sl = state.seaLevel, none = `　<b class="t">教師なし</b>`;
       const ground = hasTeacher ? "岩盤" : "地形";
       if (state.v === "bed" || state.v === "sea")
-        return `${head}<br><b class="m">${ground}</b> ${z.toFixed(0)} m${state.v === "sea" ? `・${z < sl ? (hasTeacher ? "海" : "仮想海") : "陸"}（海面 ${sl > 0 ? "+" : ""}${sl} m）` : ""}${none}`;
+        return `${head}<br><b class="m">${ground}</b> ${z.toFixed(0)} m${state.v === "sea" ? `・${z < sl ? (hasTeacher ? "海" : "仮想海") : "陸"}（海面 ${signedMetres(sl)}）` : ""}${none}`;
       if (state.v === "veg") {
         const c = rawComposite("fit", lng, lat, sl);
         return `${head}<br><b class="m">モデル値</b> ${state.vegStyle === "simple" ? simpleVeg(c)?.ja || vlab[c] : vlab[c] || "推定なし"}${none}${cryo(lng, lat)}`;
@@ -118,7 +124,7 @@ export function createStagePanel(ctx) {
     // the moved sea surface wins over the 0 m estimates
     const sl = state.seaLevel;
     const seaNote = sl !== 0 && ((z < sl) !== (z < 0))
-      ? `<br><span class="w">※海面 ${sl > 0 ? "+" : ""}${sl} m ではここは${z < sl ? "海" : "陸（干上がった海底）"}。塗り分けの推定は海面0 mのまま</span>` : "";
+      ? `<br><span class="w">※海面 ${signedMetres(sl)} ではここは${z < sl ? "海" : "陸（干上がった海底）"}。塗り分けの推定は海面0 mのまま</span>` : "";
     if (state.v === "bed" || state.v === "sea") {
       const what = state.v === "sea" ? `・${SEA_JA(z)}（海面0 m）` : "";
       const drawnSea = bilinear("bed", lng, lat) < 0, rawSea = z < 0;
@@ -126,21 +132,20 @@ export function createStagePanel(ctx) {
       return `${head}<br><b class="m">入力</b> 岩盤 ${z.toFixed(0)} m${what}　<b class="t">教師</b> なし（入力データの段階）${w}${state.v === "sea" ? seaNote : ""}`;
     }
     if (state.v === "veg") {
-      const m = rawComposite(state.mode, lng, lat), t = rawComposite("teacher", lng, lat);
-      const shown = state.src === "teacher" ? "teacher" : state.mode;
+      const m = rawComposite("fit", lng, lat), t = rawComposite("teacher", lng, lat);
+      const shown = state.src === "teacher" ? "teacher" : "fit";
       let w = "";
       if (sl === 0) {
-        const dc = (c) => (c === -1 ? "干上がった海底" : vlab[c]);
         w = state.src === "diff"
-          ? (drawnComposite(state.mode, lng, lat) !== m || drawnComposite("teacher", lng, lat) !== t
+          ? (drawnComposite("fit", lng, lat) !== m || drawnComposite("teacher", lng, lat) !== t
             ? `<br><span class="w">※この地点の画面の塗りは、境界付近の補間・平均で元データのセルと異なる</span>` : "")
-          : warn(dc(drawnComposite(shown, lng, lat)), vlab[shown === "teacher" ? t : m]);
+          : warn(vlab[drawnComposite(shown, lng, lat)], vlab[shown === "teacher" ? t : m]);
       }
       const label = (c) => state.vegStyle === "simple" && simpleVeg(c) ? `${simpleVeg(c).ja}（元: ${vlab[c]}）` : vlab[c];
       return `${head}<br><b class="m">${tag}</b> ${label(m)}　<b class="t">教師</b> ${label(t)}${w}${seaNote}${state.src === "model" ? cryo(lng, lat) : ""}`;
     }
     const m0 = vm(), key = m0.key;
-    const mod = cell(`${key}_${state.mode}`, lng, lat), tea = cell(`${key}_teacher`, lng, lat);
+    const mod = cell(`${key}_fit`, lng, lat), tea = cell(`${key}_teacher`, lng, lat);
     const f = (x) => Number.isFinite(x) ? x.toFixed(m0.digits) : null;
     const iceTxt = (x) => x > ICE_MIN_M ? `${f(x)} m` : "氷なし";
     const mv = state.v === "ice" ? iceTxt(mod) : `${f(mod)} ${m0.unit}`;
@@ -148,7 +153,7 @@ export function createStagePanel(ctx) {
     const dv = f(tea) == null ? "" : `　差 ${mod - tea >= 0 ? "+" : ""}${f(mod - tea)}`;
     let w = "";
     if (state.v === "ice" && state.src !== "diff") {
-      const which = state.src === "teacher" ? "teacher" : state.mode;
+      const which = state.src === "teacher" ? "teacher" : "fit";
       const ice = (x) => (x > ICE_MIN_M ? "氷" : "氷なし");
       w = warn(ice(bilinear(`H_${which}`, lng, lat)), ice(which === "teacher" ? tea : mod));
     }

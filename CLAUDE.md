@@ -289,6 +289,13 @@ separate layers drawn by their share of the year; constants checked against
 ERA5 2015 (reanalysis, `rules/cryo_reference_2015.npz`), never shown as a score.
 See the last section of `anti-kytera/viewer/RESPONSE.md`.
 
+**Cleanup (branch `claude/anti-kytera-v2-cleanup`, Draft PR on top of #21).** No
+behaviour change: the unused Earth ice table left the rules file, hold-out
+fields are no longer turned into drawing copies or textures, the fixed
+地球適合 mode is a constant instead of state, and two smoke scripts that
+still clicked the removed `#world-cycle` button were deleted with their
+workflows. `tools/smoke_expanded.mjs` is the phone smoke test.
+
 ## Architecture (Three.js for 3D, OpenLayers for 2D, one page, toggle button)
 
 **Three.js** for the 3D globe, **OpenLayers** for the 2D map, both mounted

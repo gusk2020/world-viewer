@@ -6,7 +6,7 @@
 // Differences between the views are only what each view adds on top: in 3D
 // v1s's light and sea sphere, in 2D a flat relief shading and the water tint.
 import * as THREE from "three";
-import { ICE_MIN_M } from "./stage-data.js";
+import { ICE_MIN_M, DRAWN_KEYS } from "./stage-data.js";
 
 export const RAMPS = {
   rock: [[0, 58, 52, 50], [0.40, 104, 92, 80], [0.57, 150, 136, 108], [0.62, 128, 140, 96], [0.72, 150, 128, 88],
@@ -35,6 +35,8 @@ export const SIMPLE_VEG = [
 ];
 export const simpleVeg = (code) => SIMPLE_VEG.find((g) => g.codes.includes(code));
 const WATER = [47, 111, 168];          // v1s's sea colour (0x2f6fa8), for the 2D map
+// the arrays stage-respond.js rewrites in place
+const RESPONDING_KEYS = ["T_fit", "E_fit", "P_fit", "H_fit", "veg_fit", "snow", "seaice"];
 const STAGE_ID = { bed: 0, sea: 1, t2m: 2, hum: 2, precip: 2, ice: 3, veg: 4 };
 
 export function ramp(name, x) {
@@ -59,19 +61,18 @@ export function colourScale(S, state) {
 export function createStageDraw(ctx) {
   const { S, F, D, vcol, state, isClimate, vm, scale } = ctx;
   // ------------------------------------------------ textures
+  // One texture per drawn array, sharing its memory: the continuous fields
+  // from the drawing copies D (snow and sea ice come from stage-respond.js),
+  // the vegetation classes from F. refreshFields() re-uploads them.
   const T = {};
-  function floatTex(arr, w, h) {
-    const t = new THREE.DataTexture(arr, w, h, THREE.RedFormat, THREE.FloatType);
-    t.minFilter = t.magFilter = THREE.NearestFilter; t.generateMipmaps = false; t.needsUpdate = true;
+  function dataTex(arr, w, h, format, type, filter) {
+    const t = new THREE.DataTexture(arr, w, h, format, type);
+    t.minFilter = t.magFilter = filter; t.generateMipmaps = false; t.unpackAlignment = 1; t.needsUpdate = true;
     return t;
   }
-  for (const k of Object.keys(S.fields)) T[k] = floatTex(D[k], D[k].meta.w, D[k].meta.h);
-  for (const k of ["snow", "seaice"]) T[k] = floatTex(D[k], D[k].meta.w, D[k].meta.h);   // stage-respond.js
-  for (const k of ["veg_fit", "veg_holdout", "veg_teacher"]) {
-    const t = new THREE.DataTexture(F[k], F[k].meta.w, F[k].meta.h, THREE.RedFormat, THREE.UnsignedByteType);
-    t.minFilter = t.magFilter = THREE.NearestFilter; t.generateMipmaps = false; t.unpackAlignment = 1; t.needsUpdate = true;
-    T[k] = t;
-  }
+  const floatTex = (a, w = a.meta.w, h = a.meta.h) => dataTex(a, w, h, THREE.RedFormat, THREE.FloatType, THREE.NearestFilter);
+  for (const k of [...DRAWN_KEYS(S), "snow", "seaice"]) T[k] = floatTex(D[k]);
+  for (const k of ["veg_fit", "veg_teacher"]) T[k] = dataTex(F[k], F[k].meta.w, F[k].meta.h, THREE.RedFormat, THREE.UnsignedByteType, THREE.NearestFilter);
   T.normal = (() => {   // object-space relief normals, for the flat 2D map only
     const f = D.bed.meta, a = D.bed, W = f.w, H = f.h, R = S.bodyRadiusMetres || 6.371e6, RELIEF = 25;
     const out = new Uint8Array(W * H * 4), dy = Math.PI * R / H;
@@ -91,9 +92,8 @@ export function createStageDraw(ctx) {
         out[o + 2] = Math.round((z * 0.5 + 0.5) * 255); out[o + 3] = 255;
       }
     }
-    const t = new THREE.DataTexture(out, W, H, THREE.RGBAFormat, THREE.UnsignedByteType);
-    t.minFilter = t.magFilter = THREE.LinearFilter; t.generateMipmaps = false;
-    t.wrapS = THREE.RepeatWrapping; t.needsUpdate = true;
+    const t = dataTex(out, W, H, THREE.RGBAFormat, THREE.UnsignedByteType, THREE.LinearFilter);
+    t.wrapS = THREE.RepeatWrapping;
     return t;
   })();
   {
@@ -104,12 +104,15 @@ export function createStageDraw(ctx) {
         rp[o] = Math.round(c[0]); rp[o + 1] = Math.round(c[1]); rp[o + 2] = Math.round(c[2]); rp[o + 3] = 255;
       }
     });
-    T.ramp = new THREE.DataTexture(rp, 256, RAMP_ROWS.length, THREE.RGBAFormat, THREE.UnsignedByteType);
-    T.ramp.minFilter = T.ramp.magFilter = THREE.LinearFilter; T.ramp.generateMipmaps = false; T.ramp.needsUpdate = true;
-    const pal = new Uint8Array(256 * 4);
+    T.ramp = dataTex(rp, 256, RAMP_ROWS.length, THREE.RGBAFormat, THREE.UnsignedByteType, THREE.LinearFilter);
+    T.pal = dataTex(new Uint8Array(256 * 4), 256, 1, THREE.RGBAFormat, THREE.UnsignedByteType, THREE.NearestFilter);
+    fillPalette();
+  }
+  // vegetation class code -> colour (the 15 classes, or their 5 groups)
+  function fillPalette() {
+    const pal = T.pal.image.data;
     for (const [code, rgb] of Object.entries(vcol)) pal.set([...(state.vegStyle === "simple" ? simpleVeg(Number(code))?.rgb || rgb : rgb), 255], Number(code) * 4);
-    T.pal = new THREE.DataTexture(pal, 256, 1, THREE.RGBAFormat, THREE.UnsignedByteType);
-    T.pal.minFilter = T.pal.magFilter = THREE.NearestFilter; T.pal.generateMipmaps = false; T.pal.needsUpdate = true;
+    T.pal.needsUpdate = true;
   }
 
   // Shared uniform objects: the 3D material and the 2D renderer read the same ones.
@@ -148,12 +151,8 @@ int akCls(sampler2D t, vec2 ll) {
   int y = clamp(int(floor((ll.y + 90.0) / 180.0 * float(sz.y))), 0, sz.y - 1);
   return int(texelFetch(t, ivec2(x, y), 0).r * 255.0 + 0.5);
 }
-int akVegGroup(int c) {
-  if (c >= 11 && c <= 18) return 11;
-  if (c == 19 || c == 20) return 19;
-  if (c == 21 || c == 22) return 21;
-  if (c == 23) return 23;
-  if (c == 24 || c == 25) return 24;
+int akVegGroup(int c) {   // SIMPLE_VEG's grouping: each group is named by its first code
+  ${SIMPLE_VEG.map((g) => `if (${g.codes.map((c) => `c == ${c}`).join(" || ")}) return ${g.codes[0]};`).join("\n  ")}
   return c;
 }
 vec3 akRampC(int row, float x) {
@@ -222,7 +221,10 @@ float akCoast(float z) {      // the sea-level contour, about one screen pixel w
 `;
 
   // ------------------------------------------------ 3D: v1s's Lambert material, colour per pixel
-  function createMaterial() {
+  // body: GLSL that sets `vec3 c` (sRGB 0-1) from the object-space position
+  // vAkPos; it is turned into linear so v1s's light and output conversion
+  // treat it like the photo.
+  function lambert(cacheKey, body) {
     const m = new THREE.MeshLambertMaterial({ color: 0xffffff });
     m.onBeforeCompile = (shader) => {
       Object.assign(shader.uniforms, U);
@@ -233,34 +235,21 @@ float akCoast(float z) {      // the sea-level contour, about one screen pixel w
         .replace("#include <common>", "#include <common>\nvarying vec3 vAkPos;\n" + GLSL)
         .replace("#include <map_fragment>", `#include <map_fragment>
   {
-    vec2 ll = akLngLat(vAkPos);
-    float z = akBil(akBed, ll), relief;
-    vec3 c = akColour(ll, z, relief) * akCoast(z) / 255.0;
-    // sRGB -> linear, so v1s's light and output conversion treat it like the photo
+    ${body}
     diffuseColor.rgb = mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c));
   }`);
     };
-    m.customProgramCacheKey = () => "anti-kytera-stage";
+    m.customProgramCacheKey = () => cacheKey;
     return m;
   }
-
+  const createMaterial = () => lambert("anti-kytera-stage", `vec2 ll = akLngLat(vAkPos);
+    float z = akBil(akBed, ll), relief;
+    vec3 c = akColour(ll, z, relief) * akCoast(z) / 255.0;`);
   // Earth's input terrain carries today's ice surface. Colour that same
   // geometry solely by its height, with the same rock ramp as the 2D view.
-  function createElevationMaterial(metresToRadius) {
-    const m = new THREE.MeshLambertMaterial({ color: 0xffffff });
-    m.onBeforeCompile = (shader) => {
-      Object.assign(shader.uniforms, U);
-      shader.vertexShader = shader.vertexShader.replace("#include <common>", "#include <common>\nvarying vec3 vAkPos;")
-        .replace("#include <begin_vertex>", "#include <begin_vertex>\nvAkPos = position;");
-      shader.fragmentShader = shader.fragmentShader.replace("#include <common>", "#include <common>\nvarying vec3 vAkPos;\n" + GLSL)
-        .replace("#include <map_fragment>", `#include <map_fragment>
-        float z = (length(vAkPos) - 1.0) / ${metresToRadius.toExponential(12)};
-        vec3 c = akRock(z) / 255.0;
-        diffuseColor.rgb = mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c));`);
-    };
-    m.customProgramCacheKey = () => "anti-kytera-elevation";
-    return m;
-  }
+  const createElevationMaterial = (metresToRadius) => lambert("anti-kytera-elevation",
+    `float z = (length(vAkPos) - 1.0) / ${metresToRadius.toExponential(12)};
+    vec3 c = akRock(z) / 255.0;`);
 
   // ------------------------------------------------ 2D: the same colour, per pixel in Web Mercator
   const MERC_R = 6378137;
@@ -354,24 +343,23 @@ void main() {
   // ------------------------------------------------ state -> uniforms
   function apply() {
     U.akVegSimple.value = state.vegStyle === "simple";
-    const pal = T.pal.image.data;
-    for (const [code, rgb] of Object.entries(vcol)) pal.set([...(state.vegStyle === "simple" ? simpleVeg(Number(code))?.rgb || rgb : rgb), 255], Number(code) * 4);
-    T.pal.needsUpdate = true;
+    fillPalette();
     U.akStage.value = STAGE_ID[state.v];
     U.akSrc.value = { model: 0, teacher: 1, diff: 2 }[state.src];
     U.akSeaLevel.value = state.seaLevel;
     if (isClimate()) {
       const key = vm().key, sc = scale();
-      U.akFM.value = T[`${key}_${state.mode}`]; U.akFT.value = T[`${key}_teacher`];
+      U.akFM.value = T[`${key}_fit`]; U.akFT.value = T[`${key}_teacher`];
       U.akRampRow.value = RAMP_ROWS.indexOf(sc.ramp); U.akLo.value = sc.lo; U.akHi.value = sc.hi; U.akLog.value = sc.log;
     }
-    U.akHM.value = T[`H_${state.mode}`]; U.akHT.value = T.H_teacher;
-    U.akVM.value = T[`veg_${state.mode}`]; U.akVT.value = T.veg_teacher;
+    // The model side is always 地球適合 (fit); the teacher side exists on Earth only.
+    U.akHM.value = T.H_fit; U.akHT.value = T.H_teacher;
+    U.akVM.value = T.veg_fit; U.akVT.value = T.veg_teacher;
   }
 
   // After the condition responder rewrote the fields in place: re-upload them.
   function refreshFields() {
-    for (const k of ["T_fit", "E_fit", "P_fit", "H_fit", "veg_fit", "snow", "seaice"]) T[k].needsUpdate = true;
+    for (const k of RESPONDING_KEYS) T[k].needsUpdate = true;
   }
 
   return { createMaterial, createElevationMaterial, renderMercator, apply, refreshFields };

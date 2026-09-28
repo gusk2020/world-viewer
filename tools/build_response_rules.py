@@ -1,20 +1,20 @@
-"""Build the common climate-response rules used when the sliders move.
+"""Build the common climate-response rules used when the sliders move
+(anti-kytera/viewer/rules/response_rules.json, read by js/stage-respond.js).
 
-One pair of lookup tables, learnt from Earth's adopted 地球適合 fields and
-applied unchanged to every body (no place or body names anywhere):
+Applied unchanged to every body (no place or body names anywhere):
 
-  ice[T][P]   the share of land cells carrying land ice (> 10 m) and their
-              mean thickness, by annual temperature and precipitation bin;
-  veg[T][P]   the share of each vegetation class among ice-free land cells in
-              the same bins, and the most common one.
+  veg[T][P]   the share of each vegetation class among ice-free land cells by
+              annual temperature and precipitation bin, and the most common
+              one -- learnt from Earth's adopted 地球適合 fields;
+  cryo        the land-ice, snow and sea-ice constants (CRYO below);
+  physics     the humidity/precipitation response and the coast factor.
 
-The viewer only uses them as *differences*: a cell keeps its adopted class
-until the new climate clearly stops supporting it (its share in the new bin
-falls below half its share in the base bin, by at least 0.05), and ice only
-melts or forms when the ice share moves by more than 0.2 across 0.5. At the
-base conditions every cell therefore keeps its adopted value.
-Cells that become land (seabed exposed by a lower sea) take the table's
-answer directly. Empty bins take the nearest filled bin.
+The viewer only uses the vegetation table as a *difference*: a cell keeps its
+adopted class until the new climate clearly stops supporting it (its share in
+the new bin falls below half its share in the base bin, by at least 0.05), so
+at the base conditions every cell keeps its adopted value. Cells that become
+land (seabed exposed by a lower sea) take the table's answer directly. Empty
+bins take the nearest filled bin.
 """
 import json
 from pathlib import Path
@@ -86,15 +86,7 @@ def main():
     ti = np.clip(((T - T_LO) / T_STEP).astype(int), 0, T_N - 1)
     pi = np.clip(((np.log10(np.maximum(P, 10)) - P_LO) / P_STEP).astype(int), 0, P_N - 1)
     area = np.cos(np.radians(-90 + (np.arange(360) + .5) * .5))[:, None] * np.ones((1, 720))
-    n = np.zeros((T_N, P_N)); ice = np.zeros((T_N, P_N)); thick = np.zeros((T_N, P_N))
-    np.add.at(n, (ti[land], pi[land]), area[land])
     iced = land & (H > ICE_MIN_M)
-    np.add.at(ice, (ti[iced], pi[iced]), area[iced])
-    np.add.at(thick, (ti[iced], pi[iced]), (area * H)[iced])
-    has = n > 0
-    frac = fill_nearest(np.where(has, ice / np.maximum(n, 1e-12), 0), has)
-    has_t = ice > 0
-    mean_t = fill_nearest(np.where(has_t, thick / np.maximum(ice, 1e-12), 0), has_t)
     vc = np.zeros((T_N, P_N, 15))
     ok = land & ~iced & (veg >= 11) & (veg <= 25)
     np.add.at(vc, (ti[ok], pi[ok], veg[ok] - 11), area[ok])
@@ -103,7 +95,6 @@ def main():
     def smooth(a):
         p = np.pad(a, ((1, 1), (1, 1)) + ((0, 0),) * (a.ndim - 2), mode="edge")
         return sum(p[1 + dy:1 + dy + a.shape[0], 1 + dx:1 + dx + a.shape[1]] for dy in (-1, 0, 1) for dx in (-1, 0, 1))
-    frac = smooth(frac) / 9
     vs = smooth(vc)
     has_v = vs.sum(2) > 0
     share = vs / np.maximum(vs.sum(2, keepdims=True), 1e-12)
@@ -113,9 +104,6 @@ def main():
         "_note": "Built by tools/build_response_rules.py from Earth's adopted 地球適合 fields. Common to every body; used only as differences from each body's base.",
         "tBins": {"lo": T_LO, "step": T_STEP, "n": T_N},
         "pBins": {"log10lo": P_LO, "step": P_STEP, "n": P_N},
-        "iceMinM": ICE_MIN_M,
-        "iceShare": np.round(frac, 3).tolist(),
-        "iceThicknessM": np.round(mean_t).astype(int).tolist(),
         "vegClass": vtab.astype(int).tolist(),
         "vegShare": np.round(share, 3).tolist(),
         "vegCodes": list(range(11, 26)),
@@ -128,7 +116,7 @@ def main():
     }
     out = AK / "viewer/rules/response_rules.json"
     out.write_text(json.dumps(rules, separators=(",", ":")))
-    print(out, out.stat().st_size, "bytes; ice bins", int((frac >= .5).sum()), "veg classes", sorted(set(vtab.ravel().tolist())))
+    print(out, out.stat().st_size, "bytes; veg classes", sorted(set(vtab.ravel().tolist())))
 
 
 if __name__ == "__main__":
