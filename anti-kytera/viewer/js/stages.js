@@ -5,6 +5,8 @@
 //   stage-respond.js  the stages at other sea levels and mean temperatures
 //   stage-draw.js     palette and the one colour function used by 3D and 2D
 //   stage-panel.js    legend/notes and the centre readout
+// (グレートジャーニー mode draws through the same colour function as stage
+// "journey"; its model and controls are journey.js / journey-ui.js.)
 //
 // state: which stage (v), model/teacher/diff (src; teacher and diff exist on
 // Earth at the base conditions only), vegetation style, and the display
@@ -61,5 +63,10 @@ export async function loadStages(base, planetary = false, { bedRange = [BED_LO, 
     legend: panel.legend,
     readout: panel.readout,
     bedMetresAt: (lng, lat) => data.bilinear("bed", lng, lat),   // the stage mesh's shape (drawing copy)
+    // グレートジャーニー: the fields at the current conditions (journey.js reads
+    // them, never writes), and the journey shown by the "journey" stage.
+    journeyInputs: () => ({ fields: data.F, radiusMetres: data.S.bodyRadiusMetres || 6.371e6, seaLevel: responder.conditions().sea }),
+    setJourney: draw.setJourney,
+    setJourneyTime: draw.setJourneyTime,
   };
 }

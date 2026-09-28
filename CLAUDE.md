@@ -296,6 +296,20 @@ fields are no longer turned into drawing copies or textures, the fixed
 still clicked the removed `#world-cycle` button were deleted with their
 workflows. `tools/smoke_expanded.mjs` is the phone smoke test.
 
+**Great Journey mode (branch `claude/anti-kytera-v2-journey`, Draft PR on top of
+#22).** Chosen at start (気候 / グレートジャーニー). `js/journey.js` is a DOM-free
+stochastic least-time spread on the 0.5-deg grid over the stage fields at the
+sliders' conditions (fixed for one journey; default sea -120 m / 8 C, labelled a
+borrowed ~20 ka background, not the dispersal period). Only the body's radius
+and its fields enter; no place/longitude/body names, no route steering. Seeded
+(mulberry32), shown and saved in localStorage. Range colours go through the
+stage shader (stage "journey", so 3D and 2D match); arrows are `journey-view.js`
+(3D ribbons via `globe3d.setOverlay`, 2D canvas strokes). Read
+`anti-kytera/viewer/JOURNEY.md`; `node tools/journey_report.mjs` reruns the
+same model headless and reports Earth's broad-region arrivals. Known
+deviation: from West Africa most runs reach Europe via the Atlantic coast and
+Gibraltar, and Europe before South Asia.
+
 ## Architecture (Three.js for 3D, OpenLayers for 2D, one page, toggle button)
 
 **Three.js** for the 3D globe, **OpenLayers** for the 2D map, both mounted

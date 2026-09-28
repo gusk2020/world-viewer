@@ -10,6 +10,7 @@ import { loadStages } from "./stages.js";
 import { ramp } from "./stage-draw.js";
 import { gapShort, gapNote, centreText } from "./stage-panel.js";
 import { BASE_MEAN_C } from "./stage-respond.js";
+import { createJourneyUI, JOURNEY_DEFAULT } from "./journey-ui.js";
 
 const WORLD_INDEX_URL = "./worlds/index.json";
 const AK_BASE = "../";                 // anti-kytera/, where results/ and veg/results/ live
@@ -50,10 +51,19 @@ async function main() {
   // to モデル on every world switch (the model side is always 地球適合).
   let surface = "standard", src = "model", vegStyle = "detailed";
   let legendOpen = true;
+  // "climate" (the seven stages) or "journey" (グレートジャーニー), chosen at start
+  let appMode = null;
+  const inJourney = () => appMode === "journey";
 
   const isEarth = () => world?.entry.id === "kasoku-sekai";
   const hasStages = () => Boolean(world && globe3d && globe3d.supportsStages && stages);
   const inStage = () => surface !== "standard" && surface !== "elevation";
+  const journeyUI = createJourneyUI({
+    $, stages: () => stages, globe: () => globe3d, map2d: () => map2d, is2d: () => mode === "2d" && Boolean(map2d),
+    refresh2d: () => refresh2d(),
+    refreshLegend: () => { if (inJourney()) renderLegend(); lastReadout = ""; },
+    conditions: () => ({ sea: seaLevelMetres(), temp: Number(tempSlider.value) }),
+  });
   for (const [name, entries] of [["惑星", index.worlds.filter(e => e.id !== "moon")], ["衛星", index.worlds.filter(e => e.id === "moon")]]) {
     const group = document.createElement("optgroup"); group.label = name;
     for (const entry of entries) { const option = document.createElement("option"); option.value = entry.id; option.textContent = entry.label; group.appendChild(option); }
@@ -70,10 +80,12 @@ async function main() {
     toggleButton.textContent = mode === "3d" ? "2Dに切替" : "3Dに切替";
   }
   function draw2d(extent, w, h) {
-    return stages.renderMercator(globe3d.renderer, extent, w, h, {
+    const canvas = stages.renderMercator(globe3d.renderer, extent, w, h, {
       photo: surface === "standard" && Boolean(globe3d.photoTexture), elevationColor: surface === "elevation",
       photoTexture: globe3d.photoTexture, elevation: globe3d.getElevation(),
     });
+    if (inJourney()) journeyUI.draw2d(canvas, extent);
+    return canvas;
   }
   let refreshQueued = false;
   function refresh2d() {
@@ -110,6 +122,7 @@ async function main() {
     if (!r) return;
     window.__akConditionMs = r.ms;
     applySurface();
+    if (inJourney()) journeyUI.rebuild();   // new conditions: a new journey from 0
   }
   function applyWaterOpacity() {
     const percent = Number(waterOpacitySlider.value);
@@ -125,7 +138,7 @@ async function main() {
   }
   // Say what follows the sliders the moment they leave the base conditions.
   function updateCondition() {
-    if (!hasStages()) { condition.hidden = true; return; }
+    if (!hasStages() || inJourney()) { condition.hidden = true; return; }
     const sea = seaLevelMetres(), temp = Number(tempSlider.value);
     const moved = sea !== 0 || temp !== BASE_MEAN_C;
     condition.hidden = !moved;
@@ -140,12 +153,16 @@ async function main() {
     document.querySelectorAll(sel).forEach((b) => b.classList.toggle("selected", b.dataset[attr] === value));
   }
   function applySurface() {
+    if (inJourney()) surface = "journey";
+    else if (surface === "journey") surface = "standard";
     selectButtons("#surface-mode button", "surface", surface);
     selectButtons("#stage-src button", "src", src);
     selectButtons("#veg-style button", "vegStyle", vegStyle);
     $("veg-style-row").hidden = surface !== "veg";
-    const teacherHere = isEarth() && stages?.atBase();
-    srcRow.hidden = !teacherHere || !inStage() || surface === "bed" || surface === "sea";
+    surfaceRow.hidden = !globe3d?.supportsStages || inJourney();   // the journey has its own panel
+    journeyUI.show(inJourney() && hasStages());
+    const teacherHere = isEarth() && stages?.atBase() && !inJourney();
+    srcRow.hidden = !teacherHere || !inStage() || surface === "bed" || surface === "sea" || surface === "journey";
     if (!teacherHere) src = "model";   // no teacher here or under changed conditions; never draw an empty one
     document.getElementById("cross").hidden = !hasStages();
     if (!hasStages()) { globe3d.setStage(null); info.hidden = true; return; }
@@ -181,15 +198,17 @@ async function main() {
       else $("ak-note").textContent = "標準：地球の衛星画像。";
       return;
     }
-    const L = stages.legend();
+    const L = inJourney() ? journeyUI.legend() : stages.legend();
     $("ak-score").textContent = L.score;
     $("ak-note").textContent = L.note;
     if (L.bar) {
       cls.hidden = true; bar.hidden = !legendOpen;
-      const fmt = (x) => Math.abs(x) >= 100 ? x.toFixed(0) : x.toFixed(Math.abs(x) >= 10 ? 0 : 1);
+      const fmt = (x) => typeof x === "string" ? x : Math.abs(x) >= 100 ? x.toFixed(0) : x.toFixed(Math.abs(x) >= 10 ? 0 : 1);
       drawBar(L.bar.colours, fmt(L.bar.lo), fmt(L.bar.hi), L.bar.unit);
-    } else {
-      bar.hidden = true; cls.hidden = !legendOpen;
+    }
+    if (L.classes) {
+      if (!L.bar) bar.hidden = true;
+      cls.hidden = !legendOpen;
       cls.innerHTML = "";
       for (const [rgb, text, n] of L.classes) {
         const div = document.createElement("div");
@@ -219,7 +238,7 @@ async function main() {
     if (!c) html = "中央: 地球の外";
     else if (!inStage()) {
       html = `${centreText(c.lng, c.lat)}　<span class="k">${surface === "elevation" ? "標高色" : "標準画像"}</span><br><b class="m">地表</b> 標高 ${globe3d.sampleElevation(c.lng, c.lat).toFixed(0)} m　<b class="t">教師</b> なし`;
-    } else html = stages.readout(c.lng, c.lat);
+    } else html = inJourney() ? journeyUI.readout(c.lng, c.lat) : stages.readout(c.lng, c.lat);
     if (html !== lastReadout) { $("ak-readout").innerHTML = html; lastReadout = html; }
   }
 
@@ -329,9 +348,9 @@ async function main() {
     seaLevelLabel.textContent = sea.label;
     seaLevelSlider.min = String(Math.round(sea.downToMetres / sea.downStepMetres));
     seaLevelSlider.max = String(Math.round(sea.upToMetres / sea.upStepMetres));
-    seaLevelSlider.value = "0";
+    seaLevelSlider.value = inJourney() ? String(journeySeaSteps(config)) : "0";
     const enabled = globe3d.supportsStages;
-    surfaceRow.hidden = !enabled;
+    surfaceRow.hidden = !enabled || inJourney();
     tempRow.hidden = !enabled;
     toggleButton.hidden = !enabled;
     virtualNote.hidden = isEarth();
@@ -347,8 +366,10 @@ async function main() {
     applyLineColor();
     applySurface();
     applyMode();
+    if (inJourney()) { journeyUI.worldChanged(); journeyUI.rebuild(); }
     loading.classList.add("hidden");
     window.__akReady = true;
+    if (!appMode) $("mode-chooser").hidden = false;
     window.__akWorldId = entry.id;
   }
   worldSelect.addEventListener("change", () => {
@@ -362,6 +383,11 @@ async function main() {
       applyMode();
       if (!map2d) {
         map2d = initMap2D("map2d", draw2d);
+        map2d.map.on("singleclick", (e) => {
+          if (!inJourney()) return;
+          const [lng, lat] = ol.proj.toLonLat(e.coordinate);
+          journeyUI.onTap(((lng + 540) % 360) - 180, lat);
+        });
         map2d.map.on("moveend", updateReadout);
         map2d.map.on("postrender", updateReadout);
       } else map2d.map.updateSize();
@@ -379,11 +405,58 @@ async function main() {
     updateReadout();
   });
 
+  // ------------------------------------------------ mode: 気候 or グレートジャーニー
+  // The journey's default conditions: a sea near the glacial low (-120 m, in
+  // this body's slider steps) and 8 C -- a fixed background borrowed from
+  // about 20,000 years ago for a comparison, not the conditions of the
+  // dispersal period itself (the panel says so).
+  function journeySeaSteps(config) {
+    const sea = config.display.seaLevel;
+    return Math.max(Math.round(sea.downToMetres / sea.downStepMetres), Math.round(JOURNEY_DEFAULT.seaMetres / sea.downStepMetres));
+  }
+  function setAppMode(next) {
+    $("mode-chooser").hidden = true;
+    if (next === appMode) return;
+    appMode = next;
+    if (!world) return;                       // applied when the first body has loaded
+    if (inJourney()) {
+      seaLevelSlider.value = String(journeySeaSteps(world.config));
+      tempSlider.value = String(JOURNEY_DEFAULT.tempC);
+    } else {
+      seaLevelSlider.value = "0";
+      tempSlider.value = String(BASE_MEAN_C);
+      surface = "standard";
+    }
+    applySeaLevel(); applyTemp();
+    clearTimeout(conditionTimer);
+    if (stages) stages.setConditions(seaLevelMetres(), Number(tempSlider.value) - BASE_MEAN_C);
+    applySurface();
+    if (inJourney() && stages) journeyUI.rebuild();
+  }
+  document.querySelectorAll("#mode-chooser [data-app-mode]").forEach((b) =>
+    b.addEventListener("click", () => setAppMode(b.dataset.appMode)));
+  $("mode-button").addEventListener("click", () => { $("mode-chooser").hidden = false; });
+
+  // Taps choose the journey's start (only while it is waiting for one): a
+  // press that did not move is a tap; a drag rotates the globe as before.
+  let down = null;
+  appEl.addEventListener("pointerdown", (e) => { down = { x: e.clientX, y: e.clientY, t: performance.now() }; });
+  appEl.addEventListener("pointerup", (e) => {
+    if (!down || !inJourney() || !globe3d) return;
+    const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y), quick = performance.now() - down.t < 500;
+    down = null;
+    if (moved > 8 || !quick) return;
+    const p = globe3d.pick(e.clientX, e.clientY);
+    if (p) journeyUI.onTap(p.lng, p.lat);
+  });
+
   // test hook: look at (lng, lat) at a zoom, in whichever view is showing
   window.__ak = {
     look: (lng, lat, zoom) => (mode === "2d" ? map2d.setView({ lng, lat, zoom }) : globe3d.setView({ lng, lat, zoom })),
     view: () => (mode === "2d" ? map2d.getView() : globe3d.getView()),
     mode: () => mode,
+    appMode: (m) => (m ? setAppMode(m) : appMode),
+    journey: journeyUI,
   };
 
   const first = index.worlds.find((e) => e.id === index.default) || index.worlds[0];
