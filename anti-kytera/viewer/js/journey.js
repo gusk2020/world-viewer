@@ -30,8 +30,12 @@ export const JOURNEY_PARAMS = {
   roughnessM: 400,             // speed halves at this relief std (m) within a cell
   settleHabitability: 0.3,     // a cell can be settled at or above this
   hardshipBudgetKm: 700,       // km of fully hostile land a party can cross between habitable cells
-  seaBudgetKm: 120,            // longest open-water hop between land cells (short crossings only)
+  seaBudgetKm: 180,            // longest open-water hop between land cells (short crossings only)
   permanentSeaIce: 0.97,       // sea-ice share of the year at or above which it is walkable all year
+  iceSpeedFactor: 0.3,         // on ice (land ice or permanent sea ice): this share of the base speed,
+                               // below the slowest bare land (0.4); every km of ice spends hardship
+  relabelMarginKm: 1,          // a later path to a reached cell is searched again when it keeps this
+                               // many more km of either budget (no cap on how often)
   settleDelayYears: 150,       // median time from first arrival to settlement
   randomSpread: 0.5,           // sigma of the lognormal factor on each step's travel time
   maxYears: 200000,
@@ -53,7 +57,17 @@ const rowLat = (j, h) => ((j + 0.5) / h - 0.5) * Math.PI;
 // The four step directions stored per cell ([dj, di]); the other four are
 // these taken from the neighbour, backwards.
 const FORWARD = [[0, 1], [1, 1], [1, 0], [1, -1]];
-// All 8 steps out of cell k: { to, len, water, ice, blocked }.
+// The 8 steps as (dj, di), each with where it is stored: forward direction
+// STEP_D, taken from the neighbour when STEP_BACK. Same order as stepsFrom.
+const STEP_DJ = [], STEP_DI = [], STEP_D = [], STEP_BACK = [];
+for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+  if (!dj && !di) continue;
+  let d = FORWARD.findIndex(([a, b]) => a === dj && b === di), back = 0;
+  if (d < 0) { d = FORWARD.findIndex(([a, b]) => a === -dj && b === -di); back = 1; }
+  STEP_DJ.push(dj); STEP_DI.push(di); STEP_D.push(d); STEP_BACK.push(back);
+}
+// All 8 steps out of cell k: { to, len, water, ice, blocked } (ice: km on
+// land ice or permanent sea ice; blocked: only off the grid's edge).
 export function stepsFrom(env, k) {
   const { W, H } = env, N = W * H, j = Math.floor(k / W), i = k - j * W, out = [];
   for (let dj = -1; dj <= 1; dj++) {
@@ -70,7 +84,7 @@ export function stepsFrom(env, k) {
   return out;
 }
 // for the strait checks in tools/journey_report.mjs
-export const neighbourSteps = (env, k) => stepsFrom(env, k).map((s) => [s.to, s.water, s.blocked || (env.land[s.to] && env.ice[s.to])]);
+export const neighbourSteps = (env, k) => stepsFrom(env, k).map((s) => [s.to, s.water, s.blocked]);
 
 // bilinear samplers of metres at (lng, lat): a north-first fine grid, or the
 // stages' south-first bedrock
@@ -154,8 +168,8 @@ export function buildEnvironment({ fields: F, radiusMetres, seaLevel, fine = nul
   }
   // Every step between neighbouring cells, measured along the real line from
   // one cell's standing point to the other's: its length, how much of it is
-  // open water, how much is permanent sea ice, and whether it crosses land
-  // ice. A diagonal step between two land cells that only touch at a corner
+  // open water, and how much is ice (permanent sea ice or land ice, one rule
+  // for both: walked slowly, spending hardship). A diagonal step between two land cells that only touch at a corner
   // now pays for the water at that corner, and a strait narrower than a
   // cell still has to be crossed by water. Stored for 4 directions; the other
   // 4 are the same steps taken backwards.
@@ -177,14 +191,14 @@ export function buildEnvironment({ fields: F, radiusMetres, seaLevel, fine = nul
         continue;
       }
       const n = Math.max(2, Math.ceil(len / SAMPLE_KM));
-      let water = 0, iceKm = 0, blocked = 0;
+      let water = 0, iceKm = 0;
       for (let q = 0; q < n; q++) {
         const f = (q + 0.5) / n, lng = lng0 + (lng1 - lng0) * f, lat = lat0 + (lat1 - lat0) * f;
         const c = cellOf(((lng + 540) % 360) - 180, lat);
         if (zAt(lng, lat) < seaLevel) { if (permIce[c]) iceKm += len / n; else water += len / n; }
-        else if (land[c] && ice[c]) blocked = 1;
+        else if (land[c] && ice[c]) iceKm += len / n;
       }
-      stepWater[d * N + k] = water; stepIce[d * N + k] = iceKm; stepBlocked[d * N + k] = blocked;
+      stepWater[d * N + k] = water; stepIce[d * N + k] = iceKm;
     }
   }
   // km to the nearest sea cell over land (two-pass chamfer, longitude wraps)
@@ -200,7 +214,7 @@ export function buildEnvironment({ fields: F, radiusMetres, seaLevel, fine = nul
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
     const k = j * W + i;
     if (!land[k]) { speed[k] = params.speedKmPerYear * (1 + params.coastSpeedBoost); continue; }
-    if (ice[k]) continue;                                           // land ice: neither habitable nor passable
+    if (ice[k]) { speed[k] = params.speedKmPerYear * params.iceSpeedFactor; continue; }   // land ice: walkable, never habitable
     const veg = VEG_PRODUCTIVITY[F.veg_fit[k]] ?? 0.4;
     const thermal = smooth(-12, 0, T[k]);                           // cold limit without cold adaptation
     const arid = smooth(80, 350, P[k]);                             // water
@@ -308,18 +322,19 @@ export const newSeed = () => (Math.floor(Math.random() * 900000) + 100000);
 // a neighbouring cell takes distance / speed, times a lognormal factor from
 // the seeded generator. Walking resets its hardship and sea budgets in any
 // habitable cell; hostile land spends the hardship budget, open water the
-// sea budget, and permanent sea ice the hardship budget. Land ice is closed.
+// sea budget, and ice (land ice or permanent sea ice) the hardship budget,
+// walked at a fraction of the base speed.
 export function runJourney(env, startCell, seed) {
-  const { W, H, R, land, ice, habit, speed, params } = env;
+  const { W, H, R, land, ice, habit, speed, params, stepLen, stepWater, stepIce, stepBlocked } = env;
   const N = W * H, rnd = makeRandom(seed);
   const Hs = params.settleHabitability, Bh = params.hardshipBudgetKm, Bs = params.seaBudgetKm;
-  const seaSpeed = params.speedKmPerYear * (1 + params.coastSpeedBoost), iceSpeed = params.speedKmPerYear * 0.6;
+  const seaSpeed = params.speedKmPerYear * (1 + params.coastSpeedBoost), iceSpeed = params.speedKmPerYear * params.iceSpeedFactor;
+  const Mk = params.relabelMarginKm;
   const best = new Float64Array(N).fill(NEVER);                  // float64 while searching (float32 rounding would lose pops)
   const arrival = new Float32Array(N).fill(NEVER), settleStart = new Float32Array(N).fill(NEVER);
   const settleEnd = new Float32Array(N).fill(NEVER);          // abandonment: reserved, never set yet
   const parent = new Int32Array(N).fill(-1), done = new Uint8Array(N);
   const procH = new Float32Array(N).fill(-1), procS = new Float32Array(N).fill(-1);
-  const relabels = new Uint8Array(N);
   // binary heap of labels (time, cell, hardship left, sea left)
   let cap = 1 << 16, size = 0;
   let hT = new Float64Array(cap), hC = new Int32Array(cap), hH = new Float32Array(cap), hS = new Float32Array(cap), hP = new Int32Array(cap);
@@ -382,7 +397,7 @@ export function runJourney(env, startCell, seed) {
     let { h, s } = top;
     if (t > params.maxYears) break;
     const first = !done[c] && t <= best[c];
-    if (!first && !(h > procH[c] + 50 || s > procS[c] + 20)) continue;   // stale, and no better budget
+    if (!first && !(h > procH[c] + Mk || s > procS[c] + Mk)) continue;   // stale, and no better budget
     if (first) {
       done[c] = 1; arrival[c] = t; lastT = t;
       if (land[c]) reachedLand++;
@@ -391,23 +406,30 @@ export function runJourney(env, startCell, seed) {
     }
     if (good(c)) { h = Bh; s = Bs; }
     procH[c] = Math.max(procH[c], h); procS[c] = Math.max(procS[c], s);
-    for (const st of stepsFrom(env, c)) {
-      const k = st.to;
-      if (st.blocked || (land[k] && ice[k])) continue;              // land ice is closed
+    const cj = Math.floor(c / W), ci = c - cj * W;
+    for (let q = 0; q < 8; q++) {                                  // the 8 steps, in stepsFrom's order, without allocating
+      const jj = cj + STEP_DJ[q]; if (jj < 0 || jj >= H) continue;
+      const k = jj * W + (ci + STEP_DI[q] + W) % W, e = STEP_D[q] * N + (STEP_BACK[q] ? k : c);
+      if (stepBlocked[e]) continue;
+      const len = stepLen[e], water = stepWater[e], iceKm = stepIce[e];
       // A step is walked on its land part, rowed or waded on its water part
-      // (the sea budget counts water since the last land), and walked on its
-      // permanent-sea-ice part (hardship).
-      const landKm = Math.max(0, st.len - st.water - st.ice);
-      let h2 = h - st.ice, s2 = s - st.water;
-      if (land[k] && !good(k)) h2 -= landKm * (1 - habit[k] / Hs);
+      // (the sea budget counts water since the last land), and walked slowly
+      // on its ice part (land ice or permanent sea ice; hardship).
+      const landKm = Math.max(0, len - water - iceKm);
+      let h2 = h - iceKm, s2 = s - water;
+      if (land[k] && !ice[k] && !good(k)) h2 -= landKm * (1 - habit[k] / Hs);
+      else if (land[k] && ice[k]) h2 -= landKm;                     // bare edge of an ice cell: fully hostile
       if (h2 < 0 || s2 < 0) continue;
       if (land[k]) s2 = Bs;                                         // landed
       const vLand = land[k] ? speed[k] : seaSpeed;
       if (!(vLand > 0)) continue;
-      const base = landKm / vLand + st.water / seaSpeed + st.ice / iceSpeed;
+      const base = landKm / vLand + water / seaSpeed + iceKm / iceSpeed;
       const t2 = t + base * Math.exp(params.randomSpread * rnd.normal() - params.randomSpread ** 2 / 2);
       if (t2 < best[k] && !done[k]) { best[k] = t2; push(t2, k, h2, s2, c); }
-      else if ((h2 > procH[k] + 50 || s2 > procS[k] + 20) && relabels[k] < 10) { relabels[k]++; push(t2, k, h2, s2, c); }
+      // A later label with more budget left can still matter -- except in a
+      // habitable cell, where both budgets refill on arrival, so only the
+      // earliest label there can ever lead anywhere.
+      else if (!good(k) && (h2 > procH[k] + Mk || s2 > procS[k] + Mk)) push(t2, k, h2, s2, c);
     }
   }
   // arrows: area-weighted mean start point and direction per (millennium,
@@ -427,7 +449,6 @@ export function runJourney(env, startCell, seed) {
 
 // The state of one cell at a time t (years from departure).
 export function cellState(journey, env, k, t) {
-  if (env.land[k] && env.ice[k]) return { state: "ice" };
   const a = journey.arrival[k];
   if (!(a <= t)) return { state: "none" };
   const s = journey.settleStart[k];

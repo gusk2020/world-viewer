@@ -133,7 +133,7 @@ export function createStageDraw(ctx) {
     akStage: { value: 0 }, akSrc: { value: 0 }, akRampRow: { value: 0 }, akNRamps: { value: RAMP_ROWS.length },
     akLo: { value: 0 }, akHi: { value: 1 }, akLog: { value: false }, akSeaLevel: { value: 0 }, akVegSimple: { value: false },
     akBedLo: { value: ctx.bedRange[0] }, akBedHi: { value: ctx.bedRange[1] },
-    akJA: { value: T.jArrive }, akJS: { value: T.jSettle }, akJT: { value: 0 }, akJMax: { value: 1 },
+    akJA: { value: T.jArrive }, akJS: { value: T.jSettle }, akJT: { value: 0 }, akJMax: { value: 1 }, akJFill: { value: 0 },
   };
 
   const GLSL = /* glsl */`
@@ -144,6 +144,7 @@ uniform bool akLog, akVegSimple;
 uniform float akBedLo, akBedHi;   // the relief colour range: Earth -8000..6000, each other body its own
 uniform sampler2D akJA, akJS;     // journey: first arrival / settlement year per cell
 uniform float akJT, akJMax;       // journey: the time shown, and the last arrival (colour scale)
+uniform float akJFill;            // journey: 1 = fill the reached range, 0 = arrows only (background alone)
 const float AK_ICE_MIN = ${ICE_MIN_M.toFixed(1)};
 const int AK_ROCK = ${RAMP_ROWS.indexOf("rock")}, AK_SEA = ${RAMP_ROWS.indexOf("sea")}, AK_JOURNEY = ${RAMP_ROWS.indexOf("journey")};
 float akBil(sampler2D t, vec2 ll) {
@@ -207,7 +208,7 @@ vec3 akJourney(vec2 ll, float z, bool sea) {
   vec3 bg = k == 0 ? akSeaIce(akSeaC(z - akSeaLevel), ll) : texelFetch(akPal, ivec2(k, 0), 0).rgb * 255.0;
   if (k != 0) bg = mix(vec3(dot(bg, vec3(0.3, 0.59, 0.11))), bg, 0.45) * 0.92;
   float a = akCell(akJA, ll), s = akCell(akJS, ll);
-  if (a > akJT) return bg;
+  if (akJFill < 0.5 || a > akJT) return bg;
   if (s <= akJT) return mix(bg, akRampC(AK_JOURNEY, a / max(akJMax, 1.0)), sea ? 0.55 : 0.8);
   return mix(bg, vec3(${JOURNEY_PASSED.join(",")}), sea ? 0.35 : 0.6);
 }
@@ -402,6 +403,7 @@ void main() {
     U.akJMax.value = journey ? Math.max(1, journey.endYear) : 1;
   }
   function setJourneyTime(t) { U.akJT.value = t; }
+  function setJourneyFill(on) { U.akJFill.value = on ? 1 : 0; }
 
-  return { createMaterial, createElevationMaterial, renderMercator, apply, refreshFields, setJourney, setJourneyTime };
+  return { createMaterial, createElevationMaterial, renderMercator, apply, refreshFields, setJourney, setJourneyTime, setJourneyFill };
 }

@@ -326,6 +326,20 @@ no longer reached, because the stage cryosphere ices Chukotka/Kamchatka (they
 open at >= 12 C); `CHECK=1` in `tools/journey_report.mjs` runs the strait
 checkpoints.
 
+**Journey arrows + movement (branch `claude/anti-kytera-v2-journey-arrows`,
+Draft PR on top of #24).** Display defaults to 矢印のみ (stage shader uniform
+`akJFill` = 0: background only); 塗り＋矢印 fills the range. Arrows are
+coloured by first-arrival era (`eras()` in journey-view.js: <= 8 round-step
+bins, plasma ramp, dark rim), never dropped or thinned; the 3D mesh is built
+once per journey and time only moves its draw range (`shownCount`). Vertex
+colours go through sRGB->linear so 3D matches 2D/legend. Movement: sea hop
+180 km; land ice and permanent sea ice share one rule (0.3x base speed,
+1 km hardship per km); re-search margin 1 km, no cap (`relabelMarginKm`),
+skipped for habitable targets (budgets refill there). Earth -120 m / 8 C now
+reaches Beringia/Americas via Kamchatka's ice (sea 180 alone stops at the
+Kamchatka ice ~58.8N 150E). `PARAMS='{...}'` overrides constants in
+`tools/journey_report.mjs`.
+
 ## Architecture (Three.js for 3D, OpenLayers for 2D, one page, toggle button)
 
 **Three.js** for the 3D globe, **OpenLayers** for the 2D map, both mounted
