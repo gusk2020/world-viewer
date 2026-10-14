@@ -47,8 +47,21 @@ jobs:
           restore-keys: |
             humidity-teacher-ncep-r1-
 
+      - name: Validate the world input
+        env:
+          INPUT_WORLD: ${{ inputs.world || 'worlds/kasoku-sekai' }}
+        run: |
+          set -euo pipefail
+          # Accept only worlds/<id> (or bare <id>) naming an existing,
+          # non-symlink directory; no "..", no absolute paths, no extra segments.
+          id="${INPUT_WORLD#worlds/}"
+          if [[ ! "$id" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] || [[ ! -d "worlds/$id" ]] || [[ -L "worlds/$id" ]]; then
+            echo "::error::invalid world"; exit 1
+          fi
+          echo "WORLD_DIR=worlds/$id" >> "$GITHUB_ENV"
+
       - name: Build the teacher
-        run: python3 tools/build_humidity_teacher.py --world "${{ inputs.world || 'worlds/kasoku-sekai' }}"
+        run: python3 tools/build_humidity_teacher.py --world "${WORLD_DIR}"
 
       - name: Commit the result
         run: |
@@ -57,7 +70,7 @@ jobs:
           # Glob rather than a list of filenames: the wind teacher's commit
           # step named its files explicitly and then silently stopped
           # committing some of them when the field list grew.
-          git add "${{ inputs.world || 'worlds/kasoku-sekai' }}"/teacher/humidity-*
+          git add "${WORLD_DIR}"/teacher/humidity-*
           if git diff --cached --quiet; then
             echo "no change"
             exit 0
