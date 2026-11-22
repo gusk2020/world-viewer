@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>過速世界 船体設計台帳</title>
+<link rel="stylesheet" href="src/style.css">
+</head>
+<body>
+<header>
+  <h1>過速世界｜恒星間船 居住シリンダー設計台帳 v10</h1>
+  <small>船首＝北↑　日本列島は回転させず南北を船体軸に一致　東西端は円周でつながる</small>
+</header>
+<nav id="views" role="tablist">
+  <button data-view="2d" aria-pressed="true">2D展開図</button>
+  <button data-view="overview" aria-pressed="false">3D全体</button>
+  <button data-view="section" aria-pressed="false">3D断面</button>
+  <button data-view="inside" aria-pressed="false">船内地表</button>
+</nav>
+<main>
+  <div id="panel">
+    <canvas id="map" aria-label="2D展開図"></canvas>
+    <div id="view3d" hidden></div>
+    <div id="labels3d" hidden></div>
+    <div id="tip"><span id="operationHelp"></span></div>
+    <div id="loading3d" hidden>3D準備中…</div>
+  </div>
+  <div class="buttons tight">
+    <button id="fit">全体を表示</button><button id="resetView">船体に合わせる</button><button id="resetAll">採用基準案に戻す</button>
+  </div>
+  <section class="controls" id="layerRow">
+    <div class="row"><strong>操作</strong>
+      <div class="seg"><button id="modeCylinder" aria-pressed="true">シリンダー</button><button id="modeJapan" aria-pressed="false">日本列島</button></div>
+    </div>
+    <small id="modeHint" class="muted"></small>
+  </section>
+  <section class="controls" id="spinRow" hidden>
+    <div class="row"><strong>自転表示</strong>
+      <div class="seg"><button data-spin="0" aria-pressed="false">停止</button><button data-spin="1" aria-pressed="false">実速度</button><button data-spin="20" aria-pressed="true">20倍</button></div>
+    </div>
+    <small id="spinNote" class="muted"></small>
+    <div class="row"><strong>表示</strong>
+      <div class="seg"><button id="q3d" aria-pressed="false">高精細</button><button id="layers3d" aria-pressed="true">区画</button></div>
+    </div>
+  </section>
+  <div id="status" aria-live="polite"></div>
+  <div id="metrics"></div>
+
+  <section class="controls">
+    <div class="row"><label for="preset">船体案（選ぶと即反映）</label><b id="presetState"></b></div>
+    <select id="preset"></select>
+  </section>
+
+  <section class="controls" id="steppers"></section>
+
+  <section class="controls">
+    <div class="row"><strong>表示切替</strong></div>
+    <div class="toggles">
+      <button class="tg" data-toggle="showOkinotori">沖ノ鳥島</button>
+      <button class="tg" data-toggle="showMinamitori">南鳥島</button>
+      <button class="tg" data-view-toggle="borders">県境</button>
+      <button class="tg" data-view-toggle="prefNames">県名</button>
+      <button class="tg" data-view-toggle="cities">都市</button>
+      <button class="tg" data-view-toggle="interference">干渉面</button>
+      <button class="tg" data-view-toggle="symbols">小島記号</button>
+    </div>
+  </section>
+
+  <section class="controls">
+    <div class="row"><strong>南西諸島の重なり補正（東西のみ）</strong></div>
+    <div class="buttons tight"><button id="fixRyukyu">重なりを自動解消</button><button id="clearOffsets">個別補正を消す</button></div>
+    <small id="offsetInfo" class="muted"></small>
+  </section>
+
+  <section class="controls">
+    <div class="row"><strong>保存・読込</strong></div>
+    <input id="saveName" placeholder="保存名（例：採用基準案 改1）" maxlength="60">
+    <div class="buttons tight"><button id="save">名前を付けて保存</button><button id="export">JSON出力</button><button id="exportAll">全案一括出力</button></div>
+    <select id="saved"></select>
+    <div class="buttons tight"><button id="renameSaved">名前変更</button><button id="deleteSaved">削除</button><label class="file">JSON読込<input id="load" type="file" accept="application/json,.json"></label></div>
+    <small id="feedback" class="muted" aria-live="polite"></small>
+  </section>
+
+  <details class="controls" id="prefDetails">
+    <summary>都道府県（49）の面積・県庁 ／ 文化設定の受け皿</summary>
+    <div id="prefTable"></div>
+  </details>
+
+  <details class="controls">
+    <summary>データの出典と精度</summary>
+    <div id="sources" class="muted"></div>
+  </details>
+</main>
+<script src="src/data.js"></script>
+<script src="src/adopted-offsets.js"></script>
+<script src="src/core.js"></script>
+<script src="src/mapdraw.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js" defer></script>
+<script src="src/view3d.js" defer></script>
+<script src="src/app.js" defer></script>
+</body>
+</html>

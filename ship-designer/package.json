@@ -1,0 +1,11 @@
+{
+  "name": "kasoku-ship-designer",
+  "private": true,
+  "description": "過速世界 恒星間船 居住シリンダー設計台帳（静的ファイルのみ・ビルド不要）",
+  "scripts": {
+    "test": "node --test tests/unit/*.test.cjs",
+    "test:e2e": "node tests/e2e/mobile.e2e.cjs",
+    "build:data": "node tools/build_data.mjs",
+    "fit:ryukyu": "node tools/fit_ryukyu.mjs"
+  }
+}
