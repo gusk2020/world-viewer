@@ -8,7 +8,7 @@
 </head>
 <body>
 <header>
-  <h1>過速世界｜恒星間船 居住シリンダー設計台帳 v10</h1>
+  <h1>過速世界｜恒星間船 居住シリンダー設計台帳 v11</h1>
   <small>船首＝北↑　日本列島は回転させず南北を船体軸に一致　東西端は円周でつながる</small>
 </header>
 <nav id="views" role="tablist">
@@ -42,6 +42,17 @@
     <div class="row"><strong>表示</strong>
       <div class="seg"><button id="q3d" aria-pressed="false">高精細</button><button id="layers3d" aria-pressed="true">区画</button></div>
     </div>
+    <div class="row"><strong>3D地形</strong>
+      <div class="seg"><button id="terrain3d" aria-pressed="true">高さあり</button><button id="seeThru3d" aria-pressed="false">透過</button></div>
+    </div>
+    <div id="insideCtl" hidden>
+      <div class="row"><strong>視線</strong>
+        <div class="seg"><button data-look="ahead" aria-pressed="true">前方（船首）</button><button data-look="up" aria-pressed="false">真上（反対側の地面）</button></div>
+      </div>
+      <div class="row"><label for="eyeH">視点の高さ（地表から）</label><b id="eyeHv"></b></div>
+      <div class="stepper"><button data-eye="-1" aria-label="視点を下げる">−</button><input id="eyeH" type="range" min="2" max="2950" step="1" value="150"><button data-eye="1" aria-label="視点を上げる">＋</button></div>
+    </div>
+    <small id="terrainNote" class="muted"></small>
   </section>
   <div id="status" aria-live="polite"></div>
   <div id="metrics"></div>
@@ -54,12 +65,39 @@
   <section class="controls" id="steppers"></section>
 
   <section class="controls">
+    <div class="row"><strong>地理補正：3地域の回転</strong></div>
+    <small class="muted">0°で元の配置。＋は反時計回り（北が西へ傾く）、−は時計回り。島の形と島同士の相対位置は保たれ、本土は回転しません。</small>
+    <div id="stepRot"></div>
+    <small id="rotInfo" class="muted"></small>
+  </section>
+
+  <section class="controls">
+    <div class="row"><strong>伊豆〜小笠原諸島の島列圧縮</strong></div>
+    <small class="muted">伊豆大島〜南硫黄島の島列だけが対象。島の形・東西の広がりは保ち、島列の方向に島と島の間隔だけを同じ倍率で縮めます。</small>
+    <div class="row"><strong>固定する端</strong><div class="seg"><button id="chainOshima" aria-pressed="true">伊豆大島を固定</button><button id="chainMinami" aria-pressed="false">南硫黄島を固定</button></div></div>
+    <div id="stepChain"></div>
+    <small id="chainInfo" class="muted"></small>
+  </section>
+
+  <section class="controls">
+    <div class="row"><strong>地形の高さ（実標高も水平も同じ1/N）</strong></div>
+    <small id="heightIntro" class="muted"></small>
+    <div id="stepHeight"></div>
+    <div class="buttons tight"><button id="resetHeight">高さの変更を元に戻す</button></div>
+    <small id="heightInfo" class="muted"></small>
+  </section>
+
+  <section class="controls">
     <div class="row"><strong>表示切替</strong></div>
     <div class="toggles">
       <button class="tg" data-toggle="showOkinotori">沖ノ鳥島</button>
       <button class="tg" data-toggle="showMinamitori">南鳥島</button>
+      <button class="tg" data-region="izu">伊豆諸島</button>
+      <button class="tg" data-region="ogasawara">小笠原諸島</button>
+      <button class="tg" data-region="ryukyu">琉球諸島</button>
+      <button class="tg" data-region="northern">北方領土</button>
+      <button class="tg" data-region="takeshima">竹島</button>
       <button class="tg" data-view-toggle="borders">県境</button>
-      <button class="tg" data-view-toggle="prefNames">県名</button>
       <button class="tg" data-view-toggle="cities">都市</button>
       <button class="tg" data-view-toggle="interference">干渉面</button>
       <button class="tg" data-view-toggle="overhang">はみ出し</button>
@@ -84,8 +122,14 @@
   </section>
 
   <details class="controls" id="prefDetails">
-    <summary>都道府県（49）の面積・県庁 ／ 文化設定の受け皿</summary>
+    <summary>都道府県（47）の面積・県庁 ／ 文化設定の受け皿（地図上には県名を出しません）</summary>
     <div id="prefTable"></div>
+  </details>
+
+  <details class="controls" id="axisDetails">
+    <summary>中心軸（直径100m）と断面図</summary>
+    <canvas id="section2d" width="260" height="260" aria-label="断面図"></canvas>
+    <div id="axisInfo" class="muted"></div>
   </details>
 
   <details class="controls">
@@ -95,12 +139,14 @@
 </main>
 <div id="ask" hidden role="dialog" aria-modal="true"><div class="askBox"><p id="askMsg"></p><input id="askInput" hidden maxlength="60"><div class="buttons tight"><button id="askCancel">やめる</button><button id="askOk">OK</button></div></div></div>
 <script src="src/data.js"></script>
+<script src="src/dem.js"></script>
+<script src="src/terrain.js"></script>
 <script src="src/adopted-offsets.js"></script>
 <script src="src/fit-candidate.js"></script>
 <script src="src/core.js"></script>
 <script src="src/mapdraw.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" defer></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js" defer></script>
+<script src="vendor/three.min.js" defer></script>
+<script src="vendor/OrbitControls.js" defer></script>
 <script src="src/view3d.js" defer></script>
 <script src="src/app.js" defer></script>
 </body>

@@ -9,7 +9,7 @@
 
   let state = C.presetState(model, "adopted");
   let presetId = "adopted", customFrom = null; // customFrom: preset name the manual edits started from
-  let view = { borders: true, prefNames: true, cities: true, interference: true, symbols: true, overhang: true };
+  let view = { borders: true, cities: true, interference: true, symbols: true, overhang: true };
   let mode = "cylinder", current = "2d";
   let camera = { x: 0, y: 0, s: 1 };
   let lay = null, inter = [], interKey = "", met = null, dirty3d = true;
@@ -68,7 +68,7 @@
     ctx.save(); ctx.beginPath(); ctx.rect(r.x, r.y, r.w, r.h); ctx.clip();
     const showNames = camera.s > 9;
     ShipDraw.paintMap(ctx, lay, inter, T, { low: f.x - f.w / 2, high: f.x + f.w / 2, south: Math.max(y0, f.y - f.h / 2), north: Math.min(y1, f.y + f.h / 2) },
-      { borders: view.borders, prefNames: view.prefNames && camera.s > 5, cities: view.cities, cityNames: view.cities && showNames, interference: view.interference && interKey === stateKey(), symbols: view.symbols, minOverlapPx: 2 });
+      { borders: view.borders, cities: view.cities, cityNames: view.cities && showNames, interference: view.interference && interKey === stateKey(), symbols: view.symbols, minOverlapPx: 2 });
     ctx.setLineDash([3, 4]); ctx.strokeStyle = "#a5d4e155"; ctx.lineWidth = 0.7;
     for (let x = Math.ceil((f.x - f.w / 2) / st) * st; x <= f.x + f.w / 2; x += st) { const u = p2s(x, 0); ctx.beginPath(); ctx.moveTo(u.x, r.y); ctx.lineTo(u.x, r.y + r.h); ctx.stroke(); }
     ctx.setLineDash([]); ctx.restore();
@@ -185,14 +185,26 @@
     { id: "tsushima", label: "対馬を南へ（船体km）", get: () => state.terrain.tsushimaSouthKm, set: (v) => { state.terrain.tsushimaSouthKm = +v.toFixed(2); }, min: 0, max: 25, step: 0.1, fmt: (v) => v.toFixed(1) + " km" },
     { id: "ogasawara", label: "小笠原 追加圧縮（硫黄島固定）", get: () => state.terrain.ogasawaraCompressionPercent, set: (v) => { state.terrain.ogasawaraCompressionPercent = Math.round(v); }, min: 0, max: 100, step: 1, fmt: (v) => v + "%" },
   ];
+  const ROT_KEYS = ["izu", "ryukyu", "northern"];
+  const ROT_STEPPERS = ROT_KEYS.map((k) => ({ id: "rot-" + k, label: C.ROT_LABEL[k], get: () => state.terrain.rotationsDeg[k], set: (v) => { state.terrain.rotationsDeg[k] = v; }, min: -C.ROT_LIMITS[k], max: C.ROT_LIMITS[k], step: 1, fmt: (v) => (v > 0 ? "+" : "") + v + "°" }));
+  const CHAIN_STEPPERS = [{ id: "chainRate", label: "島と島の間隔の圧縮率", get: () => state.terrain.chainCompression.ratePercent, set: (v) => { state.terrain.chainCompression.ratePercent = v; }, min: 0, max: C.CHAIN_MAX_PERCENT, step: 1, fmt: (v) => v + "%（間隔×" + (1 - v / 100).toFixed(2) + "）" }];
+  const HL = (k) => state.terrain.heightLayer[k];
+  const HEIGHT_STEPPERS = [
+    { id: "fujiSummit", label: "富士山の頂の高さ（実世界の標高）", get: () => HL("fujiSummitM"), set: (v) => { state.terrain.heightLayer.fujiSummitM = v; }, min: 0, max: 6000, step: 10, fmt: (v) => `${v} m → 船内 ${(v / state.terrain.japanScaleDenominator).toFixed(1)} m` },
+    { id: "fujiRot", label: "富士山の裾野の向き", get: () => HL("fujiRotDeg"), set: (v) => { state.terrain.heightLayer.fujiRotDeg = v; }, min: -180, max: 180, step: 5, fmt: (v) => v + "°" },
+    { id: "ridgeSw", label: "山脈（本州・南西側）の盛り上げ", get: () => Math.round(HL("ridgeSwScale") * 100), set: (v) => { state.terrain.heightLayer.ridgeSwScale = v / 100; }, min: 0, max: 200, step: 5, fmt: (v) => v + "%" },
+    { id: "ridgeNe", label: "山脈（本州・北東側）の盛り上げ", get: () => Math.round(HL("ridgeNeScale") * 100), set: (v) => { state.terrain.heightLayer.ridgeNeScale = v / 100; }, min: 0, max: 200, step: 5, fmt: (v) => v + "%" },
+  ];
+  const ALL_STEPPERS = [...STEPPERS, ...ROT_STEPPERS, ...CHAIN_STEPPERS, ...HEIGHT_STEPPERS];
+  const stepperHtml = (list) => list.map((s) => `<div class="row"><label for="st-${s.id}">${s.label}</label><b id="st-${s.id}-v"></b></div><div class="stepper"><button data-st="${s.id}" data-d="-1" aria-label="${s.label}を減らす">−</button><input id="st-${s.id}" type="range" min="${s.min}" max="${s.max}" step="${s.step}"><button data-st="${s.id}" data-d="1" aria-label="${s.label}を増やす">＋</button></div>`).join("");
   function buildSteppers() {
-    $("steppers").innerHTML = STEPPERS.map((s) => `<div class="row"><label for="st-${s.id}">${s.label}</label><b id="st-${s.id}-v"></b></div><div class="stepper"><button data-st="${s.id}" data-d="-1" aria-label="${s.label}を減らす">−</button><input id="st-${s.id}" type="range" min="${s.min}" max="${s.max}" step="${s.step}"><button data-st="${s.id}" data-d="1" aria-label="${s.label}を増やす">＋</button></div>`).join("");
-    for (const s of STEPPERS) {
+    $("steppers").innerHTML = stepperHtml(STEPPERS); $("stepRot").innerHTML = stepperHtml(ROT_STEPPERS); $("stepChain").innerHTML = stepperHtml(CHAIN_STEPPERS); $("stepHeight").innerHTML = stepperHtml(HEIGHT_STEPPERS);
+    for (const s of ALL_STEPPERS) {
       $("st-" + s.id).addEventListener("input", (e) => apply(s, +e.target.value, true));
       $("st-" + s.id).addEventListener("change", () => changed());
     }
     for (const b of document.querySelectorAll("button[data-st]")) {
-      const s = STEPPERS.find((x) => x.id === b.dataset.st), d = +b.dataset.d; let timer = null, rep = 0;
+      const s = ALL_STEPPERS.find((x) => x.id === b.dataset.st), d = +b.dataset.d; let timer = null, rep = 0;
       const once = () => { rep++; const mult = rep > 25 ? 10 : 1; apply(s, s.get() + d * s.step * mult, true); };
       const stop = () => { if (timer !== null) { clearTimeout(timer); clearInterval(timer); timer = null; changed(); } rep = 0; };
       b.addEventListener("pointerdown", (e) => { e.preventDefault(); stop(); once(); timer = setTimeout(() => { timer = setInterval(once, 80); }, 380); try { b.setPointerCapture(e.pointerId); } catch (_) {} });
@@ -201,15 +213,53 @@
     }
   }
   function apply(s, v, fast) { const q = Math.round(clamp(v, s.min, s.max) / s.step) * s.step; s.set(+q.toFixed(6)); syncSteppers(); changed({ fast, custom: true }); }
-  function syncSteppers() { for (const s of STEPPERS) { $("st-" + s.id).value = s.get(); $(`st-${s.id}-v`).textContent = s.fmt(s.get()); } syncToggles(); }
+  function syncSteppers() { for (const s of ALL_STEPPERS) { $("st-" + s.id).value = s.get(); $(`st-${s.id}-v`).textContent = s.fmt(s.get()); } syncToggles(); syncGeoInfo(); }
 
   // ------------------------------------------------------------ toggles, presets, modes
   function syncToggles() {
+    for (const b of document.querySelectorAll("[data-region]")) b.setAttribute("aria-pressed", String(!state.terrain.hiddenRegions.includes(b.dataset.region)));
+    $("chainOshima").setAttribute("aria-pressed", String(state.terrain.chainCompression.mode === "oshima")); $("chainMinami").setAttribute("aria-pressed", String(state.terrain.chainCompression.mode === "minamiiwo"));
     for (const b of document.querySelectorAll("[data-toggle]")) b.setAttribute("aria-pressed", String(!!state.terrain[b.dataset.toggle]));
     for (const b of document.querySelectorAll("[data-view-toggle]")) b.setAttribute("aria-pressed", String(!!view[b.dataset.viewToggle]));
   }
   for (const b of document.querySelectorAll("[data-toggle]")) b.addEventListener("click", () => { state.terrain[b.dataset.toggle] = !state.terrain[b.dataset.toggle]; syncToggles(); changed({ custom: true }); });
   for (const b of document.querySelectorAll("[data-view-toggle]")) b.addEventListener("click", () => { view[b.dataset.viewToggle] = !view[b.dataset.viewToggle]; syncToggles(); dirty3d = true; render(); listeners.forEach((f) => f()); });
+  for (const b of document.querySelectorAll("[data-region]")) b.addEventListener("click", () => { const h = state.terrain.hiddenRegions, r = b.dataset.region, i = h.indexOf(r); if (i >= 0) h.splice(i, 1); else h.push(r); syncToggles(); changed({ custom: true }); });
+  $("chainOshima").onclick = () => { state.terrain.chainCompression.mode = "oshima"; syncSteppers(); changed({ custom: true }); };
+  $("chainMinami").onclick = () => { state.terrain.chainCompression.mode = "minamiiwo"; syncSteppers(); changed({ custom: true }); };
+  $("resetHeight").onclick = () => { state.terrain.heightLayer = Object.assign({}, ShipTerrain.DEFAULT_LAYER); syncSteppers(); changed({ custom: true }); $("feedback").textContent = "高さの変更を元に戻しました（元の標高データは変更していません）。"; };
+  // 地理補正・地形の説明（現在値を平易に表示）
+  function syncGeoInfo() {
+    if (!lay) return; const t = state.terrain, nm = (id) => model.byId.get(id).name || id, d = t.japanScaleDenominator;
+    $("rotInfo").innerHTML = ROT_KEYS.map((k) => { const r = model.rot[k]; return `${C.ROT_LABEL[k]}：支点＝${r.pivotName}、${t.rotationsDeg[k]}°、対象 ${r.ids.size}島` + (k === "izu" ? "（東京都本土は回転しない）" : k === "ryukyu" ? "（九州本土・種子島・屋久島は回転しない）" : "（北海道本島は回転しない）"); }).join("<br>");
+    const cc = t.chainCompression, fixed = cc.mode === "oshima" ? model.chain.first : model.chain.last;
+    $("chainInfo").textContent = `対象：${nm(model.chain.first)}〜${nm(model.chain.last)}の島列 ${model.chain.ids.length}島。固定端＝${nm(fixed)}、${cc.mode === "oshima" ? "南の島が伊豆大島へ近づく" : "北の島が南硫黄島へ近づく"}、圧縮率 ${cc.ratePercent}%。適用順：回転 → 従来の琉球・小笠原間隔／硫黄島基準追加圧縮 → 本圧縮（旧い保存データは0%＝二重圧縮なし）。`;
+    const chk = ShipTerrain.checkFuji(model, t.heightLayer);
+    $("heightIntro").textContent = `水平距離も標高も実世界の 1/${d}。富士山 3776m は初期状態で ${(3776 / d).toFixed(1)}m。元の標高データ（GEBCO由来）は変更せず、ここでの変更は別の「地形変更レイヤー」として保存します。山脈高さの独立した縮尺はありません。`;
+    $("heightInfo").textContent = `富士山の頂：船内 ${(t.heightLayer.fujiSummitM / d).toFixed(1)}m。裾野の範囲は本州内${chk.ok ? "に収まっています" : "に収まっていません（酷道の制約：面積1.2倍の外形が海岸から1km以上内側）"}（海岸まで最小 ${chk.minClearanceKm.toFixed(1)}km）。山脈は酷道と同じ自動提案線（本州の長軸に沿う2本）。`;
+    const r = C.AXIS_DIAMETER_M / 2; $("axisInfo").textContent = `中心軸：直径 ${C.AXIS_DIAMETER_M}m（半径 ${r}m）・非回転・軸上照明を搭載する想定。居住内面は半径 ${state.ship.innerDiameterKm / 2}km（内径 ${state.ship.innerDiameterKm}km）で、3Gの周速・角速度は居住内面の半径で計算します。`;
+    drawSection();
+  }
+  function drawSection() {
+    const c = $("section2d"), g = c.getContext("2d"), W = c.width, cx = W / 2, R = W * 0.4, k = R / (state.ship.innerDiameterKm / 2), ra = (C.AXIS_DIAMETER_M / 2000) * k;
+    g.clearRect(0, 0, W, W); g.fillStyle = "#0b2435"; g.fillRect(0, 0, W, W);
+    g.strokeStyle = "#7fd3e6"; g.lineWidth = 2; g.beginPath(); g.arc(cx, cx, R, 0, 7); g.stroke();
+    g.fillStyle = "#fff6c8"; g.beginPath(); g.arc(cx, cx, Math.max(ra, 1.5), 0, 7); g.fill(); // 中心軸：同じ縮尺で描く（実寸なので小さい）
+    g.fillStyle = "#cfe8ee"; g.font = "11px system-ui"; g.textAlign = "center";
+    g.fillText(`居住内面 半径${state.ship.innerDiameterKm / 2}km（内径${state.ship.innerDiameterKm}km）`, cx, cx - R - 8); g.fillText(`中心軸 直径${C.AXIS_DIAMETER_M}m（同縮尺）`, cx, cx + 20);
+    g.strokeStyle = "#fff6c8"; g.beginPath(); g.moveTo(cx, cx + 4); g.lineTo(cx, cx + 10); g.stroke();
+  }
+  // 3D用：標高グリッドは「他の島」を1回、本州は地形変更レイヤーごとに作る
+  let demPack = null, gridCache = { others: null, honshu: null, key: "" };
+  function terrainPack() {
+    if (!demPack) demPack = ShipTerrain.decodeDem(window.SHIP_DEM);
+    const layer = ShipTerrain.normalizeLayer(state.terrain.heightLayer), key = JSON.stringify(layer);
+    if (!gridCache.others) gridCache.others = ShipTerrain.buildGrids(model, demPack, layer, (i) => i.id !== "honshu").grids;
+    if (gridCache.key !== key) { gridCache.honshu = ShipTerrain.buildGrids(model, demPack, layer, (i) => i.id === "honshu"); gridCache.key = key; }
+    const grids = new Map(gridCache.others); for (const [k, v] of gridCache.honshu.grids) grids.set(k, v);
+    return { grids, layer };
+  }
+  function heightSampler() { const p = terrainPack(); return ShipTerrain.makeShipSampler(C, lay, p.grids, model, p.layer); }
   const psel = $("preset");
   psel.appendChild(new Option("カスタム案（手動調整中）", "custom"));
   for (const p of C.presetList()) psel.appendChild(new Option(p.name, p.id));
@@ -300,7 +350,7 @@
   }
   $("prefDetails").addEventListener("toggle", prefTable);
   $("sources").innerHTML = SHIP_GEO.sources.map((s) => `<div>・${s.use}：${s.name}（${s.license}）</div>`).join("") +
-    `<div>・府県境：${SHIP_GEO.prefectureBorders.method}。実在の県境ではなく酷道世界の49府県。</div><div>・小島${model.islands.filter((s) => s.source === "schematic").length}島は位置のみの模式形（実形状データなし）。沖ノ鳥島も模式形。</div><div>・データ版：${SHIP_GEO.schema} v${SHIP_GEO.version}（${SHIP_GEO.builtAt}）</div>`;
+    `<div>・府県境：${SHIP_GEO.prefectureBorders.method}。実在の県境ではなく酷道世界の府県（北海道は3県を1つに再統合した47都道府県）。北方領土・竹島の輪郭はNatural Earthの日本側視点データで、領有判断を意味しない。</div><div>・小島${model.islands.filter((s) => s.source === "schematic").length}島は位置のみの模式形（実形状データなし）。沖ノ鳥島も模式形。</div><div>・データ版：${SHIP_GEO.schema} v${SHIP_GEO.version}（${SHIP_GEO.builtAt}）</div>`;
 
   // ------------------------------------------------------------ view switching (2D / 3D)
   function setCurrent(v) {
@@ -318,7 +368,7 @@
   // public surface for the 3D view and for tests
   window.ShipApp = {
     model, get state() { return state; }, get layout() { return lay; }, get interference() { return inter; }, get metrics() { return met; }, get view() { return view; },
-    get dirty3d() { return dirty3d; }, clean3d() { dirty3d = false; }, onChange(f) { listeners.push(f); },
+    heightSampler, terrainPack, get dirty3d() { return dirty3d; }, clean3d() { dirty3d = false; }, onChange(f) { listeners.push(f); },
     setState(s) { loadDesign(s, "テスト"); }, applyPreset, setCurrent, get presetId() { return presetId; }, get camera() { return camera; }, get mode() { return mode; },
     frameRect: () => frameRect(), flush() { recompute(true); draw(); },
   };

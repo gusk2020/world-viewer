@@ -1,7 +1,8 @@
-// Builds ship-designer/data/ship-geo.json and src/data.js.
+// Builds ship-designer/data/ship-geo.json, src/data.js and src/dem.js (v11).
 // Usage: node tools/build_data.mjs <ne_10m_admin_0_countries.geojson> <ne_10m_populated_places_simple.geojson> <kudo japan.json> <kudo japan-dem.bin>
 // Sources (see docs/DATA.md):
-//   Natural Earth 1:10m admin_0 countries (public domain) — coastlines of every Japanese island it contains
+//   Natural Earth 1:10m admin_0 countries, JAPAN-perspective file (ne_10m_admin_0_countries_jpn, public domain) — coastlines of every island,
+//   including 北方領土4島 and 竹島. (Which country a polygon belongs to is NOT decided here; see docs/DATA.md.)
 //   kudo-fudo-miseisen src/data/japan.json — the 49 prefecture definitions (ids, names, capitals, weights) and city list
 //   kudo-fudo-miseisen public/japan-dem.bin — GEBCO_2026 crop used as slope cost for the prefecture borders
 //   Natural Earth populated places (public domain) — real coordinates of capitals and cities
@@ -62,7 +63,7 @@ const NAMES = [
   ["沖縄・伊江島", 127.79, 26.72], ["伊平屋島", 127.97, 27.06], ["与論島", 128.42, 27.04], ["渡嘉敷島", 127.36, 26.19], ["粟国島", 127.23, 26.59], ["多良間島", 124.7, 24.66], ["鳥島（伊豆諸島）", 140.31, 30.48],
   ["南鳥島", 153.97, 24.29], ["南硫黄島", 141.46, 24.22], ["北硫黄島", 141.29, 25.43], ["青ヶ島", 139.76, 32.45], ["聟島", 142.14, 27.72], ["西之島", 140.87, 27.24], ["媒島", 142.19, 27.61], ["須美寿島", 140.04, 31.44],
   ["御蔵島", 139.6, 33.88], ["神津島", 139.14, 34.21], ["諏訪之瀬島", 129.73, 29.64], ["悪石島", 129.6, 29.46], ["魚釣島", 123.53, 25.77], ["宝島", 129.2, 29.14], ["小宝島", 129.33, 29.22], ["口之島", 129.93, 29.96],
-  ["渡島大島", 139.36, 41.51], ["焼尻・天売", 141.3, 44.4], ["隠岐・島後", 133.31, 36.24],
+  ["渡島大島", 139.36, 41.51], ["択捉島", 147.75, 45.03], ["国後島", 145.94, 44.13], ["色丹島", 146.78, 43.79], ["志発島（歯舞群島）", 146.16, 43.51], ["竹島", 131.86, 37.24], ["焼尻・天売", 141.3, 44.4], ["隠岐・島後", 133.31, 36.24],
 ];
 const islands = [];
 const usedNames = new Set();
@@ -104,21 +105,37 @@ for (const [name, lon, lat] of CATALOG) {
   const [x, y] = toKm([136.08, 20.42]); const ring = []; for (let k = 0; k < 10; k++) { const a = (k * 2 * Math.PI) / 10; ring.push([x + 0.5 * Math.cos(a), y + 0.35 * Math.sin(a)]); }
   islands.push({ id: "okinotori", name: "沖ノ鳥島", source: "schematic", areaKmReal: ringArea(ring), ring, c: [x, y] });
 }
+// 歯舞群島: Natural Earth (10m) carries only one polygon (志発島). The other members are added as separate schematic islets
+// at approximate positions (flagged position:"approximate") so the group is never collapsed into a single island.
+for (const [name, lon, lat] of [["水晶島（歯舞群島）", 146.0, 43.43], ["勇留島（歯舞群島）", 146.09, 43.46], ["秋勇留島（歯舞群島）", 146.13, 43.45], ["多楽島（歯舞群島）", 146.35, 43.55]]) {
+  const [x, y] = toKm([lon, lat]); let ring = null;
+  for (let rad = 0.9; rad >= 0.15 && !ring; rad /= 1.6) { const r = []; for (let k = 0; k < 10; k++) { const a = (k * 2 * Math.PI) / 10; r.push([x + rad * Math.cos(a), y + rad * 0.8 * Math.sin(a)]); } if (!islands.some((t) => r.some((q) => pointInRing(q[0], q[1], t.ring)) || t.ring.some((q) => pointInRing(q[0], q[1], r)))) ring = r; }
+  if (ring) islands.push({ id: "habomai_" + Math.round(lon * 100), name, source: "schematic", position: "approximate", areaKmReal: ringArea(ring), ring, c: [x, y] });
+}
 { const seen = new Map(); for (const s of islands) { const n = seen.get(s.id) || 0; seen.set(s.id, n + 1); if (n) s.id += "_" + (n + 1); } }
 const mt = islands.find((s) => s.name === "南鳥島"); if (mt) mt.id = "minamitori";
 const iwo = islands.find((s) => s.name === "硫黄島"); if (iwo) iwo.id = "iwo";
+for (const [nm, id] of [["伊豆大島", "izuoshima"], ["屋久島", "yakushima"], ["南硫黄島", "minamiiwo"], ["択捉島", "etorofu"], ["国後島", "kunashiri"], ["色丹島", "shikotan"], ["志発島（歯舞群島）", "shibotsu"], ["竹島", "takeshima"]]) { const t = islands.find((q) => q.name === nm); if (t) t.id = id; else throw new Error("missing island " + nm); }
 
 // Groups decide which adjustments an island takes. Pure coordinate rules — no per-island hand placement.
 for (const s of islands) {
   const [lon, lat] = toGeo(s.c);
-  if (s.id === "okinotori" || s.id === "minamitori") s.group = "bird";
+  if (s.id === "okinotori" || s.id === "minamitori" || lon > 150) s.group = "bird"; // 南鳥島は Natural Earth で2ポリゴン（lon>150 はどちらも鳥島群）
   else if (lon >= 139.9 && lat < 30.0) s.group = "oga";
   else if (lon > 138.9 && lon < 140.5 && lat >= 30.0 && lat < 34.9) s.group = "izu";
   else if (lat < 31.0 && lon < 132) s.group = "ryu";
   else if (lon > 129.1 && lon < 129.6 && lat > 34.0 && lat < 34.8) s.group = "tsushima";
+  else if (lon > 145.8 && lon < 149.5 && lat > 43.0 && lat < 46.0) s.group = "north";
+  else if (lon > 131.5 && lon < 132.2 && lat > 37.0 && lat < 37.5) s.group = "take";
   else s.group = "main";
 }
 
+// Display / rotation regions (separate from the legacy `group`, which only drives the v9/v10 spacing rules).
+for (const s of islands) {
+  s.region = { ryu: "ryukyu", oga: "ogasawara", izu: "izu", bird: s.id === "okinotori" ? "okinotori" : "minamitori", north: "northern", take: "takeshima" }[s.group] || "main";
+  if (!s.name && s.region === "minamitori") s.name = "南鳥島（付属ポリゴン）"; // Natural Earth は南鳥島を2ポリゴンで収録
+  if (s.name === "孀婦岩") s.region = "izu"; // 孀婦岩 is part of the Izu chain (Tokyo), though its longitude puts it in the legacy "oga" spacing group
+}
 // ---------------------------------------------------------------- prefectures (kudo-fudo-miseisen definitions)
 const K = JSON.parse(fs.readFileSync(kudoJson, "utf8"));
 const kudoToGeo = (p) => [p[0] / K.proj.kmPerDegLon + K.proj.lon0, p[1] / K.proj.kmPerDegLat + K.proj.lat0];
@@ -133,14 +150,23 @@ const capitalGeo = (name, fallback) => {
   if (p) return { geo: [p.longitude, p.latitude], how: "naturalearth" };
   return { geo: fallback, how: "kudo" };
 };
-const prefectures = K.prefectures.map((p) => {
+const legacyPrefectures = K.prefectures.map((p) => ({ id: p.id, name: p.name, capital: p.capital, island: p.island, weight: p.weight, capitalGeo: capitalGeo(p.capital, kudoToGeo(p.seed)).geo.map(r4) }));
+const HK_LEGACY = ["HK-SAP", "HK-HAK", "HK-NEM"];
+// 変換規則 (docs/PREFECTURE_CONVERSION.md): 酷道の49府県 → 船内の47都道府県。元の49件は legacyPrefectures にそのまま残す。
+const prefectures = [];
+for (const p of K.prefectures) {
+  if (HK_LEGACY.includes(p.id)) continue;
   const cap = capitalGeo(p.capital, kudoToGeo(p.seed));
-  return { id: p.id, name: p.name, capital: p.capital, island: p.island, weight: p.weight, capitalGeo: cap.geo.map(r4), capitalSource: cap.how };
-});
+  prefectures.push({ id: p.id, name: p.id === "JP-13" ? "東京都" : p.name, legacyName: p.id === "JP-13" ? p.name : undefined, capital: p.capital, island: p.island, weight: p.weight, capitalGeo: cap.geo.map(r4), capitalSource: cap.how });
+}
+const hkW = K.prefectures.filter((p) => HK_LEGACY.includes(p.id)).reduce((a, p) => a + p.weight, 0);
+prefectures.push({ id: "JP-01", name: "北海道", capital: "札幌市", island: "hokkaido", weight: hkW, capitalGeo: MANUAL["札幌市"].map(r4), capitalSource: "manual", mergedFrom: HK_LEGACY });
+const meanW = legacyPrefectures.reduce((a, p) => a + p.weight, 0) / legacyPrefectures.length; // 49件基準の平均を維持 → 他県の境界は v10 と同一
 
 // Weighted Dijkstra over a 2.5 km grid — kudo-fudo-miseisen's algorithm (src/core/terrain.ts), reduced to what
 // exists on an undeformed map: slope cost from GEBCO and the per-prefecture weight. No rivers or user ridges.
-const dem = new Int16Array(fs.readFileSync(kudoDem).buffer.slice(0));
+const demBuf = fs.readFileSync(kudoDem); const dem = new Int16Array(demBuf.buffer.slice(demBuf.byteOffset, demBuf.byteOffset + demBuf.byteLength));
+fs.writeFileSync(path.join(ROOT, "src/dem.js"), "// Generated by tools/build_data.mjs — GEBCO_2026 crop (kudo-fudo-miseisen japan-dem.bin), Int16 metres, row-major, base64.\nwindow.SHIP_DEM = " + JSON.stringify({ ...K.dem, b64: demBuf.toString("base64") }) + ";\n");
 const D = K.dem;
 function demAt(lon, lat) {
   const fx = (lon - D.lon0) / D.dLon, fy = (D.lat0 - lat) / D.dLat;
@@ -176,7 +202,6 @@ for (let k = 0; k < N; k++) if (isl[k]) {
   cost[k] = 1 + 25 * Math.hypot(ex, ey);
 }
 const pref = new Uint8Array(N), dist = new Float64Array(N).fill(Infinity);
-const meanW = prefectures.reduce((a, p) => a + p.weight, 0) / prefectures.length;
 const mult = prefectures.map((p) => Math.pow(meanW / p.weight, 0.7));
 // binary heap
 const hk = [], hv = [];
@@ -244,6 +269,8 @@ for (const s of islands) {
   if (mi >= 0) { s.pref = null; continue; } // split between several prefectures, see raster
   const [lon, lat] = toGeo(s.c);
   if (s.group === "izu" || s.group === "oga" || s.group === "bird") s.pref = "JP-13";
+  else if (s.group === "north") s.pref = "JP-01";
+  else if (s.group === "take") s.pref = "JP-32";
   else if (s.group === "ryu") s.pref = (lat > 26.95 && lon > 128.3) || lat > 28.0 ? "JP-46" : "JP-47";
   else if (s.group === "tsushima" || (lon < 130.0 && lat > 32.5 && lat < 34.0 && (s.name || "").match(/壱岐|福江|中通|奈留|若松|宇久/))) s.pref = "JP-42";
   else if (s.name === "淡路島") s.pref = "JP-28";
@@ -266,6 +293,7 @@ prefectures.forEach((p, n) => {
 const CITY_JA = { Kawasaki: "川崎市", Kawagoe: "川越市", Hachioji: "八王子市", Kitakyushu: "北九州市", Hamamatsu: "浜松市", Iwaki: "いわき市", Asahikawa: "旭川市", Koriyama: "郡山市", Shimonoseki: "下関市", Hachinohe: "八戸市", Sasebo: "佐世保市", Matsumoto: "松本市", Kushiro: "釧路市", Kure: "呉市", Nagaoka: "長岡市", Hirosaki: "弘前市", Tomakomai: "苫小牧市", Obihiro: "帯広市", Takaoka: "高岡市", Muroran: "室蘭市", Otaru: "小樽市", Kitami: "北見市" };
 const cities = [];
 for (const p of prefectures) cities.push({ id: "city.cap." + p.id, name: p.capital, kind: "capital", pref: p.id, geo: p.capitalGeo, source: p.capitalSource });
+for (const lp of legacyPrefectures.filter((q) => HK_LEGACY.includes(q.id))) if (lp.capital !== "札幌市") cities.push({ id: "city.legacycap." + lp.id, name: lp.capital, kind: "city", pref: "JP-01", geo: lp.capitalGeo, source: "manual", legacyCapitalOf: lp.id });
 for (const pl of P) {
   const ja = CITY_JA[pl.nameascii]; if (!ja) continue;
   cities.push({ id: "city.ne." + pl.ne_id, name: ja, kind: "city", pref: null, geo: [r4(pl.longitude), r4(pl.latitude)], source: "naturalearth", pop: pl.pop_max });
@@ -289,10 +317,13 @@ const out = {
   sources: [
     { name: "Natural Earth 1:10m admin_0 countries (JPN)", license: "Public domain", url: "https://www.naturalearthdata.com/", use: "全島の海岸線" },
     { name: "Natural Earth 1:10m populated places", license: "Public domain", url: "https://www.naturalearthdata.com/", use: "都市・県庁所在地の座標" },
+    { name: "Natural Earth 1:10m admin_0 countries, Japan-perspective (JPN)", license: "Public domain", url: "https://www.naturalearthdata.com/", use: "北方領土・竹島を含む島の輪郭（領有の判断を意味しない）" },
     { name: "kudo-fudo-miseisen src/data/japan.json (commit 69221ca)", license: "利用者自身のリポジトリ", url: "https://github.com/gusk2020/kudo-fudo-miseisen", use: "49府県の定義（ID・名称・県庁・重み）・都市リスト" },
     { name: "GEBCO_2026 (kudo-fudo-miseisen public/japan-dem.bin)", license: "GEBCO terms, attribution: GEBCO Compilation Group", url: "https://www.gebco.net/", use: "府県境生成の傾斜コスト" },
   ],
-  islands: islands.map((s) => ({ id: s.id, name: s.name, group: s.group, source: s.source, pref: s.pref, ring: s.ring.map(toGeo) })),
+  islands: islands.map((s) => ({ id: s.id, name: s.name, group: s.group, region: s.region, source: s.source, position: s.position, pref: s.pref, ring: s.ring.map(toGeo) })),
+  legacyPrefectures,
+  conversion: ["酷道の49府県を元データとして legacyPrefectures に全件保持（削除・改変なし）", "北海道3県（札幌・函館・根室）を JP-01「北海道」1件に再統合。県庁は札幌市。重みは3県の合計。内部境界は生成しない（海岸線・都市・標高は無変更）", "函館市・根室市は県庁ではなく通常の都市として残す（legacyCapitalOf で元の県を記録）", "JP-13 の名称を「東京府」から「東京都」へ戻す（IDは JP-13 のまま、旧名は legacyName）", "他の45府県は酷道と同じ重み・同じ平均重み(49件基準)で境界を再生成。v10 と同一の境界になる", "北方領土4島は JP-01、竹島は JP-32 に行政区分上は紐付けるが、これは日本側の行政区分データであり、実世界の国際的立場を設定上の結論として確定するものではない"],
   prefectures,
   prefectureBorders: { method: "kudo-fudo-miseisen 方式の重み付き Dijkstra（2.5km格子、傾斜コストのみ、変形なし）", cellKm: CELL, lines: borders },
   cities,

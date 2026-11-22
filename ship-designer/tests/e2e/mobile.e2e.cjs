@@ -1,4 +1,4 @@
-// Pixel 7 emulation (Android Chrome equivalent). Run: THREE_DIR=<folder with three@0.128.0 "package"> node tests/e2e/mobile.e2e.cjs
+// Pixel 7 emulation (Android Chrome equivalent). Run: node tests/e2e/mobile.e2e.cjs   (BASE_URL=https://… で公開URLに対して実行)
 const assert = require("node:assert/strict");
 const fs = require("fs"), os = require("os"), path = require("path");
 const { open } = require("./harness.cjs");
@@ -95,7 +95,7 @@ async function pinch(cdp, c, d0, d1, steps = 8) {
     await page.selectOption("#saved", "0"); await page.click("#renameSaved"); await okAsk("改名テスト"); await page.waitForTimeout(100);
     await page.reload(); await page.waitForFunction(() => window.ShipApp && ShipApp.metrics);
     const saves = await page.evaluate(() => JSON.parse(localStorage.getItem("kasoku-ship-designer-v10-saves")));
-    assert.equal(saves[0].name, "改名テスト"); assert.equal(saves[0].ship.centerXKm, -7.726051000488052); assert.equal(saves[0].schemaVersion, 10);
+    assert.equal(saves[0].name, "改名テスト"); assert.equal(saves[0].ship.centerXKm, -7.726051000488052); assert.equal(saves[0].schemaVersion, 11);
   });
 
   await step("JSON出力の内容が画面の値と一致", async () => {
@@ -149,10 +149,109 @@ async function pinch(cdp, c, d0, d1, steps = 8) {
     await page.click('[data-toggle="showOkinotori"]'); assert.equal((await S(page)).terrain.showMinamitori, true); await page.click('[data-toggle="showOkinotori"]');
     await page.selectOption("#preset", "adopted"); assert.deepEqual((await S(page)).ship, a.ship); // 元に戻せる
   });
+  await step("v11 メニュー：県名の表示切替が無い／県境・都市の切替は残る／47都道府県の表", async () => {
+    assert.equal(await page.locator('[data-view-toggle="prefNames"]').count(), 0);
+    assert.ok(!(await page.textContent("main")).includes("県名")  || /県名を出しません/.test(await page.textContent("#prefDetails summary")));
+    assert.equal(await page.locator('[data-view-toggle="borders"]').count(), 1); assert.equal(await page.locator('[data-view-toggle="cities"]').count(), 1);
+    await page.evaluate(() => { document.getElementById("prefDetails").open = true; });
+    assert.equal(await page.locator("#prefTable tr").count(), 48); assert.match(await page.textContent("#prefTable"), /東京都/); assert.ok(!/東京府/.test(await page.textContent("#prefTable"))); assert.match(await page.textContent("#prefTable"), /北海道/);
+    assert.ok(!/札幌県|函館県|根室県/.test(await page.textContent("#prefTable")));
+  });
+  await step("3地域の回転スライダー：独立・正負・±1・長押し・0で復帰・本土は不動", async () => {
+    await page.selectOption("#preset", "adopted");
+    const hon0 = await page.evaluate(() => JSON.stringify(ShipApp.layout.islands.find((i) => i.id === "honshu").ring));
+    const rot = () => page.evaluate(() => ({ ...ShipApp.state.terrain.rotationsDeg }));
+    const plus = (k) => page.locator(`button[data-st="rot-${k}"][data-d="1"]`), minus = (k) => page.locator(`button[data-st="rot-${k}"][data-d="-1"]`);
+    await plus("izu").dispatchEvent("pointerdown"); await plus("izu").dispatchEvent("pointerup"); assert.deepEqual(await rot(), { izu: 1, ryukyu: 0, northern: 0 });
+    await minus("ryukyu").dispatchEvent("pointerdown"); await minus("ryukyu").dispatchEvent("pointerup"); assert.deepEqual(await rot(), { izu: 1, ryukyu: -1, northern: 0 });
+    await plus("northern").dispatchEvent("pointerdown"); await page.waitForTimeout(1000); await plus("northern").dispatchEvent("pointerup");
+    const r = await rot(); assert.ok(r.northern >= 6, "長押し連続 " + r.northern); assert.equal(r.izu, 1); assert.equal(r.ryukyu, -1);
+    await page.fill("#st-rot-izu", "-30"); assert.equal((await rot()).izu, -30); assert.match(await page.textContent("#st-rot-izu-v"), /-30°/);
+    assert.equal(await page.evaluate(() => JSON.stringify(ShipApp.layout.islands.find((i) => i.id === "honshu").ring)), hon0, "本州は回転しない");
+    await page.fill("#st-rot-izu", "0"); await page.fill("#st-rot-ryukyu", "0"); await page.fill("#st-rot-northern", "0");
+    assert.deepEqual(await rot(), { izu: 0, ryukyu: 0, northern: 0 });
+    assert.equal(await page.evaluate(() => ShipApp.metrics.overhangIslands.length), 49, "0°で採用基準案と同じはみ出し");
+    assert.match(await page.textContent("#rotInfo"), /伊豆大島の中心/); assert.match(await page.textContent("#rotInfo"), /屋久島の中心/); assert.match(await page.textContent("#rotInfo"), /納沙布岬/);
+  });
+  await step("回転後に干渉とはみ出しが再計算され、赤い面・橙の表示は維持", async () => {
+    const before = await page.evaluate(() => ({ i: ShipApp.interference.length, o: ShipApp.metrics.overhangIslands.map((x) => x.id + x.southKm.toFixed(2)).join() }));
+    await page.fill("#st-rot-ryukyu", "25"); await page.waitForTimeout(500);
+    const after = await page.evaluate(() => ({ i: ShipApp.interference.length, o: ShipApp.metrics.overhangIslands.map((x) => x.id + x.southKm.toFixed(2)).join() }));
+    assert.notEqual(after.o, before.o); assert.match(await page.textContent("#status"), /はみ出し/); assert.match(await page.textContent("#status"), /地形干渉/);
+    await page.fill("#st-rot-ryukyu", "0");
+  });
+  await step("島列圧縮：2方向・固定端の表示・±長押し・0%で無効", async () => {
+    await page.selectOption("#preset", "adopted");
+    const pos = (id) => page.evaluate((id) => ShipApp.layout.islands.find((i) => i.id === id).c, id);
+    const o0 = await pos("izuoshima"), m0 = await pos("minamiiwo");
+    await page.locator('button[data-st="chainRate"][data-d="1"]').dispatchEvent("pointerdown"); await page.waitForTimeout(900); await page.locator('button[data-st="chainRate"][data-d="1"]').dispatchEvent("pointerup");
+    const rate = await page.evaluate(() => ShipApp.state.terrain.chainCompression.ratePercent); assert.ok(rate >= 4, "rate " + rate);
+    assert.deepEqual(await pos("izuoshima"), o0, "伊豆大島を固定"); assert.notDeepEqual(await pos("minamiiwo"), m0);
+    assert.match(await page.textContent("#chainInfo"), /固定端＝伊豆大島/); assert.match(await page.textContent("#chainInfo"), /適用順/);
+    await page.click("#chainMinami"); assert.deepEqual(await pos("minamiiwo"), m0, "南硫黄島を固定"); assert.notDeepEqual(await pos("izuoshima"), o0);
+    assert.match(await page.textContent("#chainInfo"), /固定端＝南硫黄島/); assert.equal(await page.evaluate(() => ShipApp.state.terrain.chainCompression.mode), "minamiiwo");
+    await page.fill("#st-chainRate", "0"); assert.deepEqual(await pos("izuoshima"), o0); assert.deepEqual(await pos("minamiiwo"), m0);
+    await page.click("#chainOshima");
+  });
+  await step("地域の表示切替（北方領土・竹島・伊豆・琉球・小笠原）", async () => {
+    const n = () => page.evaluate(() => ShipApp.layout.islands.length);
+    const n0 = await n();
+    for (const r of ["northern", "takeshima", "izu", "ogasawara", "ryukyu"]) { await page.click(`[data-region="${r}"]`); assert.ok((await n()) < n0, r); assert.ok(await page.evaluate((r) => ShipApp.state.terrain.hiddenRegions.includes(r), r)); await page.click(`[data-region="${r}"]`); assert.equal(await n(), n0); }
+    assert.equal(await page.evaluate(() => ShipApp.layout.islands.filter((i) => i.region === "northern").length), 8);
+  });
+  await step("3D地形：標高が1/40で反映され、地形変更レイヤー（富士山）が2D設定と連動", async () => {
+    await page.selectOption("#preset", "adopted");
+    await page.click('#views button[data-view="overview"]'); await page.waitForFunction(() => Ship3D.built); await page.waitForTimeout(600);
+    const h0 = await page.evaluate(() => Ship3D.maxH); assert.ok(h0 > 60 && h0 <= 94.5, "最高点 " + h0);
+    assert.match(await page.textContent("#terrainNote"), /1\/40/);
+    await page.click('#views button[data-view="2d"]');
+    const plus = page.locator('button[data-st="fujiSummit"][data-d="-1"]');
+    for (let i = 0; i < 100; i++) await plus.dispatchEvent("click", { detail: 0 }).catch(() => {});
+    const summit = await page.evaluate(() => ShipApp.state.terrain.heightLayer.fujiSummitM); assert.ok(summit < 3776, "富士山の頂 " + summit);
+    await page.click('#views button[data-view="overview"]'); await page.waitForTimeout(800);
+    const h1 = await page.evaluate(() => Ship3D.maxH); assert.ok(h1 < h0, "3Dに反映 " + h0 + " → " + h1);
+    await page.click('#views button[data-view="2d"]'); await page.click("#resetHeight");
+    assert.equal(await page.evaluate(() => ShipApp.state.terrain.heightLayer.fujiSummitM), 3776);
+  });
+  await step("3D：見通し（透過）・視点の高さ・視線（前方/真上）・断面・中心軸 直径100m", async () => {
+    await page.click('#views button[data-view="overview"]'); await page.waitForFunction(() => Ship3D.built); await page.waitForTimeout(400);
+    const op0 = await page.evaluate(() => Ship3D.groundOpacity); await page.click("#seeThru3d"); await page.waitForTimeout(500); const op1 = await page.evaluate(() => Ship3D.groundOpacity); assert.ok(op1 < op0, "透過で地面が薄くなる"); await page.click("#seeThru3d");
+    assert.equal(await page.evaluate(() => Ship3D.built.axisR), 0.05); // 半径50m
+    await page.click('#views button[data-view="section"]'); await page.waitForTimeout(500); assert.equal(await page.evaluate(() => Ship3D.built.axisR), 0.05);
+    await page.click('#views button[data-view="inside"]'); await page.waitForTimeout(600); assert.equal(await page.evaluate(() => Ship3D.built.axisR), 0.05);
+    assert.ok(await page.isVisible("#insideCtl"));
+    const radial = () => page.evaluate(() => { const p = Ship3D.camera.position; return Math.hypot(p.x, p.y); });
+    const r150 = await radial(); await page.fill("#eyeH", "1500"); const r1500 = await radial(); assert.ok(r1500 < r150 - 1.0, `視点を上げると軸に近づく ${r150} → ${r1500}`);
+    near2(r150, 3 - 0.15 - (await page.evaluate(() => 0)), 0.2);
+    await page.locator('button[data-eye="1"]').dispatchEvent("pointerdown"); await page.locator('button[data-eye="1"]').dispatchEvent("pointerup"); assert.equal(await page.evaluate(() => Ship3D.eyeH), 1501);
+    const dirAhead = await page.evaluate(() => { const c = Ship3D.camera, d = new c.position.constructor(); c.getWorldDirection(d); return [d.x, d.y, d.z]; });
+    await page.click('[data-look="up"]'); const dirUp = await page.evaluate(() => { const c = Ship3D.camera, d = new c.position.constructor(); c.getWorldDirection(d); return [d.x, d.y, d.z]; });
+    assert.notDeepEqual(dirAhead.map((v) => +v.toFixed(2)), dirUp.map((v) => +v.toFixed(2))); await page.click('[data-look="ahead"]');
+    await page.click('#views button[data-view="2d"]');
+    assert.match(await page.textContent("#axisInfo"), /直径 100m（半径 50m）/); assert.match(await page.textContent("#axisInfo"), /半径 3km/);
+  });
+  await step("船体案の切替が回転・圧縮・高さを含めて同期（採用基準案／南北収容補正案）", async () => {
+    await page.fill("#st-rot-izu", "15"); await page.fill("#st-chainRate", "20");
+    await page.selectOption("#preset", "adopted-fit"); const f = await S(page);
+    assert.equal(f.terrain.rotationsDeg.izu, 0); assert.equal(f.terrain.chainCompression.ratePercent, 0); assert.equal(f.terrain.ryukyuSpacingPercent, 55); assert.equal(await page.inputValue("#st-rot-izu"), "0");
+    assert.equal(await page.evaluate(() => ShipApp.metrics.overhangIslands.length), 0);
+    await page.selectOption("#preset", "adopted"); assert.equal((await S(page)).terrain.ryukyuSpacingPercent, 90);
+  });
+  await step("保存JSONに回転角・圧縮率・高さレイヤーが含まれ、読み込みで復元", async () => {
+    await page.fill("#st-rot-northern", "12"); await page.fill("#st-chainRate", "15"); await page.click("#chainMinami");
+    await page.fill("#saveName", "v11テスト"); await page.click("#save");
+    const [dl] = await Promise.all([page.waitForEvent("download"), page.click("#export")]); const j = JSON.parse(fs.readFileSync(await dl.path(), "utf8"));
+    assert.equal(j.schemaVersion, 11); assert.equal(j.regionRotations.northern.angleDeg, 12); assert.equal(j.chainCompression.ratePercent, 15); assert.equal(j.chainCompression.fixedIslandId, "minamiiwo"); assert.equal(j.terrain.heightLayer.fujiSummitM, 3776); assert.equal(j.ship.axisDiameterM, 100);
+    await page.selectOption("#preset", "adopted");
+    const idx = await page.evaluate(() => JSON.parse(localStorage.getItem("kasoku-ship-designer-v10-saves")).findIndex((s) => s.name === "v11テスト")); await page.selectOption("#saved", String(idx));
+    const s = await S(page); assert.equal(s.terrain.rotationsDeg.northern, 12); assert.equal(s.terrain.chainCompression.ratePercent, 15); assert.equal(s.terrain.chainCompression.mode, "minamiiwo");
+    await page.selectOption("#preset", "adopted");
+  });
   await step("コンソールエラーなし", async () => { assert.deepEqual(errors, []); });
 
   await browser.close();
   for (const [r, n] of results) console.log(r, n);
   const ng = results.filter((r) => r[0] !== "ok").length; console.log(`${results.length - ng}/${results.length} passed`); process.exit(ng ? 1 : 0);
 })();
+function near2(a, b, tol) { assert.ok(Math.abs(a - b) <= tol, `${a} vs ${b}`); }
 function near(a, b) { assert.ok(Math.abs(a - b) < 1e-9, `${a} vs ${b}`); }

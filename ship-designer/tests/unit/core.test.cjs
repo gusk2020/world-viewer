@@ -1,6 +1,7 @@
 // node --test tests/unit
 const test = require("node:test"), assert = require("node:assert/strict");
 globalThis.SHIP_FIT_CANDIDATE = (() => { const w = {}; new Function("window", require("fs").readFileSync(__dirname + "/../../src/fit-candidate.js", "utf8"))(w); return w.SHIP_FIT_CANDIDATE; })();
+const T = require("../../src/terrain.js");
 const C = require("../../src/core.js"), geo = require("../../data/ship-geo.json");
 const model = C.buildModel(geo);
 const near = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg || ""} ${a} vs ${b}`);
@@ -9,7 +10,7 @@ const sq = (id, x, y, s, group) => { const ring = [[x, y], [x + s, y], [x + s, y
 test("data: islands, prefectures, cities and sources are present", () => {
   assert.ok(model.islands.length > 130);
   for (const id of ["honshu", "hokkaido", "kyushu", "shikoku", "okinawa", "iwo", "okinotori", "minamitori"]) assert.ok(model.byId.has(id), id);
-  assert.equal(geo.prefectures.length, 49);
+  assert.equal(geo.prefectures.length, 47); assert.equal(geo.legacyPrefectures.length, 49);
   assert.ok(geo.prefectures.every((p) => p.culture === null && p.areaKm2 > 0));
   assert.ok(geo.cities.length >= 49 && geo.sources.length >= 3);
   assert.deepEqual(model.toKm(135, 35), [0, 0]); // v9 plane origin
@@ -210,4 +211,187 @@ test("individual north–south correction is stored separately and round-trips; 
   // 沖ノ鳥島 / 南鳥島 stay independently switchable on the candidate
   const t = C.cloneState(b); t.terrain.showOkinotori = false; const ids = C.layout(model, t).islands.map((i) => i.id); assert.ok(!ids.includes("okinotori") && ids.includes("minamitori"));
   assert.equal(C.overhangs(C.layout(model, t)).length, 0);
+});
+
+// ================================================================ v11
+const demPack = (() => { const w = {}; new Function("window", require("fs").readFileSync(__dirname + "/../../src/dem.js", "utf8"))(w); return T.decodeDem(w.SHIP_DEM); })();
+const adopted = () => C.presetState(model, "adopted");
+const withT = (f) => { const s = adopted(); f(s.terrain); return s; };
+const ctr = (L, id) => L.islands.find((i) => i.id === id).c;
+const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+const ring0 = (L, id) => L.islands.find((i) => i.id === id).ring;
+
+test("v11 data: 北海道は1つに再統合・東京都・旧49件は保持・函館根室は都市として残る", () => {
+  const ids = geo.prefectures.map((p) => p.id); assert.ok(!ids.some((i) => i.startsWith("HK-"))); assert.ok(ids.includes("JP-01"));
+  const hk = geo.prefectures.find((p) => p.id === "JP-01"); assert.equal(hk.name, "北海道"); assert.deepEqual(hk.mergedFrom, ["HK-SAP", "HK-HAK", "HK-NEM"]); assert.equal(hk.capital, "札幌市");
+  assert.equal(geo.prefectures.find((p) => p.id === "JP-13").name, "東京都"); assert.equal(geo.prefectures.find((p) => p.id === "JP-13").legacyName, "東京府");
+  assert.equal(geo.legacyPrefectures.filter((p) => p.id.startsWith("HK-")).length, 3); assert.equal(geo.legacyPrefectures.find((p) => p.id === "JP-13").name, "東京府"); // 元データは無改変
+  assert.equal(geo.prefectureBorders.lines.filter((b) => b.island === "hokkaido").length, 0, "北海道内部に県境が無い");
+  for (const n of ["函館市", "根室市"]) { const c = geo.cities.find((q) => q.name === n); assert.ok(c && c.kind === "city" && c.pref === "JP-01" && c.legacyCapitalOf); }
+  assert.ok(geo.conversion.length >= 5);
+  const jp = model.prefectures.every((p) => p.name && p.capital && p.areaKm2 > 0 && p.culture === null); assert.ok(jp);
+});
+
+test("v11 data: 北方領土4島（歯舞は複数の島）と竹島", () => {
+  for (const id of ["etorofu", "kunashiri", "shikotan", "shibotsu", "takeshima"]) assert.ok(model.byId.has(id), id);
+  const hab = model.islands.filter((i) => i.region === "northern" && /歯舞/.test(i.name || "")); assert.ok(hab.length >= 4, "歯舞群島は複数の島: " + hab.length);
+  assert.ok(hab.some((i) => i.source === "schematic" && i.position === "approximate") && hab.some((i) => i.source === "naturalearth"));
+  assert.equal(model.islands.filter((i) => i.region === "northern").length, 8); assert.equal(model.byId.get("takeshima").region, "takeshima");
+  assert.equal(model.byId.get("etorofu").pref, "JP-01"); assert.equal(model.byId.get("takeshima").pref, "JP-32");
+  assert.ok(model.byId.get("etorofu").areaKm2 > 2500 && model.byId.get("kunashiri").areaKm2 > 1000);
+});
+
+test("rotation 0° = 元配置、v10状態と同一の配置（旧データ互換）", () => {
+  const a = adopted(), L0 = C.layout(model, a);
+  const v10 = JSON.parse(JSON.stringify(a)); for (const k of ["rotationsDeg", "chainCompression", "hiddenRegions", "heightLayer"]) delete v10.terrain[k]; delete v10.schemaVersion; v10.ship.axisDiameterM = undefined;
+  const b = C.normalizeState(v10, model), L1 = C.layout(model, b);
+  assert.deepEqual(b.terrain.rotationsDeg, { izu: 0, ryukyu: 0, northern: 0 }); assert.equal(b.terrain.chainCompression.ratePercent, 0); assert.deepEqual(b.terrain.hiddenRegions, []);
+  for (const i of L0.islands) assert.deepEqual(i.ring, ring0(L1, i.id));
+});
+
+for (const [key, pivotId, fixedIds, movingSample] of [["izu", "izuoshima", ["honshu", "kyushu"], "minamiiwo"], ["ryukyu", "yakushima", ["kyushu", "tanegashima"], "iriomote"], ["northern", null, ["hokkaido"], "etorofu"]]) {
+  test(`回転 ${key}: 支点固定・本土は不動・剛体回転・所属（都市/県境）追従・0°で復帰`, () => {
+    const base = adopted(), L0 = C.layout(model, base), pivot = model.rot[key].pivot, denom = 40;
+    const s = withT((t) => { t.rotationsDeg[key] = 30; }), L1 = C.layout(model, s);
+    const ids = [...model.rot[key].ids]; assert.ok(ids.length >= 4);
+    for (const id of fixedIds) { const m = model.byId.get(id) || model.islands.find((i) => i.id === id); if (!m) continue; assert.deepEqual(ring0(L1, id), ring0(L0, id), id + " は回転しない"); }
+    // 剛体：島内の2点間距離が不変、支点からの距離が不変、角度が30°だけ変わる
+    const pv = C.shipPoint(pivot, L0.shifts.get(ids[0])); // 支点の船体座標（回転前の島の移動で）
+    for (const id of ids) {
+      const A = L0.islands.find((i) => i.id === id), B = L1.islands.find((i) => i.id === id); if (!A || !B) continue;
+      for (let k = 0; k < A.ring.length; k += Math.max(1, (A.ring.length / 5) | 0)) near(dist(A.ring[0], A.ring[k]), dist(B.ring[0], B.ring[k]), 1e-9, id + " 形状");
+    }
+    if (pivotId) { const o0 = ctr(L0, pivotId), o1 = ctr(L1, pivotId); if (key === "izu") near(dist(o0, o1), 0, 1e-9, "支点の島"); }
+    // 所属：回転する島の上の都市・県境は同じ変換で動く／回転しない島の都市は不動
+    const moved = L1.cities.filter((c) => model.rot[key].ids.has(c.island)), still = L1.cities.filter((c) => !model.rot[key].ids.has(c.island));
+    for (const c of still) assert.deepEqual(c.pos, L0.cities.find((q) => q.id === c.id).pos);
+    for (const c of moved) { const o = L0.cities.find((q) => q.id === c.id); assert.ok(dist(c.pos, o.pos) > 0 || dist(c.pos, C.shipPoint(pivot, L0.shifts.get(c.island))) < 1e-9); }
+    const sh = L1.shifts.get(ids[0]); const A = ctr(L0, ids[0]); // 島の中心の移動が回転式に一致
+    const q = model.byId.get(ids[0]).c, th = (30 * Math.PI) / 180, rx = pivot[0] + (q[0] - pivot[0]) * Math.cos(th) - (q[1] - pivot[1]) * Math.sin(th), ry = pivot[1] + (q[0] - pivot[0]) * Math.sin(th) + (q[1] - pivot[1]) * Math.cos(th);
+    const expect = C.shipPoint([q[0], q[1]], sh); near(dist(expect, C.shipPoint([rx, ry], { ...sh, rot: null })), 0, 1e-9, "回転式");
+    // 負の角度・0°で元に戻る
+    const back = withT((t) => { t.rotationsDeg[key] = 30; }); back.terrain.rotationsDeg[key] = 0; const Lb = C.layout(model, back);
+    for (const i of L0.islands) assert.deepEqual(i.ring, ring0(Lb, i.id));
+    const neg = withT((t) => { t.rotationsDeg[key] = -30; }); assert.notDeepEqual(ring0(C.layout(model, neg), ids[0]), ring0(L1, ids[0]));
+  });
+}
+test("回転の対象リスト：A=伊豆〜小笠原の島列、B=屋久島より南の琉球諸島、C=北方領土8島。本土・種子島・屋久島・北海道は対象外", () => {
+  const A = model.rot.izu.ids, B = model.rot.ryukyu.ids, Cn = model.rot.northern.ids;
+  for (const id of ["izuoshima", "minamiiwo", "iwo"]) assert.ok(A.has(id)); for (const id of ["honshu", "kyushu", "hokkaido", "okinawa"]) assert.ok(!A.has(id));
+  assert.ok(B.has("okinawa")); for (const id of ["kyushu", "yakushima", "honshu"]) assert.ok(!B.has(id)); assert.ok(![...B].some((id) => model.byId.get(id).c[1] >= model.byId.get("yakushima").c[1]));
+  assert.deepEqual([...Cn].sort(), model.islands.filter((i) => i.region === "northern").map((i) => i.id).sort()); assert.ok(!Cn.has("hokkaido"));
+  assert.equal(model.rot.izu.pivot, model.byId.get("izuoshima").c); assert.equal(model.rot.ryukyu.pivot, model.byId.get("yakushima").c);
+  const nos = model.toKm(145.8167, 43.3858); assert.deepEqual(model.rot.northern.pivot, nos);
+  assert.ok(C.ROT_LIMITS.izu >= 30 && C.ROT_LIMITS.ryukyu >= 30 && C.ROT_LIMITS.northern >= 30);
+});
+
+test("島列圧縮：対象は伊豆大島〜南硫黄島だけ・固定端・間隔を同率・形と東西の広がり不変・順序不変", () => {
+  const chain = model.chain; assert.equal(chain.first, "izuoshima"); assert.equal(chain.last, "minamiiwo"); assert.ok(chain.ids.length > 20);
+  assert.equal(chain.ids[0], "izuoshima"); assert.equal(chain.ids[chain.ids.length - 1], "minamiiwo");
+  assert.ok(chain.ids.every((id) => ["izu", "ogasawara"].includes(model.byId.get(id).region)));
+  const L0 = C.layout(model, adopted());
+  for (const mode of ["oshima", "minamiiwo"]) {
+    const s = withT((t) => { t.chainCompression = { mode, ratePercent: 40 }; }), L1 = C.layout(model, s), k = 0.6;
+    const fixed = mode === "oshima" ? chain.first : chain.last, other = mode === "oshima" ? chain.last : chain.first;
+    assert.deepEqual(ctr(L1, fixed), ctr(L0, fixed), "固定端は動かない");
+    const o = ctr(L0, chain.first), p1 = ctr(L0, chain.last), Lc = dist(o, p1), u = [(p1[0] - o[0]) / Lc, (p1[1] - o[1]) / Lc];
+    const t = (L, id) => { const p = ctr(L, id); return (p[0] - o[0]) * u[0] + (p[1] - o[1]) * u[1]; }, perp = (L, id) => { const p = ctr(L, id); return -(p[0] - o[0]) * u[1] + (p[1] - o[1]) * u[0]; };
+    const tFixed = mode === "oshima" ? 0 : Lc;
+    for (const id of chain.ids) { near(t(L1, id), tFixed + k * (t(L0, id) - tFixed), 1e-9, id + " 軸方向の位置＝固定端からk倍"); near(perp(L1, id), perp(L0, id), 1e-9, id + " 東西の広がり（垂直位置）不変"); }
+    const ids = chain.ids; for (let i = 1; i < ids.length; i++) { const d0 = t(L0, ids[i]) - t(L0, ids[i - 1]); near(t(L1, ids[i]) - t(L1, ids[i - 1]), k * d0, 1e-9, "間隔は一律 k 倍"); }
+    for (const id of ids) { const A = ring0(L0, id), B = ring0(L1, id); for (let q = 1; q < A.length; q += Math.max(1, (A.length / 4) | 0)) near(dist(A[0], A[q]), dist(B[0], B[q]), 1e-9, id + " 形"); }
+    // 対象外は不動
+    for (const id of ["honshu", "kyushu", "okinawa", "hokkaido", "okinotori", "minamitori", "etorofu"]) assert.deepEqual(ring0(L1, id), ring0(L0, id), id);
+    // 並び順が変わらない
+    const order = (L) => ids.slice().sort((a, b) => t(L, a) - t(L, b) || a.localeCompare(b)); assert.deepEqual(order(L1), order(L0));
+    near(Math.abs(t(L1, other) - t(L1, fixed)), k * Math.abs(t(L0, other) - t(L0, fixed)), 1e-9);
+  }
+  // 0%は無変化。2方向で固定端が違う
+  const z = withT((t) => { t.chainCompression = { mode: "minamiiwo", ratePercent: 0 }; }); assert.deepEqual(ring0(C.layout(model, z), "iwo"), ring0(L0, "iwo"));
+  const a = C.layout(model, withT((t) => { t.chainCompression = { mode: "oshima", ratePercent: 40 }; })), b = C.layout(model, withT((t) => { t.chainCompression = { mode: "minamiiwo", ratePercent: 40 }; }));
+  assert.notDeepEqual(ctr(a, "minamiiwo"), ctr(b, "minamiiwo"));
+});
+
+test("適用順：回転 → 従来の琉球・小笠原間隔/硫黄島基準 → 島列圧縮。旧設定の二重圧縮が起きない", () => {
+  const base = adopted(), s = withT((t) => { t.rotationsDeg.izu = 20; t.chainCompression = { mode: "oshima", ratePercent: 30 }; });
+  const L1 = C.layout(model, s), Lrot = C.layout(model, withT((t) => { t.rotationsDeg.izu = 20; }));
+  // 圧縮率0に戻せば「回転＋従来の補正」だけの配置と完全一致（従来の補正は圧縮と無関係に1回だけ）
+  const s0 = C.cloneState(s); s0.terrain.chainCompression.ratePercent = 0; const L0 = C.layout(model, s0);
+  for (const i of Lrot.islands) assert.deepEqual(i.ring, ring0(L0, i.id));
+  // 従来の小笠原追加圧縮の設定を変えても、固定端（伊豆大島：回転支点＝従来補正の対象外）は動かない
+  const s2 = C.cloneState(s); s2.terrain.ogasawaraCompressionPercent = 0; assert.deepEqual(ctr(C.layout(model, s2), "izuoshima"), ctr(L1, "izuoshima"));
+  // 旧v10保存相当（新項目なし）は二重圧縮なし：小笠原の位置が従来式のまま
+  const v10 = JSON.parse(JSON.stringify(base)); delete v10.terrain.chainCompression; delete v10.terrain.rotationsDeg; const n = C.normalizeState(v10, model);
+  const chichi = model.islands.find((i) => i.name === "父島").id; assert.deepEqual(ring0(C.layout(model, n), chichi), ring0(C.layout(model, base), chichi));
+});
+
+test("v11保存JSON：回転角・圧縮率・支点・対象島・地形変更レイヤー・軸径を含み、往復で一致", () => {
+  const s = withT((t) => { t.rotationsDeg = { izu: 12, ryukyu: -7, northern: 33 }; t.chainCompression = { mode: "minamiiwo", ratePercent: 25 }; t.hiddenRegions = ["takeshima"]; t.heightLayer.fujiSummitM = 3000; t.heightLayer.ridgeSwScale = 1.2; });
+  const j = JSON.parse(JSON.stringify(C.serializeState(s, model)));
+  assert.equal(j.schemaVersion, 11); assert.equal(j.ship.axisDiameterM, 100);
+  assert.equal(j.regionRotations.izu.angleDeg, 12); assert.equal(j.regionRotations.ryukyu.angleDeg, -7); assert.equal(j.regionRotations.northern.angleDeg, 33);
+  assert.ok(j.regionRotations.izu.islandIds.includes("izuoshima") && j.regionRotations.northern.islandIds.includes("etorofu") && j.regionRotations.ryukyu.pivotName.includes("屋久島"));
+  assert.deepEqual(j.chainCompression.fixedIslandId, "minamiiwo"); assert.equal(j.chainCompression.ratePercent, 25); assert.ok(j.chainCompression.order.length > 20);
+  assert.equal(j.heightScale.horizontalDenominator, j.heightScale.verticalDenominator); near(j.heightScale.fujiSummitShipM, 75, 1e-9);
+  const back = C.normalizeState(j, model); assert.deepEqual(back.terrain, s.terrain); assert.deepEqual(back.ship, s.ship);
+  assert.deepEqual(C.layout(model, back).islands.map((i) => i.ring), C.layout(model, s).islands.map((i) => i.ring));
+  const bad = C.normalizeState({ ship: s.ship, terrain: { ...s.terrain, rotationsDeg: { izu: 999, ryukyu: "x" }, chainCompression: { ratePercent: 500, mode: "?" }, hiddenRegions: ["x", "izu"] } }, model);
+  assert.equal(bad.terrain.rotationsDeg.izu, C.ROT_LIMITS.izu); assert.equal(bad.terrain.rotationsDeg.ryukyu, 0); assert.equal(bad.terrain.chainCompression.ratePercent, C.CHAIN_MAX_PERCENT); assert.deepEqual(bad.terrain.hiddenRegions, ["izu"]);
+});
+
+test("回転後も はみ出し・地形干渉が再計算され、赤・橙の判定が独立に動く", () => {
+  const a = adopted(), I0 = C.interference(C.layout(model, a)).length;
+  const s = withT((t) => { t.rotationsDeg.northern = 60; t.rotationsDeg.izu = -25; t.rotationsDeg.ryukyu = 20; }), L = C.layout(model, s), I = C.interference(L), H = C.overhangs(L);
+  assert.ok(Number.isFinite(I.length) && H.length >= 0); assert.notDeepEqual(H.map((o) => o.id + o.southKm.toFixed(3)), C.overhangs(C.layout(model, a)).map((o) => o.id + o.southKm.toFixed(3)));
+  assert.ok(C.metrics(model, s, L, I).overlapKm2 >= 0);
+});
+
+test("地域の表示切替（伊豆・琉球・小笠原・北方領土・竹島）と鳥島2島は独立", () => {
+  const ids = (s) => new Set(C.layout(model, s).islands.map((i) => i.id));
+  const all = ids(adopted());
+  for (const r of ["izu", "ogasawara", "ryukyu", "northern", "takeshima"]) {
+    const s = withT((t) => { t.hiddenRegions = [r]; }), got = ids(s), gone = [...all].filter((i) => !got.has(i));
+    assert.ok(gone.length > 0 && gone.every((i) => model.byId.get(i).region === r), r); assert.ok(got.has("okinotori") && got.has("minamitori") && got.has("honshu"));
+  }
+  const s = withT((t) => { t.hiddenRegions = ["northern", "takeshima"]; t.showOkinotori = false; }), g = ids(s); assert.ok(!g.has("okinotori") && g.has("minamitori") && !g.has("etorofu") && !g.has("takeshima") && g.has("izuoshima"));
+  // 非表示にしても、他の島の位置は変わらない
+  assert.deepEqual(ring0(C.layout(model, s), "honshu"), ring0(C.layout(model, adopted()), "honshu"));
+});
+
+test("3D標高：水平も標高も 1/N（富士山 3776m → 94.4m）、元DEMは不変、地形変更レイヤー、回転追従", () => {
+  const a = adopted(), L = C.layout(model, a), G = T.buildGrids(model, demPack, a.terrain.heightLayer), S = T.makeShipSampler(C, L, G.grids, model, a.terrain.heightLayer);
+  const fp = C.shipPoint(model.toKm(138.7274, 35.3606), L.shifts.get("honshu"));
+  near(S(fp[0], fp[1]), 94.4, 0.01, "富士山 3776/40"); near(S(fp[0] + L.frame.w, fp[1]), 94.4, 0.01, "周回コピーでも同じ");
+  const a20 = C.cloneState(a); a20.terrain.japanScaleDenominator = 20; const L20 = C.layout(model, a20), S20 = T.makeShipSampler(C, L20, G.grids, model, a20.terrain.heightLayer), fp20 = C.shipPoint(model.toKm(138.7274, 35.3606), L20.shifts.get("honshu"));
+  near(S20(fp20[0], fp20[1]), 188.8, 0.02, "1/20 なら 188.8m（水平と同じ縮尺）");
+  const h0 = G.grids.get("honshu").h.slice(); const hash = require("crypto").createHash("md5").update(Buffer.from(demPack.data.buffer, demPack.data.byteOffset, demPack.data.byteLength)).digest("hex");
+  const lay2 = { ...a.terrain.heightLayer, fujiSummitM: 3000, ridgeSwScale: 0, ridgeNeScale: 0 }, G2 = T.buildGrids(model, demPack, lay2), S2 = T.makeShipSampler(C, L, G2.grids, model, lay2);
+  near(S2(fp[0], fp[1]), 75, 0.01, "地形変更レイヤー：富士山3000m→75m");
+  const mxOf = (a) => { let m = 0; for (const v of a) if (v > m) m = v; return m; };
+  assert.ok(mxOf(G2.grids.get("honshu").h) < mxOf(h0), "山脈の盛り上げを0にすると本州の最高点が下がる");
+  assert.equal(require("crypto").createHash("md5").update(Buffer.from(demPack.data.buffer, demPack.data.byteOffset, demPack.data.byteLength)).digest("hex"), hash, "元DEMは変更されない");
+  assert.equal(T.DEFAULT_LAYER.fujiSummitM, 3776); assert.ok(!("verticalDenominator" in a.terrain) && !("heightRatio" in a.terrain), "独立した高さ縮尺は無い");
+  // 回転した島の標高は島に追従する（西表島の山）
+  const r = withT((t) => { t.rotationsDeg.ryukyu = 30; }), Lr = C.layout(model, r), Sr = T.makeShipSampler(C, Lr, G.grids, model, r.terrain.heightLayer);
+  const peakAt = (Lx, S0, id) => { const isl = Lx.islands.find((i) => i.id === id); let best = 0, bp = null; for (let x = isl.bb.lx; x <= isl.bb.rx; x += 0.02) for (let y = isl.bb.by; y <= isl.bb.ty; y += 0.02) { const h = S0(x, y); if (h > best) { best = h; bp = [x, y]; } } return { best, bp }; };
+  const p0 = peakAt(L, S, "okinawa"), p1 = peakAt(Lr, Sr, "okinawa");
+  near(p1.best, p0.best, 1.0, "沖縄本島の最高点の高さ"); assert.ok(dist(p0.bp, p1.bp) > 0.01, "最高点の位置は島と一緒に回る");
+  // 継ぎ目：xとx+円周で同じ高さ
+  for (const [x, y] of [[-10, 3], [0.5, -4], [-16, 12]]) near(S(x, y), S(x + L.frame.w, y), 1e-9);
+  // 最高点 ≤ 富士山、全体の最高が約94m
+  let mx = 0; for (let x = L.frame.x - L.frame.w / 2; x < L.frame.x + L.frame.w / 2; x += 0.1) for (let y = L.frame.y - 25; y < L.frame.y + 25; y += 0.1) mx = Math.max(mx, S(x, y)); assert.ok(mx <= 94.41 && mx > 70, "max " + mx);
+  assert.ok(T.checkFuji(model, a.terrain.heightLayer).ok);
+});
+
+test("中心軸：直径100m(半径50m)で、居住内面の半径(3km)と別物。3Gの計算は居住内面半径のまま", () => {
+  assert.equal(C.AXIS_DIAMETER_M, 100); assert.equal(adopted().ship.axisDiameterM, 100);
+  const p = C.physics(adopted().ship); assert.equal(p.radiusM, 3000); near(p.rimSpeedMs, Math.sqrt(3 * 9.80665 * 3000), 1e-9);
+  const q = C.cloneState(adopted().ship); q.axisDiameterM = 500; near(C.physics(q).rimSpeedMs, p.rimSpeedMs, 1e-12); // 軸径は3G計算に影響しない
+});
+
+test("船体案：採用基準案・南北収容補正案・従来7案・最初期案・利用者v9を引き続き選べる", () => {
+  const ids = C.presetList().map((p) => p.id);
+  for (const id of ["adopted", "adopted-fit", "user-v9", "legacy-original", "legacy-1", "legacy-2", "legacy-a", "legacy-b", "legacy-3", "legacy-4", "v9-provisional", "initial-third"]) assert.ok(ids.includes(id), id);
+  const f = C.presetState(model, "adopted-fit"); assert.equal(C.overhangs(C.layout(model, f)).length, 0);
+  assert.deepEqual(f.terrain.rotationsDeg, { izu: 0, ryukyu: 0, northern: 0 });
 });

@@ -5,7 +5,7 @@
   if (!window.THREE) { window.Ship3D = null; return; }
   const $ = (id) => document.getElementById(id), C = window.ShipCore;
   const host = $("view3d"), labelsEl = $("labels3d");
-  let renderer = null, scene, camera, controls, spinGroup, fixedGroup, tex, texCanvas, clip, built = null, running = false, spinMul = 20, hiQ = false, showLayers = true, current = "overview";
+  let groundMat = null, terrain3d = true, seeThru = false, lookDir = "ahead", eyeH = 150, maxH = 0, sampler = null, renderer = null, scene, camera, controls, spinGroup, fixedGroup, tex, texCanvas, clip, built = null, running = false, spinMul = 20, hiQ = false, showLayers = true, current = "overview";
   const labels = [];
 
   function init() {
@@ -57,16 +57,30 @@
     paintTexture(lay);
     const clipPlanes = current === "section" ? [clip] : [];
     // Habitat surface: the map lives on the inside face. Cylinder UV u runs around, v along the axis.
-    const seg = hiQ ? 256 : 128;
-    const geo = new THREE.CylinderGeometry(R, R, L, seg, Math.max(1, Math.round(L / 2)), true);
+    const seg = hiQ ? 512 : 160, rows = Math.max(1, Math.round(L / (hiQ ? 0.07 : 0.12)));
+    const geo = new THREE.CylinderGeometry(R, R, L, seg, rows, true);
     geo.rotateX(Math.PI / 2); // axis -> z; CylinderGeometry's v=1 is +y before the turn, i.e. +z (bow) after it
     // Mirror u so the map reads correctly from inside (east to your right when facing the bow). u=0 is the west seam,
     // matching ShipCore.toCylinder; CylinderGeometry's own seam column stays at u=0/1, so nothing tears there.
     const uv = geo.attributes.uv;
     for (let i = 0; i < uv.count; i++) uv.setX(i, 1 - uv.getX(i));
     uv.needsUpdate = true;
+    // 地形：実標高の 1/縮尺分母（富士山3776m → 94.4m）を内面の半径方向に反映。高さ0の海は半径R。
+    maxH = 0; sampler = null;
+    if (terrain3d) {
+      try {
+        sampler = ShipApp.heightSampler(); const pos = geo.attributes.position, w = f.w, left = f.x - w / 2;
+        for (let i = 0; i < pos.count; i++) {
+          const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i); let th = Math.atan2(-x, -y); if (th < 0) th += 2 * Math.PI;
+          const hgt = sampler(left + (th / (2 * Math.PI)) * w, f.y + z); if (hgt > maxH) maxH = hgt;
+          const k = (R - hgt / 1000) / R; pos.setXYZ(i, x * k, y * k, z);
+        }
+        pos.needsUpdate = true; geo.computeVertexNormals();
+      } catch (e) { console.error(e); }
+    }
     const inside = current === "inside";
-    const ground = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide, transparent: !inside, opacity: inside ? 1 : 0.9, clippingPlanes: clipPlanes, depthWrite: true }));
+    groundMat = new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide, transparent: !inside, opacity: inside ? 1 : (seeThru ? 0.32 : 0.8), clippingPlanes: clipPlanes, depthWrite: true });
+    const ground = new THREE.Mesh(geo, groundMat);
     ground.renderOrder = 1; spinGroup.add(ground);
     if (showLayers) {
       // 地下層：生命維持・緊急退避・物質循環（概念）／外殻
@@ -86,19 +100,20 @@
       addLabel(anchor(fixedGroup, 0, -R * 1.6, -L / 2 - R * 0.8), "後部 工業・推進区画（非回転）", "#fdba74");
     }
     // 軸上照明（非回転）
-    const rod = cylinder(Math.max(0.01, R * 0.012), L * 1.02, 12, new THREE.MeshBasicMaterial({ color: 0xfffbeb }), false); fixedGroup.add(rod);
-    fixedGroup.add(cylinder(R * 0.05, L, 16, new THREE.MeshBasicMaterial({ color: 0xfef08a, transparent: true, opacity: 0.18, depthWrite: false })));
-    addLabel(anchor(fixedGroup, 0, R * 0.1, L * 0.18), "軸上照明（非回転）", "#fef08a");
+    const AX = C.AXIS_DIAMETER_M / 2000; // 100m直径 = 半径50m。2D断面・3D・船内視点で共通
+    const rod = cylinder(AX, L * 1.02, 24, new THREE.MeshBasicMaterial({ color: 0xfffbeb }), false); fixedGroup.add(rod);
+    addLabel(anchor(fixedGroup, 0, R * 0.08, L * 0.18), "中心軸 直径100m・軸上照明（非回転）", "#fef08a");
     addLabel(anchor(fixedGroup, 0, 0, L / 2 + R * 2.4), "▲ 船首・北（進行方向）", "#7dd3fc");
     addLabel(anchor(fixedGroup, 0, 0, -L / 2 - R * 2.3), "▼ 船尾・南", "#7dd3fc");
     // city labels on the rotating surface: a handful of anchors (capitals of the largest prefectures)
     if (ShipApp.view.cities) for (const name of ["東京", "大阪市", "名古屋市", "札幌市", "福岡市", "那覇市"]) {
       const c = lay.cities.find((q) => q.name === name); if (!c) continue;
       if (c.pos[1] < f.y - f.h / 2 || c.pos[1] > f.y + f.h / 2) continue;
-      const p = C.toCylinder(c.pos[0], c.pos[1], f, R, 0.02); addLabel(anchor(spinGroup, p[0], p[1], p[2]), name.replace(/市$/, ""), "#fff");
+      const gh = sampler ? sampler(c.pos[0], c.pos[1]) / 1000 : 0, p = C.toCylinder(c.pos[0], c.pos[1], f, R, 0.02 + gh); addLabel(anchor(spinGroup, p[0], p[1], p[2]), name.replace(/市$/, ""), "#fff");
     }
     for (const grp of [spinGroup, fixedGroup]) grp.traverse((n) => { if (n.material) n.material.clippingPlanes = clipPlanes; });
-    built = { R, L, f };
+    built = { R, L, f, maxH, axisR: AX };
+    $("terrainNote").textContent = terrain3d ? `地形：水平も標高も実世界の1/${st.terrain.japanScaleDenominator}。最高点 ${maxH.toFixed(1)}m（半径${R * 1000}mの円筒では起伏はごく低い）。中心軸は直径${C.AXIS_DIAMETER_M}m。` : "地形の高さを切っています（平らな表示）。";
     ShipApp.clean3d();
     updateSpinNote();
   }
@@ -107,22 +122,26 @@
 
   // ---------------------------------------------------------------- camera presets
   function setView(v) {
-    current = v; build();
+    current = v; build(); $("insideCtl").hidden = v !== "inside";
     const { R, L, f } = built;
     controls.minDistance = 0.001; controls.maxDistance = Math.max(50, L * 6);
     spinGroup.rotation.z = 0;
     if (v === "overview") { // bow up on screen, like the 2D sheet
       const d = (L * 0.62 + R * 2) / Math.tan((camera.fov * Math.PI) / 360) / Math.min(1, camera.aspect * 1.6); camera.position.set(d * 0.92, d * 0.38, 0); controls.target.set(0, 0, 0); camera.up.set(0, 0, 1); camera.near = 0.01; }
     else if (v === "section") { camera.position.set(R * 0.6, R * 0.5, R * 4.6); controls.target.set(0, 0, -R * 0.5); camera.near = 0.01; }
-    else if (v === "inside") {
-      // stand on the ground near Tokyo (150 m up), facing the bow; the land curves up overhead
-      const tokyo = ShipApp.layout.cities.find((c) => c.name === "東京") || { pos: [f.x, f.y] };
-      const p = C.toCylinder(tokyo.pos[0], tokyo.pos[1], f, R, 0.15), ahead = C.toCylinder(tokyo.pos[0], tokyo.pos[1] + Math.min(4, L * 0.1), f, R, R * 0.55);
-      camera.position.set(p[0], p[1], p[2]); controls.target.set(ahead[0], ahead[1], ahead[2]); camera.near = 0.002;
-      camera.up.set(-p[0], -p[1], 0).normalize();
-    }
+    else if (v === "inside") { placeInside(); }
     if (v === "section") camera.up.set(0, 1, 0);
     camera.updateProjectionMatrix(); controls.update();
+  }
+  /** 船内地表の視点：東京付近の地表から。高さは地表から軸方向へ eyeH(m)。視線は船首方向、または真上（反対側の地面と軸）。 */
+  function placeInside() {
+    const { R, L, f } = built, lay = ShipApp.layout, tokyo = lay.cities.find((c) => c.name === "東京") || { pos: [f.x, f.y] };
+    const gh = sampler ? sampler(tokyo.pos[0], tokyo.pos[1]) / 1000 : 0, inset = gh + eyeH / 1000;
+    const p = C.toCylinder(tokyo.pos[0], tokyo.pos[1], f, R, inset);
+    camera.position.set(p[0], p[1], p[2]);
+    if (lookDir === "up") { const o = C.toCylinder(tokyo.pos[0] + f.w / 2, tokyo.pos[1] + Math.min(4, L * 0.08), f, R, 0); controls.target.set(o[0], o[1], o[2]); camera.up.set(0, 0, 1); }
+    else { const a = C.toCylinder(tokyo.pos[0], tokyo.pos[1] + Math.min(4, L * 0.1), f, R, Math.max(inset, R * 0.55)); controls.target.set(a[0], a[1], a[2]); camera.up.set(-p[0], -p[1], 0).normalize(); }
+    camera.near = 0.002; camera.updateProjectionMatrix(); controls.update();
   }
   function updateSpinNote() {
     const ph = C.physics(ShipApp.state.ship);
@@ -150,8 +169,16 @@
   }
   function pause() { running = false; }
   for (const b of document.querySelectorAll("[data-spin]")) b.addEventListener("click", () => { spinMul = +b.dataset.spin; for (const x of document.querySelectorAll("[data-spin]")) x.setAttribute("aria-pressed", String(x === b)); updateSpinNote(); });
+  $("terrain3d").addEventListener("click", () => { terrain3d = !terrain3d; $("terrain3d").setAttribute("aria-pressed", String(terrain3d)); if (renderer) build(); });
+  $("seeThru3d").addEventListener("click", () => { seeThru = !seeThru; $("seeThru3d").setAttribute("aria-pressed", String(seeThru)); if (renderer) build(); });
+  for (const b of document.querySelectorAll("[data-look]")) b.addEventListener("click", () => { lookDir = b.dataset.look; for (const x of document.querySelectorAll("[data-look]")) x.setAttribute("aria-pressed", String(x === b)); if (built && current === "inside") placeInside(); });
+  const eyeApply = (v) => { eyeH = Math.max(2, Math.min(2950, Math.round(v))); $("eyeH").value = eyeH; $("eyeHv").textContent = eyeH >= 1000 ? (eyeH / 1000).toFixed(2) + " km" : eyeH + " m"; if (built && current === "inside") placeInside(); };
+  $("eyeH").addEventListener("input", (e) => eyeApply(+e.target.value));
+  for (const b of document.querySelectorAll("[data-eye]")) { let timer = null, n = 0; const step = () => { n++; eyeApply(eyeH + (+b.dataset.eye) * (n > 20 ? 50 : n > 8 ? 10 : 1)); }, stop = () => { clearTimeout(timer); clearInterval(timer); timer = null; n = 0; };
+    b.addEventListener("pointerdown", (e) => { e.preventDefault(); stop(); step(); timer = setTimeout(() => { timer = setInterval(step, 70); }, 350); try { b.setPointerCapture(e.pointerId); } catch (_) {} }); b.addEventListener("pointerup", stop); b.addEventListener("pointercancel", stop); b.addEventListener("lostpointercapture", stop); }
+  eyeApply(150);
   $("q3d").addEventListener("click", () => { hiQ = !hiQ; $("q3d").setAttribute("aria-pressed", String(hiQ)); if (renderer) build(); });
   $("layers3d").addEventListener("click", () => { showLayers = !showLayers; $("layers3d").setAttribute("aria-pressed", String(showLayers)); if (renderer) build(); });
 
-  window.Ship3D = { show, pause, setView: (v) => setView(v), get built() { return built; }, get renderer() { return renderer; }, get texture() { return texCanvas; }, get spin() { return spinGroup && spinGroup.rotation.z; } };
+  window.Ship3D = { show, pause, setView: (v) => setView(v), get built() { return built; }, get maxH() { return maxH; }, get camera() { return camera; }, get groundOpacity() { return groundMat && groundMat.opacity; }, get eyeH() { return eyeH; }, get renderer() { return renderer; }, get texture() { return texCanvas; }, get spin() { return spinGroup && spinGroup.rotation.z; } };
 })();
