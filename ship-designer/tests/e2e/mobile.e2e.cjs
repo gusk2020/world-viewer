@@ -128,6 +128,27 @@ async function pinch(cdp, c, d0, d1, steps = 8) {
     assert.match(await page.textContent("#spinNote"), /0\.946 rpm.*20倍速（見かけ）/);
     await page.click('#views button[data-view="2d"]');
   });
+  await step("候補案：はみ出しなし／採用基準案は元のまま／2D・保存JSON・3Dが一致", async () => {
+    await page.selectOption("#preset", "adopted");
+    const a = await S(page); assert.equal(a.terrain.ryukyuSpacingPercent, 90);
+    assert.match(await page.textContent("#status"), /南 49島/);
+    await page.selectOption("#preset", "adopted-fit");
+    const b = await S(page);
+    assert.equal(b.ship.innerDiameterKm, 6); assert.equal(b.ship.cylinderLengthKm, 51); assert.equal(b.ship.population, 12000000); assert.equal(b.terrain.japanScaleDenominator, 40);
+    assert.ok(b.ship.centerYKm < a.ship.centerYKm); assert.equal(b.ship.centerXKm, a.ship.centerXKm);
+    assert.match(await page.textContent("#status"), /はみ出し：なし/); assert.match(await page.textContent("#status"), /地形干渉/);
+    assert.match(await page.textContent("#offsetInfo"), /沖ノ鳥島 北へ/);
+    const [dl] = await Promise.all([page.waitForEvent("download"), page.click("#export")]);
+    const j = JSON.parse(fs.readFileSync(await dl.path(), "utf8"));
+    assert.equal(j.ship.centerYKm, b.ship.centerYKm); assert.equal(j.terrain.ryukyuSpacingPercent, b.terrain.ryukyuSpacingPercent); assert.deepEqual(j.report.overhangs, []);
+    assert.ok(j.terrain.islandOffsetsNorthKm.okinotori > 0);
+    await page.click('#views button[data-view="section"]'); await page.waitForFunction(() => Ship3D.built); await page.waitForTimeout(300);
+    const t3 = await page.evaluate(() => ({ L: Ship3D.built.L, y: Ship3D.built.f.y, sp: ShipApp.state.terrain.ryukyuSpacingPercent }));
+    assert.equal(t3.L, 51); assert.equal(t3.y, b.ship.centerYKm); assert.equal(t3.sp, b.terrain.ryukyuSpacingPercent);
+    await page.click('#views button[data-view="2d"]');
+    await page.click('[data-toggle="showOkinotori"]'); assert.equal((await S(page)).terrain.showMinamitori, true); await page.click('[data-toggle="showOkinotori"]');
+    await page.selectOption("#preset", "adopted"); assert.deepEqual((await S(page)).ship, a.ship); // 元に戻せる
+  });
   await step("コンソールエラーなし", async () => { assert.deepEqual(errors, []); });
 
   await browser.close();

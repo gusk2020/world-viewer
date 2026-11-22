@@ -9,7 +9,7 @@
 
   let state = C.presetState(model, "adopted");
   let presetId = "adopted", customFrom = null; // customFrom: preset name the manual edits started from
-  let view = { borders: true, prefNames: true, cities: true, interference: true, symbols: true };
+  let view = { borders: true, prefNames: true, cities: true, interference: true, symbols: true, overhang: true };
   let mode = "cylinder", current = "2d";
   let camera = { x: 0, y: 0, s: 1 };
   let lay = null, inter = [], interKey = "", met = null, dirty3d = true;
@@ -56,6 +56,13 @@
     ctx.globalAlpha = 0.2;
     ShipDraw.paintMap(ctx, { ...lay, frame: { ...f, w: 1e9 } }, [], T, { low: x0, high: x1, south: y0, north: y1 }, { symbols: false });
     ctx.globalAlpha = 1;
+    // はみ出し（船体の南北端を越えた島）は橙の輪郭で別表示。地形干渉の赤い面とは独立。
+    if (view.overhang && met.overhangIslands.length) {
+      ctx.strokeStyle = "#ff9d2e"; ctx.lineWidth = 1.6;
+      for (const o of met.overhangIslands) { const isl = lay.islands.find((q) => q.id === o.id); if (!isl) continue;
+        const k0 = Math.ceil((x0 - isl.bb.rx) / f.w), k1 = Math.floor((x1 - isl.bb.lx) / f.w);
+        for (let k = k0; k <= k1; k++) { ctx.beginPath(); isl.ring.forEach((q, i) => { const u = p2s(q[0] + k * f.w, q[1]); if (i) ctx.lineTo(u.x, u.y); else ctx.moveTo(u.x, u.y); }); ctx.closePath(); ctx.stroke(); } }
+    }
     // inside the hull: folded onto the circumference
     ctx.fillStyle = ShipDraw.COLORS.sea; ctx.fillRect(r.x, r.y, r.w, r.h);
     ctx.save(); ctx.beginPath(); ctx.rect(r.x, r.y, r.w, r.h); ctx.clip();
@@ -100,10 +107,12 @@
     const interOk = interKey === stateKey();
     const ryu = inter.filter((o) => model.byId.get(o.a).group === "ryu" || model.byId.get(o.b).group === "ryu").length;
     const iTxt = !interOk ? "干渉を計算中…" : inter.length ? `地形干渉：赤い面が実際に重なった陸地（${inter.length}か所・南西諸島${ryu}か所）。` : "地形干渉：なし。";
-    $("status").innerHTML = `<span class="${inter.length && interOk ? "warning" : "good"}">${iTxt}</span> 南北のはみ出し：北 ${fmt(m.overhangNorthKm)} km ／ 南 ${fmt(m.overhangSouthKm)} km。` +
-      `<br><small>列島 1/${t.japanScaleDenominator}・南方離島間隔 ${t.ryukyuSpacingPercent}%・対馬 南へ${t.tsushimaSouthKm}km・小笠原圧縮 ${t.ogasawaraCompressionPercent}%（硫黄島基準）・目盛 ${fmt(tick())}km</small>`;
-    const n = Object.keys(t.islandOffsetsKm).length;
-    $("offsetInfo").textContent = n ? `個別東西補正 ${n}島：` + Object.entries(t.islandOffsetsKm).map(([id, v]) => `${model.byId.get(id).name || id} ${v > 0 ? "東" : "西"}へ${Math.abs(v * 1000).toFixed(0)}m`).join("、") : "個別東西補正なし（原島座標のまま）。";
+    const oh = m.overhangIslands, ohS = oh.filter((o) => o.southKm > 1e-9), ohN = oh.filter((o) => o.northKm > 1e-9);
+    const ohTxt = !oh.length ? "船体南北端からのはみ出し：なし。" : `船体南北端からのはみ出し（橙の輪郭）：南 ${ohS.length}島（最大 ${fmt(m.overhangSouthKm)}km：${ohS.slice(0, 3).map((o) => o.name).join("・")}${ohS.length > 3 ? "ほか" : ""}）／北 ${ohN.length}島（最大 ${fmt(m.overhangNorthKm)}km）。`;
+    $("status").innerHTML = `<div class="${inter.length && interOk ? "warning" : "good"}">${iTxt}</div><div class="${oh.length ? "warning" : "good"}">${ohTxt}</div>` +
+      `<small>列島 1/${t.japanScaleDenominator}・南方離島間隔 ${t.ryukyuSpacingPercent}%・対馬 南へ${t.tsushimaSouthKm}km・小笠原圧縮 ${t.ogasawaraCompressionPercent}%（硫黄島基準）・目盛 ${fmt(tick())}km</small>`;
+    const nm = (id) => model.byId.get(id).name || id, ew = Object.entries(t.islandOffsetsKm), ns = Object.entries(t.islandOffsetsNorthKm || {});
+    $("offsetInfo").textContent = (ew.length ? "個別東西補正：" + ew.map(([id, v]) => `${nm(id)} ${v > 0 ? "東" : "西"}へ${Math.abs(v * 1000).toFixed(0)}m`).join("、") : "個別東西補正なし。") + (ns.length ? " 個別南北補正：" + ns.map(([id, v]) => `${nm(id)} ${v > 0 ? "北" : "南"}へ${Math.abs(v).toFixed(2)}km`).join("、") : " 個別南北補正なし。") + "（原島座標は保持）";
     $("operationHelp").textContent = mode === "japan" ? "日本列島操作：1本指＝表示移動、ピンチ＝拡大縮小（枠内でも）" : "シリンダー操作：枠内ドラッグ＝移動、●◆＝変形、ピンチ（枠上）＝枠の拡縮";
   }
   function syncPresetLabel() { $("presetState").textContent = presetId === "custom" ? `カスタム案${customFrom ? "（" + customFrom + "から変更）" : ""}` : "選択案のまま"; }
@@ -215,7 +224,7 @@
     const r = C.resolveRyukyu(model, state); state = r.state; markCustom(); syncSteppers(); changed();
     $("feedback").textContent = r.moved.length ? `南西諸島 ${r.moved.length}島を東西に最小移動しました。` : "南西諸島に重なりはありません（補正なし）。";
   };
-  $("clearOffsets").onclick = async () => { if (!Object.keys(state.terrain.islandOffsetsKm).length) return; if (!(await ask("個別の東西補正をすべて消しますか？"))) return; state.terrain.islandOffsetsKm = {}; changed({ custom: true }); };
+  $("clearOffsets").onclick = async () => { if (!Object.keys(state.terrain.islandOffsetsKm).length && !Object.keys(state.terrain.islandOffsetsNorthKm).length) return; if (!(await ask("個別の東西・南北補正をすべて消しますか？"))) return; state.terrain.islandOffsetsKm = {}; state.terrain.islandOffsetsNorthKm = {}; changed({ custom: true }); };
 
   // ------------------------------------------------------------ save / load
   const STORE = "kasoku-ship-designer-v10-saves";
@@ -227,7 +236,8 @@
     stored.forEach((s, i) => $("saved").appendChild(new Option(`${s.name}（${(+s.ship.innerDiameterKm).toFixed(2)}×${(+s.ship.cylinderLengthKm).toFixed(1)}km）`, String(i))));
     $("saved").value = old && stored[+old] ? old : "";
   }
-  const snapshot = (name) => C.serializeState(Object.assign(C.cloneState(state), { name, createdAt: new Date().toISOString() }), model, { sourcePreset: presetId === "custom" ? `カスタム案（${customFrom || "手動"}）` : state.sourcePreset });
+  const snapshot = (name) => { recompute(true); return C.serializeState(Object.assign(C.cloneState(state), { name, createdAt: new Date().toISOString() }), model, { sourcePreset: presetId === "custom" ? `カスタム案（${customFrom || "手動"}）` : state.sourcePreset,
+    report: { overhangs: met.overhangIslands.map((o) => ({ id: o.id, name: o.name, southKm: +o.southKm.toFixed(4), northKm: +o.northKm.toFixed(4) })), interference: inter.map((o) => ({ a: o.a, b: o.b, wrap: o.k, areaKm2: +o.areaKm2.toFixed(6) })), interferenceAreaKm2: +met.overlapKm2.toFixed(6), landNetKm2: +met.landNetKm2.toFixed(3) } }); };
   function loadDesign(d, label) { state = C.normalizeState(d, model); presetId = "custom"; customFrom = label || d.name || "読込"; psel.value = "custom"; syncPresetLabel(); syncSteppers(); recompute(true); frameFit(); changed(); }
   $("save").onclick = async () => {
     const name = $("saveName").value.trim(); if (!name) { $("feedback").textContent = "保存名を入力してください。"; return; }

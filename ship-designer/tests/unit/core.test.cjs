@@ -1,5 +1,6 @@
 // node --test tests/unit
 const test = require("node:test"), assert = require("node:assert/strict");
+globalThis.SHIP_FIT_CANDIDATE = (() => { const w = {}; new Function("window", require("fs").readFileSync(__dirname + "/../../src/fit-candidate.js", "utf8"))(w); return w.SHIP_FIT_CANDIDATE; })();
 const C = require("../../src/core.js"), geo = require("../../data/ship-geo.json");
 const model = C.buildModel(geo);
 const near = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg || ""} ${a} vs ${b}`);
@@ -145,4 +146,68 @@ test("all presets build and stay consistent", () => {
   }
   const l2 = C.presetState(model, "legacy-2"); assert.equal(l2.ship.innerDiameterKm, 4); assert.equal(l2.ship.cylinderLengthKm, 38.5);
   const third = C.presetState(model, "initial-third"); assert.equal(third.terrain.japanScaleDenominator, 3);
+});
+
+// ---------------------------------------------------------------- 南北収容の補正（候補案 adopted-fit）
+test("adopted design is untouched; its overhang is detected separately from interference", () => {
+  const a = C.presetState(model, "adopted"), L = C.layout(model, a), H = C.overhangs(L);
+  assert.equal(a.ship.centerYKm, 4.424036296290547); assert.equal(a.terrain.ryukyuSpacingPercent, 90); assert.deepEqual(a.terrain.islandOffsetsNorthKm, {});
+  assert.ok(H.length > 40 && H.every((o) => o.southKm > 0 && o.northKm === 0));
+  near(H[0].southKm, 16.4965, 1e-3, "沖ノ鳥島"); assert.equal(H[0].id, "okinotori");
+  // interference is a different list: overhanging islets are not "interfering"
+  const I = C.interference(L); assert.notEqual(H.length, I.length); // two independent detections
+});
+
+test("overhang: island fully inside vs poking past each end", () => {
+  const f = { x: 0, y: 0, w: 10, h: 10 };
+  const mk = (id, y) => ({ ...sq(id, 0, y, 1), name: id });
+  const H = C.overhangs({ islands: [mk("in", -2), mk("s", -5.5), mk("n", 4.5)], frame: f });
+  assert.equal(H.length, 2); near(H.find((o) => o.id === "s").southKm, 0.5, 1e-12); near(H.find((o) => o.id === "n").northKm, 0.5, 1e-12);
+  assert.equal(C.overhangs({ islands: [mk("touch", -5)], frame: f }).length, 0); // touching the end is inside
+});
+
+test("fit candidate: no overhang at either end, north edge kept, canon values unchanged", () => {
+  const b = C.presetState(model, "adopted-fit"), a = C.presetState(model, "adopted"), L = C.layout(model, b);
+  assert.equal(C.overhangs(L).length, 0);
+  const north = L.frame.y + L.frame.h / 2, top = Math.max(...L.islands.filter((i) => i.group !== "bird").map((i) => i.bb.ty));
+  assert.ok(north - top >= 0 && north - top < 0.1, "north margin " + (north - top));
+  assert.ok(b.ship.centerYKm < a.ship.centerYKm); near(a.ship.centerYKm - b.ship.centerYKm, 0.648, 0.002);
+  for (const k of ["innerDiameterKm", "cylinderLengthKm", "centerXKm", "population", "gravityG"]) assert.equal(b.ship[k], a.ship[k], k);
+  const t = b.terrain; assert.equal(t.japanScaleDenominator, 40); assert.equal(t.ogasawaraCompressionPercent, 50); assert.equal(t.tsushimaSouthKm, 1); assert.ok(t.showOkinotori && t.showMinamitori);
+  assert.ok(t.ryukyuSpacingPercent < 90 && t.ryukyuSpacingPercent > 10);
+  // minimal: one percent less compression leaves a non-bird island over the south end
+  const c = C.cloneState(b); c.terrain.ryukyuSpacingPercent += 1;
+  assert.ok(C.overhangs(C.layout(model, c)).some((o) => o.group !== "bird" && o.southKm > 0));
+  // only 沖ノ鳥島 gets an individual north–south correction
+  assert.deepEqual(Object.keys(t.islandOffsetsNorthKm), ["okinotori"]);
+  // the adopted design object still exists unchanged after building the candidate
+  assert.equal(C.presetState(model, "adopted").terrain.ryukyuSpacingPercent, 90);
+});
+
+test("fit candidate: outlines rigid, order kept, no terrain interference in 南西諸島, symbols excluded", () => {
+  const a = C.presetState(model, "adopted"), b = C.presetState(model, "adopted-fit"), La = C.layout(model, a), Lb = C.layout(model, b);
+  for (const ia of La.islands) { // outline = pure translation
+    const ib = Lb.islands.find((q) => q.id === ia.id), dx = ib.ring[0][0] - ia.ring[0][0], dy = ib.ring[0][1] - ia.ring[0][1];
+    for (let k = 0; k < ia.ring.length; k += Math.max(1, (ia.ring.length / 6) | 0)) { near(ib.ring[k][0] - ia.ring[k][0], dx, 1e-9); near(ib.ring[k][1] - ia.ring[k][1], dy, 1e-9); }
+    assert.ok(Math.abs(dx) < 0.5, ia.id + " east–west move " + dx);
+  }
+  const order = (L) => L.islands.filter((i) => i.group === "ryu").sort((x, y) => y.c[1] - x.c[1] || x.id.localeCompare(y.id)).map((i) => i.id);
+  // north→south order of the non-ties is preserved (ties broken by id)
+  const oa = order(La), ob = order(Lb); const rank = new Map(ob.map((id, i) => [id, i]));
+  let inversions = 0; for (let i = 1; i < oa.length; i++) if (rank.get(oa[i - 1]) > rank.get(oa[i])) inversions++;
+  assert.ok(inversions <= 2, "order inversions " + inversions);
+  const I = C.interference(Lb, { only: (x, y) => x.group === "ryu" || y.group === "ryu" }); assert.equal(I.length, 0);
+  // main islands do not move relative to each other
+  const d = (L, id) => L.islands.find((i) => i.id === id).c; near(d(Lb, "honshu")[1] - d(Lb, "hokkaido")[1], d(La, "honshu")[1] - d(La, "hokkaido")[1], 1e-12);
+});
+
+test("individual north–south correction is stored separately and round-trips; raw coordinates untouched", () => {
+  const raw = JSON.stringify(model.islands.map((i) => i.ring)), b = C.presetState(model, "adopted-fit");
+  const j = JSON.parse(JSON.stringify(C.serializeState(b, model)));
+  assert.ok(j.terrain.islandOffsetsNorthKm.okinotori > 0);
+  const back = C.normalizeState(j, model); assert.deepEqual(back.terrain, b.terrain); assert.equal(back.ship.centerYKm, b.ship.centerYKm);
+  assert.equal(JSON.stringify(model.islands.map((i) => i.ring)), raw);
+  // 沖ノ鳥島 / 南鳥島 stay independently switchable on the candidate
+  const t = C.cloneState(b); t.terrain.showOkinotori = false; const ids = C.layout(model, t).islands.map((i) => i.id); assert.ok(!ids.includes("okinotori") && ids.includes("minamitori"));
+  assert.equal(C.overhangs(C.layout(model, t)).length, 0);
 });

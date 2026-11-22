@@ -62,12 +62,13 @@
       <button class="tg" data-view-toggle="prefNames">県名</button>
       <button class="tg" data-view-toggle="cities">都市</button>
       <button class="tg" data-view-toggle="interference">干渉面</button>
+      <button class="tg" data-view-toggle="overhang">はみ出し</button>
       <button class="tg" data-view-toggle="symbols">小島記号</button>
     </div>
   </section>
 
   <section class="controls">
-    <div class="row"><strong>南西諸島の重なり補正（東西のみ）</strong></div>
+    <div class="row"><strong>個別補正（南西諸島の重なりは東西のみ）</strong></div>
     <div class="buttons tight"><button id="fixRyukyu">重なりを自動解消</button><button id="clearOffsets">個別補正を消す</button></div>
     <small id="offsetInfo" class="muted"></small>
   </section>
@@ -95,6 +96,7 @@
 <div id="ask" hidden role="dialog" aria-modal="true"><div class="askBox"><p id="askMsg"></p><input id="askInput" hidden maxlength="60"><div class="buttons tight"><button id="askCancel">やめる</button><button id="askOk">OK</button></div></div></div>
 <script src="src/data.js"></script>
 <script src="src/adopted-offsets.js"></script>
+<script src="src/fit-candidate.js"></script>
 <script src="src/core.js"></script>
 <script src="src/mapdraw.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" defer></script>

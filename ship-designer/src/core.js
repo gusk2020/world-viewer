@@ -63,7 +63,7 @@
   // ------------------------------------------------------------------ design state
   function defaultTerrain() {
     return { japanScaleDenominator: 40, ryukyuSpacingPercent: 90, tsushimaSouthKm: 1, ogasawaraCompressionPercent: 50, showOkinotori: true, showMinamitori: true,
-      ogasawaraAnchor: "硫黄島", southIslandSharedSpacing: true, orientation: "true north toward bow", islandOffsetsKm: {} };
+      ogasawaraAnchor: "硫黄島", southIslandSharedSpacing: true, orientation: "true north toward bow", islandOffsetsKm: {}, islandOffsetsNorthKm: {} };
   }
   function cloneState(s) { return JSON.parse(JSON.stringify(s)); }
 
@@ -77,6 +77,8 @@
     const pickNum = (v, def, lo, hi) => (v === undefined || v === null || !Number.isFinite(Number(v)) ? def : clamp(Number(v), lo, hi));
     const offsets = {};
     if (t.islandOffsetsKm && typeof t.islandOffsetsKm === "object") for (const [k, v] of Object.entries(t.islandOffsetsKm)) if (Number.isFinite(Number(v)) && (!model || model.byId.has(k))) offsets[k] = Number(v);
+    const northOff = {};
+    if (t.islandOffsetsNorthKm && typeof t.islandOffsetsNorthKm === "object") for (const [k, v] of Object.entries(t.islandOffsetsNorthKm)) if (Number.isFinite(Number(v)) && (!model || model.byId.has(k))) northOff[k] = Number(v);
     return {
       schemaVersion: SCHEMA_VERSION,
       name: typeof s.name === "string" ? s.name : "名称未設定",
@@ -96,7 +98,7 @@
         ogasawaraCompressionPercent: Math.round(pickNum(t.ogasawaraCompressionPercent, 0, 0, 100)),
         showOkinotori: !!t.showOkinotori, showMinamitori: !!t.showMinamitori,
         ogasawaraAnchor: "硫黄島", southIslandSharedSpacing: true, orientation: "true north toward bow",
-        islandOffsetsKm: offsets,
+        islandOffsetsKm: offsets, islandOffsetsNorthKm: northOff,
       },
       sourcePreset: typeof s.sourcePreset === "string" ? s.sourcePreset : null,
     };
@@ -137,7 +139,8 @@
       if (yy > iwoY) yshift += (iwoY - yy) * terrain.ogasawaraCompressionPercent / 100;
     }
     const ox = (terrain.islandOffsetsKm && terrain.islandOffsetsKm[s.id]) || 0;
-    return { ox, oy: yshift / denom, denom };
+    const oyExtra = (terrain.islandOffsetsNorthKm && terrain.islandOffsetsNorthKm[s.id]) || 0; // 個別の南北補正（船体km、+北）。沖ノ鳥島などの例外用
+    return { ox, oy: yshift / denom + oyExtra, denom };
   }
   const shipPoint = (q, sh) => [q[0] / sh.denom + sh.ox, q[1] / sh.denom + sh.oy];
 
@@ -237,6 +240,17 @@
     return { state: st, moved: [...touched] };
   }
 
+  // ------------------------------------------------------------------ 船体南北端からのはみ出し（地形干渉とは別に検出）
+  /** Per island: how far (km) its outline pokes past the south / north end of the hull. Independent of interference. */
+  function overhangs(lay) {
+    const f = lay.frame, south = f.y - f.h / 2, north = f.y + f.h / 2, out = [];
+    for (const s of lay.islands) {
+      const so = Math.max(0, south - s.bb.by), no = Math.max(0, s.bb.ty - north);
+      if (so > 1e-9 || no > 1e-9) out.push({ id: s.id, name: s.name || s.id, group: s.group, southKm: so, northKm: no });
+    }
+    return out.sort((a, b) => Math.max(b.southKm, b.northKm) - Math.max(a.southKm, a.northKm));
+  }
+
   // ------------------------------------------------------------------ metrics
   function metrics(model, state, lay, inter) {
     const ph = physics(state.ship), f = lay.frame, south = f.y - f.h / 2, north = f.y + f.h / 2;
@@ -248,7 +262,7 @@
       physics: ph, landTotalKm2: landTotal, landInFrameKm2: landInFrame, overlapKm2: overlap, landNetKm2: landNet,
       seaKm2: Math.max(0, ph.areaKm2 - landNet), landShare: landNet / ph.areaKm2,
       densityPerLandKm2: landNet > 0 ? POPULATION / landNet : Infinity,
-      overhangNorthKm: Math.max(0, ymax - north), overhangSouthKm: Math.max(0, south - ymin), interferenceCount: inter.length,
+      overhangNorthKm: Math.max(0, ymax - north), overhangSouthKm: Math.max(0, south - ymin), interferenceCount: inter.length, overhangIslands: overhangs(lay),
     };
   }
 
@@ -278,6 +292,7 @@
   function presetList() {
     return [
       { id: "adopted", name: "★採用基準案｜6.0km × 51.0km・1/40" },
+      ...(root.SHIP_FIT_CANDIDATE ? [{ id: "adopted-fit", name: "候補｜南北収容補正案（採用基準案から派生）" }] : []),
       { id: "user-v9", name: "利用者調整 原値（2026-11-22 JSON）" },
       ...LEGACY.map((p) => ({ id: p.id, name: p.name })),
       { id: "v9-provisional", name: "v9 暫定決定｜7.2km × 60.8km" },
@@ -292,6 +307,12 @@
       s.ship.innerDiameterKm = 6.0; s.ship.cylinderLengthKm = 51.0; // 表示・初期設定のみ丸める。中心座標は原値のまま。
       s.terrain.islandOffsetsKm = Object.assign({}, ADOPTED_OFFSETS);
       s.name = "採用基準案"; s.sourcePreset = nm; s.migratedFrom = undefined; return s;
+    }
+    if (id === "adopted-fit") {
+      const F = root.SHIP_FIT_CANDIDATE, s = presetState(model, "adopted");
+      s.ship.centerYKm = F.centerYKm; s.terrain.ryukyuSpacingPercent = F.ryukyuSpacingPercent;
+      s.terrain.islandOffsetsNorthKm = Object.assign({}, F.islandOffsetsNorthKm); s.terrain.islandOffsetsKm = Object.assign({}, F.islandOffsetsKm || {});
+      s.name = "南北収容補正案（候補）"; s.sourcePreset = nm; return s; // 採用基準案そのものは変更しない
     }
     if (id === "user-v9") { const s = normalizeState(USER_V9_JSON, model); s.sourcePreset = nm; return s; }
     const t0 = { japanScaleDenominator: 3, ryukyuSpacingPercent: 100, tsushimaSouthKm: 0, ogasawaraCompressionPercent: 0, showOkinotori: false, showMinamitori: false };
@@ -313,7 +334,7 @@
     return [-r * Math.sin(th), -r * Math.cos(th), y - frame.y];
   }
 
-  const api = { G0, POPULATION, SCHEMA_VERSION, buildModel, defaultTerrain, normalizeState, serializeState, physics, layout, wrapX, interference, islandConflicts, resolveRyukyu, metrics,
+  const api = { G0, POPULATION, SCHEMA_VERSION, buildModel, defaultTerrain, normalizeState, serializeState, physics, layout, wrapX, interference, islandConflicts, resolveRyukyu, metrics, overhangs,
     presetList, presetState, landBounds, toCylinder, frameOf, USER_V9_JSON, ringArea, bandArea, pointInRing, pairOverlap, isVisible, cloneState };
   root.ShipCore = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
