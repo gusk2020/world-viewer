@@ -5,7 +5,8 @@
 ## 0. 置き場所の判断
 - 新規リポジトリ作成はこの環境の権限範囲外のため、world-viewer リポジトリ内の独立フォルダにした。world-viewer の既存ファイルは変更していない。
 - world-viewer の GitHub Pages は別ブランチを配信しており、このフォルダは Pages に載らない。酷道リポジトリは読み取りのみ。
-- スマホ試遊は claude.ai の Artifact（非公開URL）で提供。GitHub Pages で公開する場合は Pages 設定の変更（オーナー操作）が必要。
+- スマホ試遊は claude.ai の Artifact（非公開URL）で提供：https://claude.ai/artifact/LYcZHrCpfnVfrxEY3sVw6J （`python3 tools/make_artifact.py <out.html>` で1ファイル化して公開。更新は同じURLへ再公開）。
+- Artifact では confirm/prompt とファイル保存が動かないため、確認・改名は画面内ダイアログ、JSON出力はファイル保存を試みた上で必ずコピー欄にも表示する。GitHub Pages で公開する場合は Pages 設定の変更（オーナー操作）が必要。
 
 ## 1. 構成
 | ファイル | 役割 |

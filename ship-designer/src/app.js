@@ -215,7 +215,7 @@
     const r = C.resolveRyukyu(model, state); state = r.state; markCustom(); syncSteppers(); changed();
     $("feedback").textContent = r.moved.length ? `南西諸島 ${r.moved.length}島を東西に最小移動しました。` : "南西諸島に重なりはありません（補正なし）。";
   };
-  $("clearOffsets").onclick = () => { if (!Object.keys(state.terrain.islandOffsetsKm).length) return; if (!confirm("個別の東西補正をすべて消しますか？")) return; state.terrain.islandOffsetsKm = {}; changed({ custom: true }); };
+  $("clearOffsets").onclick = async () => { if (!Object.keys(state.terrain.islandOffsetsKm).length) return; if (!(await ask("個別の東西補正をすべて消しますか？"))) return; state.terrain.islandOffsetsKm = {}; changed({ custom: true }); };
 
   // ------------------------------------------------------------ save / load
   const STORE = "kasoku-ship-designer-v10-saves";
@@ -229,22 +229,39 @@
   }
   const snapshot = (name) => C.serializeState(Object.assign(C.cloneState(state), { name, createdAt: new Date().toISOString() }), model, { sourcePreset: presetId === "custom" ? `カスタム案（${customFrom || "手動"}）` : state.sourcePreset });
   function loadDesign(d, label) { state = C.normalizeState(d, model); presetId = "custom"; customFrom = label || d.name || "読込"; psel.value = "custom"; syncPresetLabel(); syncSteppers(); recompute(true); frameFit(); changed(); }
-  $("save").onclick = () => {
+  $("save").onclick = async () => {
     const name = $("saveName").value.trim(); if (!name) { $("feedback").textContent = "保存名を入力してください。"; return; }
     const i = stored.findIndex((s) => s.name === name);
-    if (i >= 0 && !confirm(`「${name}」は保存済みです。上書きしますか？`)) return;
+    if (i >= 0 && !(await ask(`「${name}」は保存済みです。上書きしますか？`, { ok: "上書きする" }))) return;
     const s = snapshot(name); if (i >= 0) stored[i] = s; else stored.push(s);
     if (persist()) { renderSaved(); $("saved").value = String(i >= 0 ? i : stored.length - 1); $("feedback").textContent = `「${name}」を保存しました。`; }
   };
   $("saved").addEventListener("change", () => { const i = $("saved").value; if (i === "" || !stored[+i]) return; try { loadDesign(stored[+i], stored[+i].name); $("saveName").value = stored[+i].name; $("feedback").textContent = `「${stored[+i].name}」を反映しました。`; } catch (e) { $("feedback").textContent = e.message; } });
-  $("renameSaved").onclick = () => {
+  $("renameSaved").onclick = async () => {
     const i = $("saved").value; if (i === "" || !stored[+i]) { $("feedback").textContent = "名前を変える案を選んでください。"; return; }
-    const nn = (prompt("新しい名前", stored[+i].name) || "").trim(); if (!nn || nn === stored[+i].name) return;
+    const nn = ((await ask("新しい名前", { input: stored[+i].name, ok: "変更" })) || "").trim(); if (!nn || nn === stored[+i].name) return;
     if (stored.some((s, k) => k !== +i && s.name === nn)) { $("feedback").textContent = "同じ名前の案があります。別の名前にしてください。"; return; }
     stored[+i].name = nn; if (persist()) { renderSaved(); $("saved").value = i; $("feedback").textContent = `名前を「${nn}」に変更しました。`; }
   };
-  $("deleteSaved").onclick = () => { const i = $("saved").value; if (i === "" || !stored[+i]) return; if (!confirm(`「${stored[+i].name}」を削除しますか？（出力済みJSONは残ります）`)) return; stored.splice(+i, 1); if (persist()) { renderSaved(); $("feedback").textContent = "削除しました。"; } };
-  function download(obj, filename) { const blob = new Blob([JSON.stringify(obj, null, 2)], { type: "application/json" }), url = URL.createObjectURL(blob), a = document.createElement("a"); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 3000); }
+  $("deleteSaved").onclick = async () => { const i = $("saved").value; if (i === "" || !stored[+i]) return; if (!(await ask(`「${stored[+i].name}」を削除しますか？（出力済みJSONは残ります）`, { ok: "削除する" }))) return; stored.splice(+i, 1); if (persist()) { renderSaved(); $("feedback").textContent = "削除しました。"; } };
+  // File save where the browser allows it; the JSON is always also shown with a copy button (some viewers block downloads).
+  function download(obj, filename) {
+    const text = JSON.stringify(obj, null, 2);
+    try { const blob = new Blob([text], { type: "application/json" }), url = URL.createObjectURL(blob), a = document.createElement("a"); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 3000); } catch (_) {}
+    $("jsonOut").value = text; $("jsonBox").hidden = false; $("jsonName").textContent = filename;
+  }
+  $("copyJson").onclick = async () => { try { await navigator.clipboard.writeText($("jsonOut").value); $("feedback").textContent = "JSONをコピーしました。"; } catch (_) { $("jsonOut").select(); $("feedback").textContent = "全選択しました。長押しでコピーしてください。"; } };
+  $("closeJson").onclick = () => { $("jsonBox").hidden = true; };
+  /** In-page confirm / prompt (native dialogs are unavailable in some viewers). Resolves true/false, or the text. */
+  function ask(message, o) {
+    o = o || {};
+    return new Promise((resolve) => {
+      $("askMsg").textContent = message; const inp = $("askInput"); inp.hidden = o.input === undefined; inp.value = o.input || "";
+      $("askOk").textContent = o.ok || "OK"; $("ask").hidden = false; (o.input === undefined ? $("askOk") : inp).focus();
+      const done = (v) => { $("ask").hidden = true; $("askOk").onclick = $("askCancel").onclick = null; resolve(v); };
+      $("askOk").onclick = () => done(o.input === undefined ? true : inp.value); $("askCancel").onclick = () => done(o.input === undefined ? false : null);
+    });
+  }
   const today = () => new Date().toISOString().slice(0, 10);
   $("export").onclick = () => { download(snapshot($("saveName").value.trim() || "名称未設定"), `kasoku-ship-${today()}.json`); $("feedback").textContent = "現在の案をJSONで出力しました。"; };
   $("exportAll").onclick = () => { download({ schema: "kasoku-ship-designs", schemaVersion: C.SCHEMA_VERSION, exportedAt: new Date().toISOString(), designs: stored, current: snapshot($("saveName").value.trim() || "現在の案") }, `kasoku-ship-all-${today()}.json`); $("feedback").textContent = `保存済み${stored.length}案と現在の案を出力しました。`; };

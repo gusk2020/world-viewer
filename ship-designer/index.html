@@ -79,6 +79,7 @@
     <select id="saved"></select>
     <div class="buttons tight"><button id="renameSaved">名前変更</button><button id="deleteSaved">削除</button><label class="file">JSON読込<input id="load" type="file" accept="application/json,.json"></label></div>
     <small id="feedback" class="muted" aria-live="polite"></small>
+    <div id="jsonBox" hidden><div class="row"><small id="jsonName" class="muted"></small><span class="seg"><button id="copyJson">コピー</button><button id="closeJson">閉じる</button></span></div><textarea id="jsonOut" rows="6" readonly></textarea></div>
   </section>
 
   <details class="controls" id="prefDetails">
@@ -91,6 +92,7 @@
     <div id="sources" class="muted"></div>
   </details>
 </main>
+<div id="ask" hidden role="dialog" aria-modal="true"><div class="askBox"><p id="askMsg"></p><input id="askInput" hidden maxlength="60"><div class="buttons tight"><button id="askCancel">やめる</button><button id="askOk">OK</button></div></div></div>
 <script src="src/data.js"></script>
 <script src="src/adopted-offsets.js"></script>
 <script src="src/core.js"></script>

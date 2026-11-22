@@ -34,3 +34,7 @@ input[type=range]{width:100%;accent-color:#7fd3e6}
 .file input{position:absolute;inset:0;opacity:0}
 table{width:100%;border-collapse:collapse;font-size:12px}td,th{border-bottom:1px solid #24414f;padding:3px 4px;text-align:right}td:first-child,th:first-child{text-align:left}
 summary{cursor:pointer;padding:4px 0}
+textarea{width:100%;background:#12324a;color:var(--txt);border:1px solid #5d8193;border-radius:9px;font:11px ui-monospace,monospace}
+#ask{position:fixed;inset:0;z-index:50;background:#000a;display:flex;align-items:center;justify-content:center;padding:16px}
+.askBox{background:#10293b;border:1px solid #7b9eac;border-radius:12px;padding:14px;width:min(420px,100%)}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #c9efff;outline-offset:2px}

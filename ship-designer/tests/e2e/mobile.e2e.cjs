@@ -21,7 +21,7 @@ async function pinch(cdp, c, d0, d1, steps = 8) {
 (async () => {
   const { browser, context, page, errors } = await open({ context: { acceptDownloads: true } });
   const cdp = await context.newCDPSession(page);
-  page.on("dialog", (d) => d.accept(d.type() === "prompt" ? "改名テスト" : undefined));
+  const okAsk = async (text) => { await page.waitForSelector("#ask:not([hidden])"); if (text !== undefined) await page.fill("#askInput", text); await page.click("#askOk"); };
 
   await step("起動時は採用基準案（6.00km × 51.0km、3G、密度12,483人/km²）", async () => {
     const s = await S(page); assert.equal(s.ship.innerDiameterKm, 6); assert.equal(s.ship.cylinderLengthKm, 51); assert.equal(s.ship.centerXKm, -7.726051000488052);
@@ -90,9 +90,9 @@ async function pinch(cdp, c, d0, d1, steps = 8) {
   await step("名前付き保存・上書き確認・名前変更・再読込後も残る", async () => {
     await page.selectOption("#preset", "adopted");
     await page.fill("#saveName", "テスト案A"); await page.click("#save");
-    await page.fill("#saveName", "テスト案A"); await page.click("#save"); // overwrite → confirm (accepted)
+    await page.fill("#saveName", "テスト案A"); await page.click("#save"); await okAsk(); // overwrite → in-page confirm
     let n = await page.evaluate(() => JSON.parse(localStorage.getItem("kasoku-ship-designer-v10-saves")).length); assert.equal(n, 1);
-    await page.selectOption("#saved", "0"); await page.click("#renameSaved");
+    await page.selectOption("#saved", "0"); await page.click("#renameSaved"); await okAsk("改名テスト"); await page.waitForTimeout(100);
     await page.reload(); await page.waitForFunction(() => window.ShipApp && ShipApp.metrics);
     const saves = await page.evaluate(() => JSON.parse(localStorage.getItem("kasoku-ship-designer-v10-saves")));
     assert.equal(saves[0].name, "改名テスト"); assert.equal(saves[0].ship.centerXKm, -7.726051000488052); assert.equal(saves[0].schemaVersion, 10);
@@ -102,6 +102,7 @@ async function pinch(cdp, c, d0, d1, steps = 8) {
     const [dl] = await Promise.all([page.waitForEvent("download"), page.click("#export")]);
     const j = JSON.parse(fs.readFileSync(await dl.path(), "utf8"));
     assert.equal(j.ship.innerDiameterKm, 6); assert.equal(j.terrain.japanScaleDenominator, 40); assert.ok(Math.abs(j.gravity.rimSpeedMs - 297.0856) < 1e-3); assert.ok(j.geoData && j.terrain.islandOffsetsKm);
+    assert.deepEqual(JSON.parse(await page.inputValue("#jsonOut")), j); // the copy box shows the same JSON
   });
   await step("旧v9 JSON（利用者の保存ファイル）を読み込める", async () => {
     const f = path.join(os.tmpdir(), "v9-test.json");
