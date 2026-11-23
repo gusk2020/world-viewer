@@ -6,14 +6,9 @@ small,.muted{color:var(--mut);font-size:12px;display:block;margin:3px 0}
 html,body{height:100%}
 body{display:flex;flex-direction:column;height:100dvh;overflow:hidden;padding:0 6px}
 header#top{flex:none;padding:3px 4px 1px}h1{font-size:13px;margin:0;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-nav#views{flex:none;display:grid;grid-template-columns:repeat(4,1fr);gap:3px;padding:2px 0 3px}
-nav#views button{min-height:32px;padding:3px 2px;font-size:12.5px;border-radius:8px}
 #panel{position:relative;flex:1 1 auto;min-height:150px;background:var(--panel);border:2px solid var(--line);border-radius:10px;overflow:hidden;touch-action:none}
 #panel[data-mode="cylinder"]{border-color:#e8c26a}#panel[data-mode="japan"]{border-color:#5cc9e8}
-#mapBtns{flex:none;display:flex;gap:4px;padding:3px 0 2px}#mapBtns button{flex:1 1 0;min-height:30px;padding:2px 3px;font-size:12px;border-radius:8px}
-#modeBar{flex:none;display:grid;grid-template-columns:1fr 1.3fr 1.3fr;gap:5px;padding:2px 0 4px;position:sticky;bottom:0;z-index:5}
-#modeBar button{min-height:44px;padding:4px 4px;font-size:14px;font-weight:600;border-radius:10px}
-#btnEdit[aria-expanded="true"]{background:#7a5a1d;border-color:#ffdc97}
+
 #modeCylinder[aria-pressed="true"]{background:#8a6a1d;border-color:#ffdc97}#modeJapan[aria-pressed="true"]{background:#1f7f98;border-color:#bff0ff}
 #editor{flex:0 0 auto;display:flex;flex-direction:column;height:clamp(230px,40dvh,380px);border-top:1px solid #2c4b5e;padding-bottom:max(4px,env(safe-area-inset-bottom,0px))}
 #tabs{flex:none;display:grid;grid-template-columns:repeat(5,1fr);gap:3px;padding:3px 0}
@@ -58,3 +53,29 @@ textarea{width:100%;background:#12324a;color:var(--txt);border:1px solid #5d8193
 .askBox{background:#10293b;border:1px solid #7b9eac;border-radius:12px;padding:14px;width:min(420px,100%)}
 button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #c9efff;outline-offset:2px}
 #section2d{max-width:100%;border-radius:10px;display:block;margin:6px 0}
+
+/* ---- v13: 6ボタン（2段×3）・スライダー・誤操作防止・3D操作器 ---- */
+body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+input,textarea,select{-webkit-user-select:text;user-select:text}
+button{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:manipulation}
+#ctl{flex:none;display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:4px 0 3px;position:sticky;bottom:0;z-index:5}
+#ctl button{min-height:40px;padding:2px 3px;font-size:13.5px;font-weight:600;border-radius:9px;white-space:nowrap}
+#btnView[aria-pressed="true"]{background:#2c6fb0;border-color:#bfe0ff}
+#btnEdit[aria-expanded="true"]{background:#7a5a1d;border-color:#ffdc97}
+#modeCylinder[aria-pressed="true"]{background:#8a6a1d;border-color:#ffdc97}#modeJapan[aria-pressed="true"]{background:#1f7f98;border-color:#bff0ff}
+#gizmoBox{position:absolute;left:6px;bottom:6px;width:112px;height:112px;z-index:6}
+#gizmo{width:112px;height:112px;display:block;touch-action:none;border-radius:50%}
+#btnInOut{position:absolute;right:-4px;top:-4px;width:34px;height:34px;min-height:34px;padding:0;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#10293bcc}
+#btnInOut[aria-pressed="true"]{background:#2c6fb0}
+.stepper{display:grid;grid-template-columns:34px 1fr 34px;gap:6px;align-items:center;margin:0 0 6px}
+.stepper button{min-height:30px;height:30px;width:34px;padding:0;display:flex;align-items:center;justify-content:center;border-radius:8px}
+.stepper button svg{pointer-events:none}
+.stepper input[type=range]{height:22px;margin:0;touch-action:pan-y;pointer-events:none;-webkit-appearance:none;appearance:none;background:transparent}
+.stepper input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:3px;background:#3a6a82}
+.stepper input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:24px;height:24px;margin-top:-10px;border-radius:50%;background:#7fd3e6;border:2px solid #0b2538;pointer-events:auto;touch-action:pan-y}
+.stepper input[type=range]::-moz-range-track{height:4px;border-radius:3px;background:#3a6a82}
+.stepper input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:#7fd3e6;border:2px solid #0b2538;pointer-events:auto}
+.row .stepnote{font-size:10.5px;color:var(--mut);margin-left:6px;font-weight:400}
+.row label{font-size:13px}
+#saveDlg{position:fixed;inset:0;z-index:55;background:#000a;display:flex;align-items:center;justify-content:center;padding:16px}.dl{display:block;font-size:12px;color:var(--mut);margin:6px 0 2px}
+#ask{white-space:pre-line}

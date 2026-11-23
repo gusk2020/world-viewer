@@ -162,7 +162,7 @@
     return { ok: inside && minClear >= COAST_CLEARANCE_KM, inside, minClearanceKm: minClear };
   }
   /** 船体座標(x,y)の地面の高さ（船内m）。島ごとの剛体移動の逆変換で元の標高グリッドを引く。周回コピーも見る。 */
-  function makeShipSampler(core, lay, grids, model, layerIn) {
+  function makeShipSampler(core, lay, grids, model, layerIn, realUnits) {
     const f = lay.frame, w = f.w, left = f.x - w / 2, layer = normalizeLayer(layerIn), fc = model ? model.toKm(FUJI.lon, FUJI.lat) : null, a0 = 0;
     // 富士山頂は格子(2.5km)の中心に無いので、頂上付近は解析式で直接引く（山頂が正確に summit になる）
     const fujiAt = (q) => { const dx = q[0] - fc[0], dy = q[1] - fc[1], d = Math.hypot(dx, dy); if (d >= FUJI.baseRadiusKm * 1.25) return 0; const th = Math.atan2(dy, dx) - a0, R = FUJI.baseRadiusKm * (1 + 0.1 * Math.sin(3 * th + 1) + 0.06 * Math.sin(5 * th + 2)); return d < R ? 250 + (layer.fujiSummitM - 250) * Math.pow(1 - d / R, 1.5) : 0; };
@@ -172,11 +172,28 @@
       for (const { i, sh, g } of items) {
         if (y < i.bb.by - 0.01 || y > i.bb.ty + 0.01) continue;
         const k0 = Math.ceil((i.bb.lx - 0.01 - xw) / w), k1 = Math.floor((i.bb.rx + 0.01 - xw) / w);
-        for (let k = k0; k <= k1; k++) { const q = core.unshipPoint([xw + k * w, y], sh); let hgt = gridHeight(g, q[0], q[1]); if (fc && i.id === "honshu" && Number.isFinite(hgt)) hgt = Math.max(hgt, fujiAt(q)); const hs = (hgt * VERTICAL_FACTOR * layer.globalScale) / sh.denom; if (hs > best) best = hs; }
+        for (let k = k0; k <= k1; k++) { const q = core.unshipPoint([xw + k * w, y], sh); let hgt = gridHeight(g, q[0], q[1]); if (fc && i.id === "honshu" && Number.isFinite(hgt)) hgt = Math.max(hgt, fujiAt(q)); const hs = realUnits ? hgt : (hgt * VERTICAL_FACTOR * layer.globalScale) / sh.denom; if (hs > best) best = hs; }
       }
       return best;
     };
   }
-  const api = { VERTICAL_FACTOR, makeShipSampler, FUJI, DEFAULT_LAYER, LAYER_LIMITS, decodeDem, sampleDem, suggestRidge, fujiShape, normalizeLayer, buildGrids, gridHeight, checkFuji, fbm };
+  // ---- 河川：酷道と同じく標高から作る（priority-flood で窪地を埋め、流れ込む面積が閾値以上のセルを川にする。主要 2200km²・支流 550km²）----
+  const RIVER_MAJOR_KM2 = 2200, RIVER_MINOR_KM2 = 550;
+  function buildRivers(g) {
+    const { nx, ny, cell, land, h, x0, y0 } = g, N = nx * ny, N8 = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]];
+    const recv = new Int32Array(N).fill(-2), filled = new Float32Array(N), seen = new Uint8Array(N), order = [];
+    const hk = [], hv = []; // 最小ヒープ
+    const push = (k, v) => { hk.push(k); hv.push(v); let i = hk.length - 1; while (i > 0) { const p = (i - 1) >> 1; if (hk[p] <= hk[i]) break; [hk[p], hk[i]] = [hk[i], hk[p]]; [hv[p], hv[i]] = [hv[i], hv[p]]; i = p; } };
+    const pop = () => { const v = hv[0], lk = hk.pop(), lv = hv.pop(); if (hk.length) { hk[0] = lk; hv[0] = lv; let i = 0; for (;;) { const l = 2 * i + 1, r = l + 1; let m = i; if (l < hk.length && hk[l] < hk[m]) m = l; if (r < hk.length && hk[r] < hk[m]) m = r; if (m === i) break; [hk[m], hk[i]] = [hk[i], hk[m]]; [hv[m], hv[i]] = [hv[i], hv[m]]; i = m; } } return v; };
+    for (let k = 0; k < N; k++) if (land[k]) { const i = k % nx, j = (k / nx) | 0; let coastal = false; for (const [di, dj] of N8) { const a = i + di, b = j + dj; if (a < 0 || b < 0 || a >= nx || b >= ny || !land[b * nx + a]) { coastal = true; break; } } if (coastal) { seen[k] = 1; recv[k] = -1; filled[k] = h[k]; push(h[k], k); } }
+    while (hk.length) { const c = pop(); order.push(c); const i = c % nx, j = (c / nx) | 0; for (const [di, dj] of N8) { const a = i + di, b = j + dj; if (a < 0 || b < 0 || a >= nx || b >= ny) continue; const n = b * nx + a; if (!land[n] || seen[n]) continue; seen[n] = 1; recv[n] = c; filled[n] = Math.max(h[n], filled[c] + 1e-3); push(filled[n], n); } }
+    const acc = new Float32Array(N); for (const k of order) acc[k] = 1;
+    for (let t = order.length - 1; t >= 0; t--) { const c = order[t], r = recv[c]; if (r >= 0) acc[r] += acc[c]; }
+    const A = cell * cell, T1 = Math.max(8, Math.round(RIVER_MAJOR_KM2 / A)), T2 = Math.max(4, Math.round(RIVER_MINOR_KM2 / A)), segs = [];
+    const cx = (k) => x0 + ((k % nx) + 0.5) * cell, cy = (k) => y0 + (((k / nx) | 0) + 0.5) * cell;
+    for (const c of order) if (acc[c] >= T2) { const r = recv[c]; const lvl = acc[c] >= T1 ? 2 : 1; if (r >= 0) segs.push([cx(c), cy(c), cx(r), cy(r), lvl]); else { const i = c % nx, j = (c / nx) | 0; for (const [di, dj] of N8) { const a = i + di, b = j + dj; if (a < 0 || b < 0 || a >= nx || b >= ny || !land[b * nx + a]) { segs.push([cx(c), cy(c), cx(c) + di * cell * 0.6, cy(c) + dj * cell * 0.6, lvl]); break; } } } }
+    return segs; // [x1,y1,x2,y2,level] in source km
+  }
+  const api = { RIVER_MAJOR_KM2, RIVER_MINOR_KM2, buildRivers, VERTICAL_FACTOR, makeShipSampler, FUJI, DEFAULT_LAYER, LAYER_LIMITS, decodeDem, sampleDem, suggestRidge, fujiShape, normalizeLayer, buildGrids, gridHeight, checkFuji, fbm };
   root.ShipTerrain = api; if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof window !== "undefined" ? window : globalThis);

@@ -2,15 +2,16 @@
 (function () {
   "use strict";
   const C = window.ShipCore, $ = (id) => document.getElementById(id);
-  const model = C.buildModel(window.SHIP_GEO);
+  const model = C.buildModel(window.SHIP_GEO, window.SHIP_EXTRA);
   const canvas = $("map"), ctx = canvas.getContext("2d");
   const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
   const fmt = (n, d) => (Math.abs(n) >= 100 ? n.toFixed(d === undefined ? 0 : Math.min(d, 1)) : Math.abs(n) >= 10 ? n.toFixed(d === undefined ? 1 : d) : n.toFixed(d === undefined ? 2 : d));
 
-  let state = C.presetState(model, "adopted");
-  let presetId = "adopted", customFrom = null; // customFrom: preset name the manual edits started from
+  let state = C.presetState(model, "current");
+  let presetId = "current", customFrom = null; // customFrom: preset name the manual edits started from
   let editOpen = false, tab = "view", tapInfo = null;
-  let view = { ridges: false, borders: true, cities: true, interference: true, symbols: true, overhang: true };
+  // 表示レイヤーは船体案と一緒に保存・復元されるので state.layers を直接読み書きする
+  const view = new Proxy({}, { get: (_, k) => state.layers[k], set: (_, k, v) => { state.layers[k] = v; return true; } });
   let mode = "cylinder", current = "2d";
   let camera = { x: 0, y: 0, s: 1 };
   let lay = null, inter = [], interKey = "", met = null, dirty3d = true;
@@ -31,10 +32,9 @@
     if (opts.custom) markCustom();
     recompute(!opts.fast);
     if (opts.fast) { clearTimeout(interTimer); interTimer = setTimeout(() => { recompute(true); render(); }, 160); }
-    render(); if (current !== "2d") syncText();
+    render(); syncText(); scheduleTerrain();
     listeners.forEach((f) => f());
   }
-  function markCustom() { if (presetId !== "custom") { customFrom = (C.presetList().find((p) => p.id === presetId) || {}).name || customFrom; presetId = "custom"; state.sourcePreset = null; } $("preset").value = "custom"; syncPresetLabel(); }
 
   // ------------------------------------------------------------ 2D drawing
   function p2s(x, y) { return { x: canvas.clientWidth / 2 + (x - camera.x) * camera.s, y: canvas.clientHeight / 2 - (y - camera.y) * camera.s }; }
@@ -67,9 +67,11 @@
     // inside the hull: folded onto the circumference
     ctx.fillStyle = ShipDraw.COLORS.sea; ctx.fillRect(r.x, r.y, r.w, r.h);
     ctx.save(); ctx.beginPath(); ctx.rect(r.x, r.y, r.w, r.h); ctx.clip();
-    const showNames = camera.s > 9;
-    ShipDraw.paintMap(ctx, lay, inter, T, { low: f.x - f.w / 2, high: f.x + f.w / 2, south: Math.max(y0, f.y - f.h / 2), north: Math.min(y1, f.y + f.h / 2) },
-      { borders: view.borders, cities: view.cities, cityNames: view.cities && showNames, interference: view.interference && interKey === stateKey(), symbols: view.symbols, minOverlapPx: 2 });
+    const tOk = terrainReady(); if (tOk) { ctx.imageSmoothingEnabled = true; ctx.drawImage(terrainImg.canvas, r.x, r.y, r.w, r.h); } else scheduleTerrain();
+    const winH = { low: f.x - f.w / 2, high: f.x + f.w / 2, south: Math.max(y0, f.y - f.h / 2), north: Math.min(y1, f.y + f.h / 2) };
+    ShipDraw.paintMap(ctx, lay, inter, T, winH,
+      { landFill: !tOk, borders: view.borders, cities: view.cities, cityNames: view.cities && !view.names && camera.s > 9, interference: view.interference && interKey === stateKey(), symbols: view.symbols, minOverlapPx: 2 });
+    ShipLayers.paint(ctx, lay, layerData(), T, winH, layerOpts(11));
     ctx.setLineDash([3, 4]); ctx.strokeStyle = "#a5d4e155"; ctx.lineWidth = 0.7;
     for (let x = Math.ceil((f.x - f.w / 2) / st) * st; x <= f.x + f.w / 2; x += st) { const u = p2s(x, 0); ctx.beginPath(); ctx.moveTo(u.x, r.y); ctx.lineTo(u.x, r.y + r.h); ctx.stroke(); }
     ctx.setLineDash([]); ctx.restore();
@@ -79,16 +81,12 @@
     ctx.setLineDash([6, 5]); ctx.strokeStyle = "#ffffffaa"; ctx.lineWidth = 1.2;
     for (const X of [r.x, r.x + r.w]) { ctx.beginPath(); ctx.moveTo(X, r.y); ctx.lineTo(X, r.y + r.h); ctx.stroke(); }
     ctx.setLineDash([]);
-    if (mode === "cylinder") for (const [id, x, y] of handles(r)) {
-      ctx.beginPath(); ctx.fillStyle = id.length === 2 ? "#ffdc97" : "#a1e6f3";
-      if (id.length === 2) ctx.arc(x, y, 9, 0, Math.PI * 2); else { ctx.moveTo(x, y - 10); ctx.lineTo(x + 10, y); ctx.lineTo(x, y + 10); ctx.lineTo(x - 10, y); ctx.closePath(); }
-      ctx.fill(); ctx.strokeStyle = "#123e55"; ctx.lineWidth = 1; ctx.stroke();
-    }
+    // 四隅・辺中央のつまみは常時は描かない（タッチ判定だけ残す）。使用中のつまみだけ微弱に強調する。
+    if (gesture && gesture.type && gesture.type.length <= 2 && gesture.type !== "move" && gesture.type !== "pan") { const h = handles(r).find((q) => q[0] === gesture.type); if (h) { ctx.beginPath(); ctx.arc(h[1], h[2], 16, 0, Math.PI * 2); ctx.fillStyle = "rgba(255,220,151,0.22)"; ctx.fill(); ctx.strokeStyle = "rgba(255,236,190,0.6)"; ctx.lineWidth = 1.5; ctx.stroke(); } }
     ctx.fillStyle = "#f3f4eb"; ctx.font = "12px system-ui"; ctx.textAlign = "center";
     ctx.fillText("↑ 船首・北", r.x + r.w / 2, Math.max(16, r.y - 14)); ctx.fillText("↓ 船尾・南", r.x + r.w / 2, Math.min(h - 6, r.y + r.h + 18));
     ctx.font = "10px system-ui"; ctx.fillStyle = "#ffffffbb";
     if (r.h > 120) { ctx.save(); ctx.translate(r.x - 4, r.y + r.h / 2); ctx.rotate(-Math.PI / 2); ctx.fillText("西端＝東端に接続", 0, 0); ctx.restore(); }
-    syncText();
   }
   function handles(r) { return [["lt", r.x, r.y], ["t", r.x + r.w / 2, r.y], ["rt", r.x + r.w, r.y], ["r", r.x + r.w, r.y + r.h / 2], ["rb", r.x + r.w, r.y + r.h], ["b", r.x + r.w / 2, r.y + r.h], ["lb", r.x, r.y + r.h], ["l", r.x, r.y + r.h / 2]]; }
 
@@ -118,6 +116,7 @@
     for (const key of ["sw", "ne"]) { const pts = T[key], k = Math.round((wx - pts[0][0]) / W); for (let i = 0; i + 1 < pts.length; i++) { const a = [pts[i][0] + k * W, pts[i][1]], b = [pts[i + 1][0] + k * W, pts[i + 1][1]], dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy; let t = l2 ? ((wx - a[0]) * dx + (wy - a[1]) * dy) / l2 : 0; t = Math.max(0, Math.min(1, t)); const d = px(Math.hypot(a[0] + t * dx - wx, a[1] + t * dy - wy)); if (d < bd) { bd = d; best = key; } } }
     return best;
   }
+  function terrainSelSync() { setTerrainSel(terrainSel); }
   const SEL_NAME = { fuji: "富士山", sw: "南西の山脈", ne: "北東の山脈" };
   function setTerrainSel(k) {
     terrainSel = k; for (const b of document.querySelectorAll("[data-sel]")) b.setAttribute("aria-pressed", String(b.dataset.sel === k));
@@ -153,9 +152,13 @@
       `<small class="muted">はみ出し（距離の大きい順）</small><table>${O.map((o) => row(o.name, o.southKm > 1e-9 ? "南" : "北", fmt(Math.max(o.southKm, o.northKm)) + " km")).join("") || row("なし", "", "")}${more(oh.length, 14)}</table>`;
     const ew = Object.entries(t.islandOffsetsKm), ns = Object.entries(t.islandOffsetsNorthKm || {});
     $("offsetInfo").textContent = (ew.length ? "個別東西補正：" + ew.map(([id, v]) => `${nm(id)} ${v > 0 ? "東" : "西"}へ${Math.abs(v * 1000).toFixed(0)}m`).join("、") : "個別東西補正なし。") + (ns.length ? " 個別南北補正：" + ns.map(([id, v]) => `${nm(id)} ${v > 0 ? "北" : "南"}へ${Math.abs(v).toFixed(2)}km`).join("、") : " 個別南北補正なし。") + "（原島座標は保持）";
+    const pp = pops(), nt = network(), top = pp.munis.slice().sort((a, b) => b.pop - a.pop).slice(0, 8), pf = [...pp.prefFrame].sort((a, b) => b[1] - a[1]).slice(0, 5), pn = (id) => model.prefectures.find((q) => q.id === id).name;
+    $("popInfo").innerHTML = `<div><b>${pp.source === "provisional" ? "暫定配分" : pp.source === "imported" ? "読み込んだ県別人口枠" : "一部のみ読込（残りは暫定）"}</b>：${pp.params.status}</div><div>県別枠の合計 ${(pp.frameTotal / 10000).toLocaleString(undefined, { maximumFractionDigits: 0 })}万人／船体人口 ${(state.ship.population / 10000).toLocaleString()}万人／差 ${(pp.diff / 10000).toFixed(1)}万人（比例補正はしません）</div><div>県内配分＝市町村の面積×可住面積比×種別係数×拠点都市ブースト（暫定値）。確定設定の県別人口枠のJSONを読み込むと置き換わります。</div>`;
+    $("popTop").innerHTML = `<table>${pf.map(([id, v]) => `<tr><td>${pn(id)}</td><td></td><td>${(v / 10000).toFixed(0)}万人</td></tr>`).join("")}${top.map((m) => `<tr><td>${m.n}</td><td>${pn(m.p)}</td><td>${(m.pop / 10000).toFixed(0)}万人</td></tr>`).join("")}</table>`;
+    { const g = ShipGrid.convert(t.japanScaleDenominator), fz = ShipGrid.pointData(state.ship, t.heightLayer.fujiSummitM * 10 / t.japanScaleDenominator * t.heightLayer.globalScale); $("gridInfo").innerHTML = `酷道の最小マス＝地形5km（標高・河川・府県・都市）／内部メッシュ3km／標高元データ約9.8km／面積の単位0.5km²（寸法ではない）。1/${t.japanScaleDenominator}では 5km＝${g.terrainCellShipM.toFixed(0)}m、3km＝${g.demSplatStepShipM.toFixed(0)}m。光・昼夜・季節・雲・風・雨・雪は格子単位で後から設定できる拡張点を保持（寸法・制御則は未確定）。<br>富士山頂（共通点データ）：高さ${fz.shipHeightM.toFixed(0)}m・回転軸から${fz.radiusM.toFixed(0)}m・局所重力${fz.localGravityG.toFixed(3)}G・軸照明まで${fz.light.distanceFromAxisSurfaceM.toFixed(0)}m。`; }
+    $("netInfo").innerHTML = `鉄道（リニア）：${nt.stats.railEdges}区間・実距離${nt.stats.railKm.toFixed(0)}km（船内 ${(nt.stats.railKm / t.japanScaleDenominator).toFixed(1)}km）／道路：${nt.stats.roadEdges}区間（幹線 ${nt.stats.trunkKm.toFixed(0)}km・地方 ${nt.stats.localKm.toFixed(0)}km）／拠点 ${nt.stats.hubs}（県庁＋大都市）。人口配分を変えると自動で再設計されます。`;
     $("legacyNote").textContent = t.ogasawaraCompressionPercent > 0 ? `旧・小笠原追加圧縮 ${t.ogasawaraCompressionPercent}%（硫黄島基準）は保存データの互換のため保持。伊豆・小笠原の島列圧縮が0%の間だけ適用され、島列圧縮を使うと置き換わります（二重圧縮なし）。` : "";
   }
-  function syncPresetLabel() { $("presetState").textContent = presetId === "custom" ? `カスタム案${customFrom ? "（" + customFrom + "から変更）" : ""}` : "選択案のまま"; }
 
   // ------------------------------------------------------------ camera
   function frameFit() { const f = lay.frame; camera.x = f.x; camera.y = f.y; camera.s = clamp(Math.min((canvas.clientWidth - 75) / f.w, (canvas.clientHeight - 80) / f.h), 0.0005, 3000); render(); }
@@ -221,27 +224,28 @@
   // ------------------------------------------------------------ steppers (±1 and long-press repeat)
   const popFmt = (v) => (v >= 10000 ? (v / 10000).toLocaleString() + "万人" : v + "人");
   const STEPPERS = [
-    { id: "diameter", grp: "hull", label: "居住シリンダー内径 D", get: () => state.ship.innerDiameterKm, set: (v) => { state.ship.innerDiameterKm = v; }, min: 0.1, max: 30, step: 0.01, fmt: (v) => v.toFixed(2) + " km" },
-    { id: "length", grp: "hull", label: "居住シリンダー長 L", get: () => state.ship.cylinderLengthKm, set: (v) => { state.ship.cylinderLengthKm = v; }, min: 0.5, max: 300, step: 0.1, fmt: (v) => v.toFixed(2) + " km" },
-    { id: "axis", grp: "hull", label: "中心軸の直径（非回転）", get: () => state.ship.axisDiameterM, set: (v) => { state.ship.axisDiameterM = v; }, min: 10, max: 1000, step: 10, fmt: (v) => v + " m（半径 " + v / 2 + " m）" },
-    { id: "population", grp: "hull", label: "人口", get: () => state.ship.population, set: (v) => { state.ship.population = v; }, min: 100000, max: 100000000, step: 100000, fmt: popFmt },
-    { id: "scale", grp: "common", label: "日本列島の縮尺（分母）", get: () => state.terrain.japanScaleDenominator, set: (v) => { state.terrain.japanScaleDenominator = Math.round(v); }, min: 3, max: 1000, step: 1, fmt: (v) => "1/" + v },
-    { id: "tsushima", grp: "tsushima", label: "対馬を南へ（船体km）", get: () => state.terrain.tsushimaSouthKm, set: (v) => { state.terrain.tsushimaSouthKm = +v.toFixed(2); }, min: 0, max: 25, step: 0.1, fmt: (v) => v.toFixed(1) + " km" },
-    { id: "island", grp: "kago", label: "琉球・小笠原 共通南北間隔", get: () => state.terrain.ryukyuSpacingPercent, set: (v) => { state.terrain.ryukyuSpacingPercent = Math.round(v); }, min: 10, max: 100, step: 1, fmt: (v) => v + "%" },
+    { id: "diameter", grp: "hull", label: "居住シリンダー内径 D", get: () => state.ship.innerDiameterKm, set: (v) => { state.ship.innerDiameterKm = v; }, min: 0.5, max: 30, step: 0.1, note: "0.1km刻み", fmt: (v) => v.toFixed(1) + " km" },
+    { id: "length", grp: "hull", label: "居住シリンダー長 L", get: () => state.ship.cylinderLengthKm, set: (v) => { state.ship.cylinderLengthKm = v; }, min: 0.5, max: 300, step: 0.1, note: "0.1km刻み", fmt: (v) => v.toFixed(1) + " km" },
+    { id: "axis", grp: "hull", label: "中心軸の直径（非回転）", get: () => state.ship.axisDiameterM, set: (v) => { state.ship.axisDiameterM = v; }, min: 10, max: 1000, step: 10, note: "10m刻み", fmt: (v) => v + " m（半径 " + v / 2 + " m）" },
+    { id: "population", grp: "hull", label: "人口", get: () => state.ship.population, set: (v) => { state.ship.population = v; }, min: 100000, max: 100000000, step: 100000, note: "10万人刻み", fmt: popFmt },
+    { id: "scale", grp: "common", label: "日本列島の縮尺（分母）", get: () => state.terrain.japanScaleDenominator, set: (v) => { state.terrain.japanScaleDenominator = Math.round(v); }, min: 3, max: 1000, step: 1, note: "分母を1刻み", fmt: (v) => "1/" + v },
+    { id: "tsushima", grp: "tsushima", label: "対馬を南へ（船体km）", get: () => state.terrain.tsushimaSouthKm, set: (v) => { state.terrain.tsushimaSouthKm = +v.toFixed(2); }, min: 0, max: 25, step: 0.1, note: "0.1km刻み", fmt: (v) => v.toFixed(1) + " km" },
+    { id: "island", grp: "kago", label: "琉球・小笠原 共通南北間隔", get: () => state.terrain.ryukyuSpacingPercent, set: (v) => { state.terrain.ryukyuSpacingPercent = Math.round(v); }, min: 10, max: 100, step: 1, note: "1%刻み", fmt: (v) => v + "%" },
   ];
   const ROT_KEYS = ["izu", "ryukyu", "northern"];
-  const ROT_STEPPERS = ROT_KEYS.map((k) => ({ id: "rot-" + k, grp: { izu: "izu", ryukyu: "kago", northern: "north" }[k], label: C.ROT_LABEL[k], get: () => state.terrain.rotationsDeg[k], set: (v) => { state.terrain.rotationsDeg[k] = v; }, min: -C.ROT_LIMITS[k], max: C.ROT_LIMITS[k], step: 1, fmt: (v) => (v > 0 ? "+" : "") + v + "°" }));
-  const CHAIN_STEPPERS = [{ id: "chainRate", grp: "izu", label: "島と島の間隔の圧縮率", get: () => state.terrain.chainCompression.ratePercent, set: (v) => { state.terrain.chainCompression.ratePercent = v; }, min: 0, max: C.CHAIN_MAX_PERCENT, step: 1, fmt: (v) => v + "%（間隔×" + (1 - v / 100).toFixed(2) + "）" }];
+  const ROT_STEPPERS = ROT_KEYS.map((k) => ({ id: "rot-" + k, grp: { izu: "izu", ryukyu: "kago", northern: "north" }[k], label: C.ROT_LABEL[k], get: () => state.terrain.rotationsDeg[k], set: (v) => { state.terrain.rotationsDeg[k] = v; }, min: -C.ROT_LIMITS[k], max: C.ROT_LIMITS[k], step: 1, note: "1°刻み", fmt: (v) => (v > 0 ? "+" : "") + v + "°" }));
+  const CHAIN_STEPPERS = [{ id: "chainRate", grp: "izu", label: "島と島の間隔の圧縮率", get: () => state.terrain.chainCompression.ratePercent, set: (v) => { state.terrain.chainCompression.ratePercent = v; }, min: 0, max: C.CHAIN_MAX_PERCENT, step: 1, note: "1%刻み", fmt: (v) => v + "%（間隔×" + (1 - v / 100).toFixed(2) + "）" }];
   const HL = (k) => state.terrain.heightLayer[k];
   const denomNow = () => state.terrain.japanScaleDenominator, shipM = (realM) => (realM * 10 / denomNow() * HL("globalScale"));
   const HEIGHT_STEPPERS = [
-    { id: "heightGlobal", grp: "height", label: "全地形の高さ倍率（基準＝10/N）", get: () => Math.round(HL("globalScale") * 100), set: (v) => { state.terrain.heightLayer.globalScale = v / 100; }, min: 0, max: 300, step: 5, fmt: (v) => "基準×" + (v / 100).toFixed(2) + (v === 100 ? "（基準）" : v > 100 ? "（+" + (v - 100) + "%）" : "（" + (v - 100) + "%）") },
-    { id: "fujiSummit", grp: "sel", sel: "fuji", label: "富士山の頂の高さ（実世界の標高）", get: () => HL("fujiSummitM"), set: (v) => { state.terrain.heightLayer.fujiSummitM = v; }, min: 0, max: 6000, step: 10, fmt: (v) => `${v} m → 船内 ${shipM(v).toFixed(0)} m` },
-    { id: "ridgeSw", grp: "sel", sel: "sw", label: "南西の山脈の盛り上げ", get: () => Math.round(HL("ridgeSwScale") * 100), set: (v) => { state.terrain.heightLayer.ridgeSwScale = v / 100; }, min: 0, max: 200, step: 5, fmt: (v) => v + "%" },
-    { id: "ridgeNe", grp: "sel", sel: "ne", label: "北東の山脈の盛り上げ", get: () => Math.round(HL("ridgeNeScale") * 100), set: (v) => { state.terrain.heightLayer.ridgeNeScale = v / 100; }, min: 0, max: 200, step: 5, fmt: (v) => v + "%" },
+    { id: "heightGlobal", grp: "height", label: "全地形の高さ倍率（基準＝10/N）", get: () => Math.round(HL("globalScale") * 100), set: (v) => { state.terrain.heightLayer.globalScale = v / 100; }, min: 0, max: 300, step: 5, note: "5%刻み", fmt: (v) => "基準×" + (v / 100).toFixed(2) + (v === 100 ? "（基準）" : v > 100 ? "（+" + (v - 100) + "%）" : "（" + (v - 100) + "%）") },
+    { id: "fujiSummit", grp: "sel", sel: "fuji", label: "富士山の頂の高さ（実世界の標高）", get: () => HL("fujiSummitM"), set: (v) => { state.terrain.heightLayer.fujiSummitM = v; }, min: 0, max: 6000, step: 10, note: "10m刻み", fmt: (v) => `${v} m → 船内 ${shipM(v).toFixed(0)} m` },
+    { id: "ridgeSw", grp: "sel", sel: "sw", label: "南西の山脈の盛り上げ", get: () => Math.round(HL("ridgeSwScale") * 100), set: (v) => { state.terrain.heightLayer.ridgeSwScale = v / 100; }, min: 0, max: 200, step: 5, note: "5%刻み", fmt: (v) => v + "%" },
+    { id: "ridgeNe", grp: "sel", sel: "ne", label: "北東の山脈の盛り上げ", get: () => Math.round(HL("ridgeNeScale") * 100), set: (v) => { state.terrain.heightLayer.ridgeNeScale = v / 100; }, min: 0, max: 200, step: 5, note: "5%刻み", fmt: (v) => v + "%" },
   ];
   const ALL_STEPPERS = [...STEPPERS, ...ROT_STEPPERS, ...CHAIN_STEPPERS, ...HEIGHT_STEPPERS];
-  const stepperHtml = (list) => list.map((s) => `<div id="row-${s.id}"><div class="row"><label for="st-${s.id}">${s.label}</label><b id="st-${s.id}-v"></b></div><div class="stepper"><button data-st="${s.id}" data-d="-1" aria-label="${s.label}を減らす">−</button><input id="st-${s.id}" type="range" min="${s.min}" max="${s.max}" step="${s.step}"><button data-st="${s.id}" data-d="1" aria-label="${s.label}を増やす">＋</button></div></div>`).join("");
+  const MINUS = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M5 12h14" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>', PLUS = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M5 12h14M12 5v14" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>';
+  const stepperHtml = (list) => list.map((s) => `<div id="row-${s.id}"><div class="row"><label for="st-${s.id}">${s.label}<span class="stepnote">${s.note || ""}</span></label><b id="st-${s.id}-v"></b></div><div class="stepper"><button type="button" data-st="${s.id}" data-d="-1" aria-label="${s.label}を減らす">${MINUS}</button><input id="st-${s.id}" type="range" min="${s.min}" max="${s.max}" step="${s.step}"><button type="button" data-st="${s.id}" data-d="1" aria-label="${s.label}を増やす">${PLUS}</button></div></div>`).join("");
   function buildSteppers() {
     for (const g of ["hull", "common", "north", "izu", "tsushima", "kago", "height", "sel"]) $("st-grp-" + g).innerHTML = stepperHtml(ALL_STEPPERS.filter((q) => q.grp === g));
     for (const s of ALL_STEPPERS) {
@@ -268,7 +272,7 @@
     for (const b of document.querySelectorAll("[data-view-toggle]")) b.setAttribute("aria-pressed", String(!!view[b.dataset.viewToggle]));
   }
   for (const b of document.querySelectorAll("[data-toggle]")) b.addEventListener("click", () => { state.terrain[b.dataset.toggle] = !state.terrain[b.dataset.toggle]; syncToggles(); changed({ custom: true }); });
-  for (const b of document.querySelectorAll("[data-view-toggle]")) b.addEventListener("click", () => { view[b.dataset.viewToggle] = !view[b.dataset.viewToggle]; syncToggles(); dirty3d = true; render(); listeners.forEach((f) => f()); });
+  for (const b of document.querySelectorAll("[data-view-toggle]")) b.addEventListener("click", () => { view[b.dataset.viewToggle] = !view[b.dataset.viewToggle]; syncToggles(); dirty3d = true; scheduleTerrain(); render(); listeners.forEach((f) => f()); });
   for (const b of document.querySelectorAll("[data-region]")) b.addEventListener("click", () => { const h = state.terrain.hiddenRegions, r = b.dataset.region, i = h.indexOf(r); if (i >= 0) h.splice(i, 1); else h.push(r); syncToggles(); changed({ custom: true }); });
   $("chainOshima").onclick = () => { state.terrain.chainCompression.mode = "oshima"; syncSteppers(); changed({ custom: true }); };
   $("chainMinami").onclick = () => { state.terrain.chainCompression.mode = "minamiiwo"; syncSteppers(); changed({ custom: true }); };
@@ -296,20 +300,58 @@
   }
   // 3D用：標高グリッドは「他の島」を1回、本州は地形変更レイヤーごとに作る
   let demPack = null, gridCache = { others: null, honshu: null, key: "" };
+  const riversOf = (grids) => { const m = new Map(); for (const [id, g] of grids) if (model.byId.get(id).areaKm2 > 1000) m.set(id, ShipTerrain.buildRivers(g)); return m; };
   function terrainPack() {
     if (!demPack) demPack = ShipTerrain.decodeDem(window.SHIP_DEM);
     const layer = ShipTerrain.normalizeLayer(state.terrain.heightLayer), key = JSON.stringify(layer);
-    if (!gridCache.others) gridCache.others = ShipTerrain.buildGrids(model, demPack, layer, (i) => i.id !== "honshu").grids;
-    if (gridCache.key !== key) { gridCache.honshu = ShipTerrain.buildGrids(model, demPack, layer, (i) => i.id === "honshu"); gridCache.key = key; }
+    if (!gridCache.others) { gridCache.others = ShipTerrain.buildGrids(model, demPack, layer, (i) => i.id !== "honshu").grids; gridCache.othersRivers = riversOf(gridCache.others); }
+    if (gridCache.key !== key) { gridCache.honshu = ShipTerrain.buildGrids(model, demPack, layer, (i) => i.id === "honshu"); gridCache.honshuRivers = riversOf(gridCache.honshu.grids); gridCache.key = key; }
     const grids = new Map(gridCache.others); for (const [k, v] of gridCache.honshu.grids) grids.set(k, v);
-    return { grids, layer };
+    return { grids, layer, rivers: new Map([...gridCache.othersRivers, ...gridCache.honshuRivers]) };
   }
   function heightSampler() { const p = terrainPack(); return ShipTerrain.makeShipSampler(C, lay, p.grids, model, p.layer); }
-  const psel = $("preset");
-  psel.appendChild(new Option("カスタム案（手動調整中）", "custom"));
-  for (const p of C.presetList()) psel.appendChild(new Option(p.name, p.id));
-  function applyPreset(id) { state = C.presetState(model, id); presetId = id; customFrom = null; psel.value = id; syncPresetLabel(); syncSteppers(); recompute(true); frameFit(); changed(); $("feedback").textContent = `適用：${state.sourcePreset}（内径 ${fmt(state.ship.innerDiameterKm)}km・長さ ${fmt(state.ship.cylinderLengthKm)}km）`; }
-  psel.addEventListener("change", () => { if (psel.value !== "custom") applyPreset(psel.value); });
+
+  // ------------------------------------------------------------ 人口・道路鉄道・追加レイヤーのデータ
+  let popCache = { key: "", v: null, byCode: null }, netCache = { key: "", v: null }, ldCache = { lay: null, key: "", v: null };
+  const popKey = () => state.ship.population + "|" + JSON.stringify(state.popFrame || null);
+  function pops() { const k = popKey(); if (popCache.key !== k) { const v = ShipPop.compute(model, state.ship.population, state.popFrame); popCache = { key: k, v, byCode: new Map(v.munis.map((m) => [m.c, m])) }; } return popCache.v; }
+  function network() { const p = pops(), k = popKey(); if (netCache.key !== k) netCache = { key: k, v: ShipNet.design(model, p) }; return netCache.v; }
+  function layerData() {
+    const k = popKey(); if (ldCache.lay === lay && ldCache.key === k) return ldCache.v; pops();
+    const vis = new Set(lay.islands.map((i) => i.id));
+    const munis = lay.munis.map((m) => { const q = popCache.byCode.get(m.c); return { c: m.c, n: m.n, k: m.k, pos: m.pos, pop: q.pop, areaKm2: q.a, capital: q.capital }; });
+    const net = network().edges.filter((e) => vis.has(e.island)).map((e) => { const sh = lay.shifts.get(e.island); return { mode: e.mode, tier: e.tier, a: C.shipPoint(e.pa, sh), b: C.shipPoint(e.pb, sh) }; });
+    const v = { munis, net, denom: state.terrain.japanScaleDenominator }; ldCache = { lay, key: k, v }; return v;
+  }
+  const layerOpts = (fs) => ({ density: view.density, urban: view.urban, rail: view.rail, road: view.road, munis: view.munis, names: view.names, nameFont: fs });
+
+  // ------------------------------------------------------------ 地形ラスター（標高色・陰影・雪・湖・河川）。2Dと3Dで共用。非同期に少しずつ計算
+  let terrainImg = { key: "", pendingKey: "", canvas: null, water: null, job: null, timer: null };
+  function terrainKey() { const t = state.terrain, hl = t.heightLayer; return JSON.stringify([state.ship.innerDiameterKm, state.ship.cylinderLengthKm, state.ship.centerXKm, state.ship.centerYKm, { ...t, heightLayer: [hl.fujiSummitM, hl.ridgeSwScale, hl.ridgeNeScale, hl.ridgeCapM] }, view.elevColor, view.rivers, view.lakes]); }
+  const terrainReady = () => !!(view.elevColor && terrainImg.canvas && terrainImg.key === terrainKey());
+  function scheduleTerrain() {
+    if (!view.elevColor) return; const k = terrainKey(); if (terrainImg.key === k || terrainImg.pendingKey === k) return;
+    clearTimeout(terrainImg.timer); terrainImg.timer = setTimeout(() => startTerrain(k), 350);
+  }
+  function startTerrain(k) {
+    if (terrainImg.job) terrainImg.job.cancel(); terrainImg.pendingKey = k;
+    const p = terrainPack(), f = lay.frame, ppk = Math.min(24, Math.sqrt(6e5 / (f.w * f.h))), layR = { ...lay, lakes: view.lakes ? lay.lakes : [] };
+    terrainImg.job = ShipTerrainImg.renderAsync(C, ShipTerrain, model, layR, p.grids, p.layer, view.rivers ? p.rivers : new Map(), { ppk, rowsPerTick: 30 }, (res) => {
+      terrainImg.pendingKey = ""; if (k !== terrainKey()) { scheduleTerrain(); return; }
+      const c = document.createElement("canvas"); c.width = res.W; c.height = res.H; c.getContext("2d").putImageData(new ImageData(res.rgba, res.W, res.H), 0, 0);
+      terrainImg = { key: k, pendingKey: "", canvas: c, water: res.water, W: res.W, H: res.H, ppk: res.ppk, left: f.x - f.w / 2, top: f.y + f.h / 2, frame: f, job: null, timer: null };
+      render(); dirty3d = true; listeners.forEach((fn) => fn());
+    });
+  }
+  function waterMask() { if (!terrainReady()) return null; const t = terrainImg, w = t.frame.w; return (x, y) => { const xw = t.left + ((((x - t.left) % w) + w) % w), i = Math.min(t.W - 1, Math.floor((xw - t.left) * t.ppk)), j = Math.floor((t.top - y) * t.ppk); return j < 0 || j >= t.H ? 1 : t.water[j * t.W + i]; }; }
+  function paintTexture(g, TW, TH, hiQ) {
+    const f = lay.frame, tOk = terrainReady(); g.fillStyle = ShipDraw.COLORS.sea; g.fillRect(0, 0, TW, TH);
+    if (tOk) { g.imageSmoothingEnabled = true; g.drawImage(terrainImg.canvas, 0, 0, TW, TH); } else scheduleTerrain();
+    const sx = TW / f.w, sy = -TH / f.h, left = f.x - f.w / 2, top = f.y + f.h / 2, T = { sx, ox: -left * sx, sy, oy: -top * sy }, win = { low: left, high: left + f.w, south: f.y - f.h / 2, north: top };
+    ShipDraw.paintMap(g, lay, inter, T, win, { landFill: !tOk, borders: view.borders, cities: view.cities, cityNames: view.cities && !view.names && hiQ, cityFont: Math.round(TW / 90), interference: view.interference, symbols: view.symbols, symbolPx: 3, symbolR: 2, borderPx: TW / 900, edgePx: TW / 1200, minOverlapPx: 2 });
+    ShipLayers.paint(g, lay, layerData(), T, win, layerOpts(Math.round(TW / 85)));
+    g.strokeStyle = "rgba(255,230,150,0.35)"; g.lineWidth = 1; for (let k = 1; k < 4; k++) { g.beginPath(); g.moveTo((k * TW) / 4, 0); g.lineTo((k * TW) / 4, TH); g.stroke(); }
+  }
   function setMode(m) { mode = m; pointers.clear(); gesture = null; $("modeCylinder").setAttribute("aria-pressed", String(m === "cylinder")); $("modeJapan").setAttribute("aria-pressed", String(m === "japan")); $("panel").dataset.mode = m; render(); }
   // 3ボタンは常時表示。3D表示中に操作モードを押したら、そのモードで2Dへ戻る（設定は一切変えない）。
   $("modeCylinder").onclick = () => { setMode("cylinder"); if (current !== "2d") setCurrent("2d"); };
@@ -320,44 +362,88 @@
   $("btnEdit").onclick = () => setEdit(!editOpen);
   for (const b of document.querySelectorAll("#tabs button")) b.addEventListener("click", () => setTab(b.dataset.tab));
   if (window.ResizeObserver) new ResizeObserver(() => { render(); if (window.Ship3D && current !== "2d") Ship3D.resize(); }).observe($("panel"));
-  $("fit").onclick = () => (current === "2d" ? viewFit() : window.Ship3D && Ship3D.setView(current));
-  $("resetView").onclick = () => (current === "2d" ? frameFit() : window.Ship3D && Ship3D.setView(current));
-  $("resetAll").onclick = () => { setMode("cylinder"); applyPreset("adopted"); $("feedback").textContent = "採用基準案に戻しました（保存済みの案は消していません）。"; };
+  $("fit").onclick = () => (current === "2d" ? viewFit() : window.Ship3D && Ship3D.resetView());
+  $("resetView").onclick = () => (current === "2d" ? frameFit() : window.Ship3D && Ship3D.resetView());
   $("fixRyukyu").onclick = () => {
     const r = C.resolveRyukyu(model, state); state = r.state; markCustom(); syncSteppers(); changed();
     $("feedback").textContent = r.moved.length ? `南西諸島 ${r.moved.length}島を東西に最小移動しました。` : "南西諸島に重なりはありません（補正なし）。";
   };
   $("clearOffsets").onclick = async () => { if (!Object.keys(state.terrain.islandOffsetsKm).length && !Object.keys(state.terrain.islandOffsetsNorthKm).length) return; if (!(await ask("個別の東西・南北補正をすべて消しますか？"))) return; state.terrain.islandOffsetsKm = {}; state.terrain.islandOffsetsNorthKm = {}; changed({ custom: true }); };
 
-  // ------------------------------------------------------------ save / load
-  const STORE = "kasoku-ship-designer-v10-saves";
-  let stored = [];
-  try { const p = JSON.parse(localStorage.getItem(STORE) || "[]"); if (Array.isArray(p)) stored = p; } catch (_) {}
-  function persist() { try { localStorage.setItem(STORE, JSON.stringify(stored)); return true; } catch (_) { $("feedback").textContent = "端末内保存が使えません。JSON出力を使ってください。"; return false; } }
-  function renderSaved() {
-    const old = $("saved").value; $("saved").innerHTML = '<option value="">保存済みの案（選ぶと即反映）</option>';
-    stored.forEach((s, i) => $("saved").appendChild(new Option(`${s.name}（${(+s.ship.innerDiameterKm).toFixed(2)}×${(+s.ship.cylinderLengthKm).toFixed(1)}km）`, String(i))));
-    $("saved").value = old && stored[+old] ? old : "";
+  // ------------------------------------------------------------ 保存スロット（標準案・名前付き保存・JSON読込を1つの一覧に統一）
+  let store; try { store = ShipSlots.createStore(window.localStorage); } catch (_) { store = ShipSlots.createStore(null); }
+  let cur = { kind: "std", id: "current" }, dirty = false;
+  const curKey = () => cur.kind + ":" + cur.id, stdName = (id) => (C.presetList().find((p) => p.id === id) || {}).name || id;
+  const entryName = () => (cur.kind === "std" ? stdName(cur.id) : (store.get(cur.id) || {}).name || "（削除されたスロット）");
+  const dimTxt = (d) => `${(+d.ship.innerDiameterKm).toFixed(1)}×${(+d.ship.cylinderLengthKm).toFixed(1)}km`;
+  function markCustom() { dirty = true; presetId = "custom"; syncPresetLabel(); }
+  function syncPresetLabel() { $("presetState").textContent = dirty ? "変更あり（未保存）" : "保存どおり"; $("slotState").textContent = dirty ? "変更あり（未保存）" : "保存どおり"; }
+  function renderSlots() {
+    const std = C.presetList().filter((p) => !store.hiddenStd().includes(p.id)), slots = store.list();
+    for (const sel of [$("preset"), $("saved")]) {
+      sel.innerHTML = ""; const g1 = document.createElement("optgroup"); g1.label = "標準案（読み取り専用の原本）"; for (const p of std) g1.appendChild(new Option(p.name, "std:" + p.id)); sel.appendChild(g1);
+      const g2 = document.createElement("optgroup"); g2.label = `保存スロット（${slots.length}件）`; for (const q of slots) g2.appendChild(new Option(`${q.name}（${dimTxt(q.design)}）`, "slot:" + q.id)); if (slots.length) sel.appendChild(g2);
+      if (![...sel.options].some((o) => o.value === curKey())) sel.appendChild(new Option(entryName() + "（現在）", curKey())); sel.value = curKey();
+    }
+    const q = cur.kind === "slot" ? store.get(cur.id) : null;
+    $("slotInfo").innerHTML = (q ? `選択中：保存スロット「${q.name}」／ファイル名 ${q.fileName}／保存 ${q.savedAt.slice(0, 16).replace("T", " ")}／元：${q.origin}` : `選択中：標準案「${stdName(cur.id)}」（読み取り専用の原本。変更したら「保存…」で保存スロットへ）`) + (store.writable ? "" : "<br>このブラウザでは保存スロットを書き込めません。JSON出力で外部に保存してください。") + ` ／ごみ箱 ${store.trash().length}件`;
+    syncPresetLabel();
   }
-  const snapshot = (name) => { recompute(true); return C.serializeState(Object.assign(C.cloneState(state), { name, createdAt: new Date().toISOString() }), model, { sourcePreset: presetId === "custom" ? `カスタム案（${customFrom || "手動"}）` : state.sourcePreset,
-    report: { overhangs: met.overhangIslands.map((o) => ({ id: o.id, name: o.name, southKm: +o.southKm.toFixed(4), northKm: +o.northKm.toFixed(4) })), interference: inter.map((o) => ({ a: o.a, b: o.b, wrap: o.k, areaKm2: +o.areaKm2.toFixed(6) })), interferenceAreaKm2: +met.overlapKm2.toFixed(6), landNetKm2: +met.landNetKm2.toFixed(3) } }); };
-  function loadDesign(d, label) { state = C.normalizeState(d, model); presetId = "custom"; customFrom = label || d.name || "読込"; psel.value = "custom"; syncPresetLabel(); syncSteppers(); recompute(true); frameFit(); changed(); }
-  $("save").onclick = async () => {
-    const name = $("saveName").value.trim(); if (!name) { $("feedback").textContent = "保存名を入力してください。"; return; }
-    const i = stored.findIndex((s) => s.name === name);
-    if (i >= 0 && !(await ask(`「${name}」は保存済みです。上書きしますか？`, { ok: "上書きする" }))) return;
-    const s = snapshot(name); if (i >= 0) stored[i] = s; else stored.push(s);
-    if (persist()) { renderSaved(); $("saved").value = String(i >= 0 ? i : stored.length - 1); $("feedback").textContent = `「${name}」を保存しました。`; }
+  function snapshot(name) { recompute(true); return C.serializeState(Object.assign(C.cloneState(state), { name: name || entryName(), createdAt: new Date().toISOString() }), model, { sourcePreset: dirty ? `変更あり（元：${entryName()}）` : state.sourcePreset,
+    report: { overhangs: met.overhangIslands.map((o) => ({ id: o.id, name: o.name, southKm: +o.southKm.toFixed(4), northKm: +o.northKm.toFixed(4) })), interference: inter.map((o) => ({ a: o.a, b: o.b, wrap: o.k, areaKm2: +o.areaKm2.toFixed(6) })), interferenceAreaKm2: +met.overlapKm2.toFixed(6), landNetKm2: +met.landNetKm2.toFixed(3) } }); }
+  /** 状態を丸ごと差し替える。2D・3D・枠・補正・スライダー・計算値・レイヤーを同時に更新（古い値を残さない）。 */
+  function installState(ns, entry, note) {
+    state = ns; cur = entry; dirty = false; presetId = curKey(); terrainSelSync(); syncSteppers(); recompute(true); frameFit(); changed(); renderSlots();
+    if (note) $("feedback").textContent = note;
+  }
+  function loadEntry(value) {
+    const i = value.indexOf(":"), kind = value.slice(0, i), id = value.slice(i + 1);
+    try {
+      if (kind === "std") { const st = C.presetState(model, id); installState(st, { kind, id }, `適用：${stdName(id)}（内径 ${fmt(st.ship.innerDiameterKm)}km・長さ ${fmt(st.ship.cylinderLengthKm)}km）`); }
+      else { const q = store.get(id); if (!q) throw new Error("スロットが見つかりません"); const st = C.normalizeState(q.design, model); st.sourcePreset = st.sourcePreset || q.origin; installState(st, { kind, id }, `保存スロット「${q.name}」を呼び出しました${st.migratedFrom ? "（" + st.migratedFrom + " から移行：欠けた項目は既定値）" : ""}。`); }
+    } catch (e) { $("feedback").textContent = e.message; renderSlots(); }
+  }
+  function applyPreset(id) { loadEntry("std:" + id); }
+  function loadDesign(d, label) { const st = C.normalizeState(d, model); installState(st, { kind: "std", id: cur.id }, null); dirty = true; presetId = "custom"; customFrom = label || d.name || "読込"; syncPresetLabel(); }
+  for (const sel of [$("preset"), $("saved")]) sel.addEventListener("change", () => loadEntry(sel.value));
+  // --- 保存ダイアログ：表示名・ファイル名を「新規」または既存候補から選ぶ
+  function openSaveDialog() {
+    return new Promise((resolve) => {
+      const slots = store.list(), sn = $("sdName"), sf = $("sdFile"), ni = $("sdNameIn"), fi = $("sdFileIn"), ok = $("sdOk"), hint = $("sdHint");
+      const fill = (sel, vals) => { sel.innerHTML = ""; sel.appendChild(new Option("新規（自由に名付ける）", "")); for (const v of vals) sel.appendChild(new Option(v, v)); };
+      fill(sn, slots.map((q) => q.name)); fill(sf, slots.map((q) => q.fileName));
+      const base = cur.kind === "slot" ? store.get(cur.id) : null; sn.value = base ? base.name : ""; sf.value = base ? base.fileName : "";
+      const shortName = entryName().split("｜")[0].replace("★", "").trim(); ni.value = base ? "" : store.uniqueName(shortName + " 改"); fi.value = store.defaultFileName(ni.value || shortName);
+      const sync = () => { ni.hidden = sn.value !== ""; fi.hidden = sf.value !== ""; const ow = sn.value !== ""; ok.textContent = ow ? "上書き保存" : "新規登録"; hint.textContent = ow ? `「${sn.value}」を上書きします（以前の内容は戻せません。必要ならJSON出力でバックアップ）。` : "新しいスロットとして登録します（既存の案は変わりません）。"; hint.className = ow ? "warning" : "muted"; };
+      sn.onchange = () => { if (sn.value === "") { fi.value = store.defaultFileName(ni.value || "design"); } else { const q = slots.find((x) => x.name === sn.value); sf.value = q ? q.fileName : ""; } sync(); }; sf.onchange = sync; ni.oninput = () => { if (sf.value === "") fi.value = store.defaultFileName(ni.value); };
+      sync(); $("saveDlg").hidden = false; ni.focus();
+      const done = (v) => { $("saveDlg").hidden = true; ok.onclick = $("sdCancel").onclick = null; resolve(v); };
+      ok.onclick = () => { const ow = sn.value !== ""; const name = ow ? sn.value : ni.value.trim(); if (!name) { hint.textContent = "表示名を入力してください。"; return; } const file = sf.value !== "" ? sf.value : (fi.value.trim() || store.defaultFileName(name)); done({ overwrite: ow, id: ow ? (slots.find((q) => q.name === sn.value) || {}).id : null, name, fileName: file.endsWith(".json") ? file : file + ".json" }); };
+      $("sdCancel").onclick = () => done(null);
+    });
+  }
+  $("saveOpen").onclick = async () => {
+    const r = await openSaveDialog(); if (!r) return; recompute(true);
+    try {
+      let q; if (r.overwrite && r.id) q = store.overwrite(r.id, snapshot(r.name), { name: r.name, fileName: r.fileName }); else q = store.add(snapshot(r.name), { name: r.name, fileName: r.fileName, origin: cur.kind === "std" ? "標準案から保存：" + stdName(cur.id) : "新規保存" });
+      cur = { kind: "slot", id: q.id }; dirty = false; presetId = curKey(); renderSlots(); $("feedback").textContent = store.writable ? `保存スロット「${q.name}」に${r.overwrite ? "上書き保存" : "新規登録"}しました（ファイル名 ${q.fileName}）。端末に残すには「JSON出力」。` : "このブラウザでは保存スロットに書き込めませんでした。JSON出力を使ってください。";
+    } catch (e) { $("feedback").textContent = e.message; }
   };
-  $("saved").addEventListener("change", () => { const i = $("saved").value; if (i === "" || !stored[+i]) return; try { loadDesign(stored[+i], stored[+i].name); $("saveName").value = stored[+i].name; $("feedback").textContent = `「${stored[+i].name}」を反映しました。`; } catch (e) { $("feedback").textContent = e.message; } });
+  $("dupSaved").onclick = () => { try { const q = store.add(snapshot(entryName() + " のコピー"), { name: entryName() + " のコピー", origin: (cur.kind === "std" ? "標準案から複製：" : "複製：") + entryName() }); cur = { kind: "slot", id: q.id }; dirty = false; renderSlots(); $("feedback").textContent = `「${q.name}」として複製しました。`; } catch (e) { $("feedback").textContent = e.message; } };
   $("renameSaved").onclick = async () => {
-    const i = $("saved").value; if (i === "" || !stored[+i]) { $("feedback").textContent = "名前を変える案を選んでください。"; return; }
-    const nn = ((await ask("新しい名前", { input: stored[+i].name, ok: "変更" })) || "").trim(); if (!nn || nn === stored[+i].name) return;
-    if (stored.some((s, k) => k !== +i && s.name === nn)) { $("feedback").textContent = "同じ名前の案があります。別の名前にしてください。"; return; }
-    stored[+i].name = nn; if (persist()) { renderSaved(); $("saved").value = i; $("feedback").textContent = `名前を「${nn}」に変更しました。`; }
+    if (cur.kind !== "slot") { $("feedback").textContent = "標準案は読み取り専用です。「複製」か「保存…」でスロットにしてから名前を変えられます。"; return; }
+    const q = store.get(cur.id); const nn = ((await ask(`「${q.name}」の新しい表示名`, { input: q.name, ok: "変更" })) || "").trim(); if (!nn || nn === q.name) return;
+    try { store.rename(q.id, nn); renderSlots(); $("feedback").textContent = `名前を「${nn}」に変更しました。`; } catch (e) { $("feedback").textContent = e.message; }
   };
-  $("deleteSaved").onclick = async () => { const i = $("saved").value; if (i === "" || !stored[+i]) return; if (!(await ask(`「${stored[+i].name}」を削除しますか？（出力済みJSONは残ります）`, { ok: "削除する" }))) return; stored.splice(+i, 1); if (persist()) { renderSaved(); $("feedback").textContent = "削除しました。"; } };
-  // File save where the browser allows it; the JSON is always also shown with a copy button (some viewers block downloads).
+  $("deleteSaved").onclick = async () => {
+    if (cur.kind !== "slot") { $("feedback").textContent = "標準案は削除できません（読み取り専用の原本）。不要なら「選択中の標準案を一覧から隠す」。"; return; }
+    const q = store.get(cur.id); if (!(await ask(`保存スロット「${q.name}」（${q.fileName}）を削除しますか？\n「削除を取り消す」で戻せます。`, { ok: "削除する" }))) return;
+    store.remove(q.id); cur = { kind: "std", id: "current" }; installState(C.presetState(model, "current"), cur, `「${q.name}」を削除しました（ごみ箱。取り消せます）。`);
+  };
+  $("undoDelete").onclick = () => { const q = store.restoreLast(); $("feedback").textContent = q ? `「${q.name}」を戻しました。` : "取り消せる削除はありません。"; renderSlots(); };
+  $("hideStd").onclick = () => { if (cur.kind !== "std") { $("feedback").textContent = "標準案を選んでから押してください。"; return; } if (dirty) { $("feedback").textContent = "未保存の変更があります。「保存…」してから隠してください。"; return; } const left = C.presetList().filter((p) => !store.hiddenStd().includes(p.id) && p.id !== cur.id); if (!left.length) { $("feedback").textContent = "標準案は最低1件残します。"; return; } const id = cur.id; store.hideStd(id); loadEntry("std:" + (left.find((p) => p.id === "current") || left[0]).id); $("feedback").textContent = `標準案「${stdName(id)}」を一覧から隠しました（原本は消えず、「隠した標準案を戻す」で戻せます）。`; };
+  $("showStd").onclick = () => { store.showStdAll(); renderSlots(); $("feedback").textContent = "隠した標準案を戻しました。"; };
+  // ファイル書き出し：Artifactなど保存が使えない環境でも、必ずコピー欄にも出す
   function download(obj, filename) {
     const text = JSON.stringify(obj, null, 2);
     try { const blob = new Blob([text], { type: "application/json" }), url = URL.createObjectURL(blob), a = document.createElement("a"); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 3000); } catch (_) {}
@@ -365,7 +451,6 @@
   }
   $("copyJson").onclick = async () => { try { await navigator.clipboard.writeText($("jsonOut").value); $("feedback").textContent = "JSONをコピーしました。"; } catch (_) { $("jsonOut").select(); $("feedback").textContent = "全選択しました。長押しでコピーしてください。"; } };
   $("closeJson").onclick = () => { $("jsonBox").hidden = true; };
-  /** In-page confirm / prompt (native dialogs are unavailable in some viewers). Resolves true/false, or the text. */
   function ask(message, o) {
     o = o || {};
     return new Promise((resolve) => {
@@ -375,22 +460,15 @@
       $("askOk").onclick = () => done(o.input === undefined ? true : inp.value); $("askCancel").onclick = () => done(o.input === undefined ? false : null);
     });
   }
-  const today = () => new Date().toISOString().slice(0, 10);
-  $("export").onclick = () => { download(snapshot($("saveName").value.trim() || "名称未設定"), `kasoku-ship-${today()}.json`); $("feedback").textContent = "現在の案をJSONで出力しました。"; };
-  $("exportAll").onclick = () => { download({ schema: "kasoku-ship-designs", schemaVersion: C.SCHEMA_VERSION, exportedAt: new Date().toISOString(), designs: stored, current: snapshot($("saveName").value.trim() || "現在の案") }, `kasoku-ship-all-${today()}.json`); $("feedback").textContent = `保存済み${stored.length}案と現在の案を出力しました。`; };
-  function importBundle(data) {
-    const list = data.designs.filter((s) => s && s.ship && s.terrain); let added = 0, renamed = 0;
-    for (const s of list) { let name = s.name || "名称未設定"; if (stored.some((t) => t.name === name)) { let n = 2; while (stored.some((t) => t.name === `${name} (${n})`)) n++; name = `${name} (${n})`; renamed++; } stored.push(Object.assign({}, s, { name })); added++; }
-    persist(); renderSaved(); return { added, renamed };
-  }
+  const currentFileName = () => (cur.kind === "slot" && store.get(cur.id) ? store.get(cur.id).fileName : store.defaultFileName(entryName()));
+  $("export").onclick = () => { download(snapshot(entryName()), currentFileName()); $("feedback").textContent = "現在の案をJSONファイルとして書き出しました（保存スロットとは別。端末へのバックアップ）。"; };
+  $("exportAll").onclick = () => { download(store.exportAll(), `kasoku-ship-slots-${new Date().toISOString().slice(0, 10)}.json`); $("feedback").textContent = `保存スロット${store.list().length}件をまとめてJSONに書き出しました。`; };
   $("load").addEventListener("change", async (e) => {
     const f = e.target.files[0]; if (!f) return;
     try {
-      const data = JSON.parse(await f.text());
-      if ((data.schema === "kasoku-world-cylinder-designs" || data.schema === "kasoku-ship-designs") && Array.isArray(data.designs)) {
-        const r = importBundle(data); if (data.current) loadDesign(data.current, "一括ファイル");
-        $("feedback").textContent = `${r.added}案を追加しました${r.renamed ? `（同名${r.renamed}案は番号を付けて別保存、上書きなし）` : ""}。`;
-      } else { loadDesign(data, data.name); $("feedback").textContent = `${data.version === 9 ? "旧v9形式" : "設定"}を読み込みました。残すには名前を付けて保存してください。`; }
+      const data = JSON.parse(await f.text()), added = store.importJSON(data, { fileName: f.name }); if (!added.length) throw new Error("船体案のJSONとして読めませんでした");
+      const q = added[0], st = C.normalizeState(q.design, model); installState(st, { kind: "slot", id: q.id }, null);
+      $("feedback").textContent = `JSONを読み込み、保存スロットに${added.length}件登録しました（${added.map((x) => x.name).join("、")}）。${st.migratedFrom ? st.migratedFrom + " の形式から移行し、欠けた項目は既定値にしました。" : ""}`;
     } catch (err) { $("feedback").textContent = "読み込み失敗：" + err.message; }
     e.target.value = "";
   });
@@ -402,34 +480,37 @@
       model.prefectures.map((p) => `<tr><td>${p.name}</td><td>${p.capital}</td><td>${p.areaKm2.toLocaleString()}</td><td>${(p.areaKm2 / (d * d)).toFixed(2)}</td></tr>`).join("") + "</table>";
   }
   $("prefDetails").addEventListener("toggle", prefTable);
-  $("sources").innerHTML = SHIP_GEO.sources.map((s) => `<div>・${s.use}：${s.name}（${s.license}）</div>`).join("") +
+  $("sources").innerHTML = (window.SHIP_EXTRA ? SHIP_EXTRA.sources.map((s) => `<div>・${s.use}：${s.name}（${s.license}）</div>`).join("") : "") + SHIP_GEO.sources.map((s) => `<div>・${s.use}：${s.name}（${s.license}）</div>`).join("") +
     `<div>・府県境：${SHIP_GEO.prefectureBorders.method}。実在の県境ではなく酷道世界の府県（北海道は3県を1つに再統合した47都道府県）。北方領土・竹島の輪郭はNatural Earthの日本側視点データで、領有判断を意味しない。</div><div>・小島${model.islands.filter((s) => s.source === "schematic").length}島は位置のみの模式形（実形状データなし）。沖ノ鳥島も模式形。</div><div>・データ版：${SHIP_GEO.schema} v${SHIP_GEO.version}（${SHIP_GEO.builtAt}）</div>`;
 
   // ------------------------------------------------------------ view switching (2D / 3D)
   function setCurrent(v) {
-    current = v;
-    for (const b of document.querySelectorAll("#views button")) b.setAttribute("aria-pressed", String(b.dataset.view === v));
-    const is2d = v === "2d";
-    canvas.hidden = !is2d; $("view3d").hidden = is2d; $("labels3d").hidden = is2d;
+    if (v !== "2d") v = "3d"; current = v; const is2d = v === "2d";
+    $("btnView").setAttribute("aria-pressed", String(!is2d)); canvas.hidden = !is2d; $("view3d").hidden = is2d; $("labels3d").hidden = is2d; $("gizmoBox").hidden = is2d;
     if (is2d) { if (window.Ship3D) Ship3D.pause(); render(); }
-    else if (window.Ship3D) Ship3D.show(v);
+    else if (window.Ship3D) Ship3D.show();
     else $("feedback").textContent = "3D表示の部品（three.js）を読み込めませんでした。通信状態を確認してください。2D設計は使えます。";
   }
-  for (const b of document.querySelectorAll("#views button")) b.addEventListener("click", () => setCurrent(b.dataset.view));
+  $("btnView").onclick = () => setCurrent(current === "2d" ? "3d" : "2d");
   window.addEventListener("resize", () => { render(); });
 
   // public surface for the 3D view and for tests
   window.ShipApp = {
     get terrainSel() { return terrainSel; }, terrainScreen(key) { const T = terrainShapes(), w = lay.frame.w; let q = key === "fuji" ? T.fuji : T[key][Math.floor(T[key].length / 2)]; const x = q[0] + Math.round((camera.x - q[0]) / w) * w, u = p2s(x, q[1]), r = canvas.getBoundingClientRect(); return [r.left + u.x, r.top + u.y]; },
+    terrainWorld(key) { const T = terrainShapes(), w = lay.frame.w; const q = key === "fuji" ? T.fuji : T[key][Math.floor(T[key].length / 2)]; return [q[0] + Math.round((camera.x - q[0]) / w) * w, q[1]]; },
     model, get state() { return state; }, get layout() { return lay; }, get interference() { return inter; }, get metrics() { return met; }, get view() { return view; },
-    heightSampler, terrainPack, get dirty3d() { return dirty3d; }, clean3d() { dirty3d = false; }, onChange(f) { listeners.push(f); },
-    setState(s) { loadDesign(s, "テスト"); }, applyPreset, setCurrent, get presetId() { return presetId; }, get camera() { return camera; }, get mode() { return mode; },
+    heightSampler, terrainPack, paintTexture, waterMask, pops, network, layerData, get terrainReady() { return terrainReady(); }, get terrainImage() { return terrainImg; }, get dirty3d() { return dirty3d; }, clean3d() { dirty3d = false; }, onChange(f) { listeners.push(f); },
+    setState(s) { loadDesign(s, "テスト"); }, applyPreset, setCurrent, get presetId() { return presetId; }, get slotStore() { return store; }, get current() { return { ...cur, dirty }; }, loadEntry, renderSlots, get camera() { return camera; }, get mode() { return mode; },
     frameRect: () => frameRect(), flush() { recompute(true); draw(); },
   };
   const stubBtn = (t, why) => `<button disabled title="${why}">${t}（${why}）</button>`;
-  $("stubTerrain").innerHTML = ["海岸線：常に表示", "標高：3Dで表示"].map((t) => `<button disabled style="opacity:1;border-style:solid">${t}</button>`).join("") + stubBtn("河川", "未整備") + stubBtn("湖", "未整備");
-  $("stubTraffic").innerHTML = ["高速道路", "一般道路", "新幹線・リニア", "一般鉄道", "計画・工事中・中断", "未成", "廃線・廃道", "建設計画・未成線", "港湾", "空港", "路線番号標識", "都市の丸・都市圏", "路線名の文字"].map((t) => stubBtn(t, "未整備")).join("");
-  buildSteppers(); syncSteppers(); setTerrainSel("fuji"); setTab("view"); setMode("cylinder"); renderSaved(); syncPresetLabel(); psel.value = presetId;
+    $("stubTraffic").innerHTML = ["廃線・廃道", "建設計画・未成線", "港湾", "空港", "路線番号標識", "路線名の文字"].map((t) => stubBtn(t, "未整備")).join("");
+  // 県別人口枠の読込（確定設定の人口枠）。合計が船体人口と違っても比例補正せず、差を表示する
+  function parsePopFrame(o) { const out = {}, byName = new Map(model.prefectures.map((p) => [p.name, p.id])), put = (k, v) => { const id = model.prefectures.some((p) => p.id === k) ? k : byName.get(k); if (id && Number.isFinite(Number(v))) out[id] = Number(v); };
+    const src = o && o.prefectures ? o.prefectures : o; if (Array.isArray(src)) for (const r of src) put(r.id || r.name || r.pref, r.population ?? r.pop ?? r.persons); else if (src && typeof src === "object") for (const [k, v] of Object.entries(src)) put(k, typeof v === "object" ? (v.population ?? v.pop) : v); return out; }
+  $("popLoad").addEventListener("change", async (e) => { const f = e.target.files[0]; if (!f) return; try { const fr = parsePopFrame(JSON.parse(await f.text())), n = Object.keys(fr).length; if (!n) throw new Error("県ID（JP-01…）または県名と人口の組が見つかりません"); state.popFrame = fr; markCustom(); changed(); $("feedback").textContent = `県別人口枠を${n}件読み込みました（47県中）。`; } catch (err) { $("feedback").textContent = "人口枠の読み込み失敗：" + err.message; } e.target.value = ""; });
+  $("popClear").onclick = () => { state.popFrame = null; markCustom(); changed(); $("feedback").textContent = "暫定配分に戻しました。"; };
+  buildSteppers(); syncSteppers(); setTerrainSel("fuji"); setTab("view"); setMode("cylinder"); renderSlots();
   recompute(true);
   requestAnimationFrame(() => { frameFit(); syncText(); });
 })();
