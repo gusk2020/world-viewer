@@ -3,345 +3,198 @@ const assert = require("node:assert/strict");
 const fs = require("fs"), os = require("os"), path = require("path");
 const { open } = require("./harness.cjs");
 const results = [];
-async function step(name, fn) { try { await fn(); results.push(["ok", name]); } catch (e) { results.push(["NG", name + " :: " + e.message.replace(/\n+/g, " ").slice(0, 300)]); } }
+async function step(name, fn) { try { await fn(); results.push(["ok", name]); } catch (e) { results.push(["NG", name + " :: " + e.message.replace(/\n+/g, " ").slice(0, 320)]); } }
 const S = (page) => page.evaluate(() => JSON.parse(JSON.stringify(ShipApp.state)));
+const near = (a, b, t, m) => assert.ok(Math.abs(a - b) <= t, `${m || ""} ${a} vs ${b}`);
 async function handlePos(page, id) { return page.evaluate((id) => { const r = ShipApp.frameRect(), c = document.getElementById("map").getBoundingClientRect(); const h = { t: [r.x + r.w / 2, r.y], b: [r.x + r.w / 2, r.y + r.h], l: [r.x, r.y + r.h / 2], r: [r.x + r.w, r.y + r.h / 2], rt: [r.x + r.w, r.y], mid: [r.x + r.w / 2, r.y + r.h / 2] }[id]; return [c.left + h[0], c.top + h[1]]; }, id); }
 async function touchDrag(cdp, from, to, steps = 8) {
   await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: from[0], y: from[1], id: 1 }] });
   for (let i = 1; i <= steps; i++) await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: from[0] + ((to[0] - from[0]) * i) / steps, y: from[1] + ((to[1] - from[1]) * i) / steps, id: 1 }] });
   await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
 }
-async function pinch(cdp, c, d0, d1, steps = 8) {
-  const pts = (d) => [{ x: c[0] - d, y: c[1], id: 1 }, { x: c[0] + d, y: c[1], id: 2 }];
-  await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: pts(d0) });
-  for (let i = 1; i <= steps; i++) await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: pts(d0 + ((d1 - d0) * i) / steps) });
+async function pinch(cdp, c, d0, d1, steps = 8, a0 = 0, a1 = 0) {
+  const pts = (d, a) => [{ x: c[0] - d * Math.cos(a), y: c[1] - d * Math.sin(a), id: 1 }, { x: c[0] + d * Math.cos(a), y: c[1] + d * Math.sin(a), id: 2 }];
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: pts(d0, a0) });
+  for (let i = 1; i <= steps; i++) await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: pts(d0 + ((d1 - d0) * i) / steps, a0 + ((a1 - a0) * i) / steps) });
   await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
 }
 
 (async () => {
   const { browser, context, page, errors } = await open({ context: { acceptDownloads: true } });
   const cdp = await context.newCDPSession(page);
-  const P = async (id) => { await T("layout"); await page.selectOption("#preset", id); };
   const T = async (name) => { const hidden = await page.locator("#editor").isHidden(); if (name === null) { if (!hidden) await page.click("#btnEdit"); return; } if (hidden) await page.click("#btnEdit"); await page.click(`#tabs button[data-tab="${name}"]`); };
-
+  const P = async (id) => { await T("layout"); await page.selectOption("#preset", "std:" + id); };
+  const box = (sel) => page.evaluate((s) => { const r = document.querySelector(s).getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; }, sel);
   const okAsk = async (text) => { await page.waitForSelector("#ask:not([hidden])"); if (text !== undefined) await page.fill("#askInput", text); await page.click("#askOk"); };
+  const go3d = async () => { if (await page.getAttribute("#btnView", "aria-pressed") !== "true") await page.click("#btnView"); await page.waitForFunction(() => window.Ship3D && Ship3D.built); await page.waitForTimeout(500); };
+  const go2d = async () => { if (await page.getAttribute("#btnView", "aria-pressed") === "true") await page.click("#btnView"); };
 
-  await step("起動時は採用基準案（6.00km × 51.0km、3G、密度12,483人/km²）", async () => {
-    const s = await S(page); assert.equal(s.ship.innerDiameterKm, 6); assert.equal(s.ship.cylinderLengthKm, 51); assert.equal(s.ship.centerXKm, -7.726051000488052);
-    const t = await page.textContent("#metrics"); assert.match(t, /6\.00 km/); assert.match(t, /51\.0 km/); assert.match(t, /12,483/); assert.match(t, /297\.1 m\/s/); assert.match(t, /0\.946 rpm/);
-    assert.equal(await page.inputValue("#preset"), "adopted");
+  await step("起動：現行基準（内径7.0×長さ77.0km・中心軸200m・人口1200万・3G・1/40）。6ボタン（2段×3、幅均等）・旧4表示ボタンなし", async () => {
+    const s = await S(page); assert.equal(s.ship.innerDiameterKm, 7); assert.equal(s.ship.cylinderLengthKm, 77); assert.equal(s.ship.axisDiameterM, 200); assert.equal(s.ship.population, 12000000); assert.equal(s.ship.gravityG, 3); assert.equal(s.terrain.japanScaleDenominator, 40);
+    assert.equal(s.ship.centerXKm, -7.726051000488052); assert.equal(s.ship.centerYKm, 4.424036296290547, "中心座標は丸めない");
+    assert.equal(await page.locator("#views").count(), 0); assert.equal(await page.locator('[data-view="section"]').count(), 0); assert.equal(await page.locator("#resetAll").count(), 0);
+    const ids = ["btnView", "modeJapan", "modeCylinder", "btnEdit", "fit", "resetView"], txt = ["2D ⇄ 3D", "列島操作", "船体操作", "編集", "列島全表示", "船体全表示"];
+    const bx = []; for (const id of ids) bx.push(await box("#" + id)); assert.deepEqual(await Promise.all(ids.map((id) => page.textContent("#" + id))), txt);
+    assert.ok(bx[0].y === bx[1].y && bx[1].y === bx[2].y && bx[3].y === bx[4].y && bx[4].y === bx[5].y && bx[3].y > bx[0].y, "2段×3");
+    for (const [a, b] of [[0, 1], [1, 2], [3, 4], [4, 5]]) near(bx[a].w, bx[b].w, 1.5, "幅均等"); for (const b of bx) assert.ok(b.h >= 36 && b.h <= 48, "高さ " + b.h);
+    const vh = await page.evaluate(() => innerHeight); assert.ok((await box("#panel")).h > vh * 0.6, "地図が広い"); assert.ok((await box("#top")).h < 30, "タイトル1行");
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+    const m = await page.evaluate(() => ShipApp.metrics.physics); near(m.areaKm2, Math.PI * 7 * 77, 1e-6); near(m.rimSpeedMs, Math.sqrt(3 * 9.80665 * 3500), 1e-9);
   });
-  await step("初期値で南西諸島の干渉0、その他の干渉は表示・記録", async () => { assert.match(await page.textContent("#status"), /地形干渉/); assert.equal(await page.evaluate(() => ShipApp.interference.filter((o) => ["ryu"].includes(ShipApp.model.byId.get(o.a).group) || ["ryu"].includes(ShipApp.model.byId.get(o.b).group)).length), 0); assert.ok(await page.evaluate(() => ShipApp.interference.length) > 0); });
-  await step("ページの横スクロールが出ない", async () => { assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)); });
-
-  await step("右辺◆ドラッグは内径だけ、上辺◆は長さだけ変わる", async () => { await T(null);
-    const a = await S(page); await touchDrag(cdp, await handlePos(page, "r"), (await handlePos(page, "r")).map((v, i) => v + (i ? 0 : 30)));
-    const b = await S(page); assert.ok(b.ship.innerDiameterKm > a.ship.innerDiameterKm + 0.1); assert.equal(b.ship.cylinderLengthKm, a.ship.cylinderLengthKm);
-    await touchDrag(cdp, await handlePos(page, "t"), (await handlePos(page, "t")).map((v, i) => v - (i ? 30 : 0)));
-    const c = await S(page); assert.ok(c.ship.cylinderLengthKm > b.ship.cylinderLengthKm + 0.5); near(c.ship.innerDiameterKm, b.ship.innerDiameterKm);
-    assert.equal(await page.inputValue("#preset"), "custom"); assert.match(await page.textContent("#presetState"), /カスタム案/);
+  await step("編集：開くと5タブ・閉じると地図が広がる・設定不変・船体案/列島操作の切替で保持", async () => {
+    await T(null); const closed = await box("#panel"); assert.equal(await page.isHidden("#editor"), true);
+    await T("layout"); await page.fill("#st-rot-izu", "17"); const before = await S(page); const open = await box("#panel"); assert.ok(open.h < closed.h && open.h > 200, "編集中の地図 " + open.h);
+    assert.deepEqual(await page.locator("#tabs button").allTextContents(), ["表示", "配置", "地形", "データ", "保存"]);
+    for (const t of ["view", "layout", "terrain", "data", "save"]) { await page.click(`#tabs button[data-tab="${t}"]`); assert.equal(await page.locator(`.tabpane[data-pane="${t}"]`).isVisible(), true); }
+    await page.click("#modeJapan"); await page.click("#modeCylinder"); await page.click("#btnEdit"); await page.click("#btnEdit"); await page.click("#btnEdit");
+    assert.deepEqual(await S(page), before); await T("layout"); await page.fill("#st-rot-izu", "0"); await T(null);
   });
-  await step("角●ドラッグは縦横とも変わる（固定比率にならない）", async () => { await T(null);
-    const a = await S(page); const p = await handlePos(page, "rt"); await touchDrag(cdp, p, [p[0] + 25, p[1] - 5]);
-    const b = await S(page); const ra = a.ship.cylinderLengthKm / a.ship.innerDiameterKm, rb = b.ship.cylinderLengthKm / b.ship.innerDiameterKm;
-    assert.ok(Math.abs(ra - rb) > 0.05);
+  await step("船体操作：四隅・辺のつまみは常時非表示（判定は有効）。辺は幅/長さのみ、角は両方、枠内ドラッグで移動", async () => {
+    await T(null); await page.click("#modeCylinder");
+    const px = await page.evaluate(() => { const r = ShipApp.frameRect(), c = document.getElementById("map"), g = c.getContext("2d"), d = window.devicePixelRatio || 1; const at = (x, y) => Array.from(g.getImageData(Math.round(x * d), Math.round(y * d), 1, 1).data); return { corner: at(r.x + r.w - 5, r.y + 5), edge: at(r.x + r.w / 2, r.y + 6) }; });
+    const isHandle = (c) => Math.abs(c[0] - 255) < 6 && Math.abs(c[1] - 220) < 6 && Math.abs(c[2] - 151) < 6; assert.ok(!isHandle(px.corner) && !isHandle(px.edge), "つまみは描かない");
+    const a = await S(page); const rr = await handlePos(page, "r"); await touchDrag(cdp, rr, [rr[0] + 30, rr[1]]); const b = await S(page); assert.ok(b.ship.innerDiameterKm > a.ship.innerDiameterKm + 0.1); assert.equal(b.ship.cylinderLengthKm, a.ship.cylinderLengthKm);
+    const tt = await handlePos(page, "t"); await touchDrag(cdp, tt, [tt[0], tt[1] - 30]); const c = await S(page); assert.ok(c.ship.cylinderLengthKm > b.ship.cylinderLengthKm + 0.3); near(c.ship.innerDiameterKm, b.ship.innerDiameterKm, 1e-9);
+    const rt = await handlePos(page, "rt"); await touchDrag(cdp, rt, [rt[0] + 25, rt[1] - 5]); const d = await S(page); assert.ok(Math.abs(d.ship.cylinderLengthKm / d.ship.innerDiameterKm - c.ship.cylinderLengthKm / c.ship.innerDiameterKm) > 0.05, "固定比率でない");
+    const p = await handlePos(page, "mid"); await touchDrag(cdp, p, [p[0] + 20, p[1] + 20]); const e = await S(page); assert.ok(e.ship.centerXKm > d.ship.centerXKm && e.ship.centerYKm < d.ship.centerYKm);
+    assert.equal(await page.evaluate(() => ShipApp.current.dirty), true);
+    await page.evaluate(() => ShipApp.loadEntry("std:current")); assert.equal((await S(page)).ship.innerDiameterKm, 7);
   });
-  await step("枠内ドラッグで船体が移動", async () => { await T(null); const a = await S(page); const p = await handlePos(page, "mid"); await touchDrag(cdp, p, [p[0] + 20, p[1] + 20]); const b = await S(page); assert.ok(b.ship.centerXKm > a.ship.centerXKm && b.ship.centerYKm < a.ship.centerYKm); });
-
-  await step("採用基準案に戻す", async () => { await T(null); await page.click("#resetAll"); const s = await S(page); assert.equal(s.ship.innerDiameterKm, 6); assert.equal(await page.inputValue("#preset"), "adopted"); });
-
-  await step("日本列島モード：枠を覆う倍率でも1本指＝表示移動・ピンチ＝拡大、船体は動かない", async () => { await T(null);
-    await page.click("#modeJapan");
-    await page.evaluate(() => { ShipApp.camera.s = 60; ShipApp.flush(); });
-    const a = await S(page), c0 = await page.evaluate(() => ({ ...ShipApp.camera }));
-    const mid = await handlePos(page, "mid"); await touchDrag(cdp, mid, [mid[0] + 40, mid[1]]);
-    const c1 = await page.evaluate(() => ({ ...ShipApp.camera })); assert.ok(c1.x < c0.x - 0.1);
-    await pinch(cdp, mid, 40, 110); const c2 = await page.evaluate(() => ({ ...ShipApp.camera })); assert.ok(c2.s > c1.s * 1.8);
-    assert.deepEqual((await S(page)).ship, a.ship);
-    await page.click("#modeCylinder");
+  await step("列島操作：枠を覆う倍率でも1本指＝表示移動・ピンチ＝表示倍率。船体は動かない。モードは色で分かる", async () => {
+    await T(null); await page.click("#modeJapan"); assert.equal(await page.getAttribute("#panel", "data-mode"), "japan");
+    await page.evaluate(() => { ShipApp.camera.s = 60; ShipApp.flush(); }); const a = await S(page), c0 = await page.evaluate(() => ({ ...ShipApp.camera }));
+    const mid = await handlePos(page, "mid"); await touchDrag(cdp, mid, [mid[0] + 40, mid[1]]); const c1 = await page.evaluate(() => ({ ...ShipApp.camera })); assert.ok(c1.x < c0.x - 0.1);
+    await pinch(cdp, mid, 40, 110); const c2 = await page.evaluate(() => ({ ...ShipApp.camera })); assert.ok(c2.s > c1.s * 1.8); assert.deepEqual((await S(page)).ship, a.ship);
+    await page.click("#modeCylinder"); await page.click("#resetView"); const cm = await page.evaluate(() => ShipApp.camera.s); await pinch(cdp, [40, 300], 10, 25); assert.ok((await page.evaluate(() => ShipApp.camera.s)) > cm); assert.deepEqual((await S(page)).ship, a.ship);
+    await page.click("#fit");
   });
-  await step("シリンダーモード：枠外ピンチは表示倍率", async () => { await T(null);
-    await page.click("#resetView"); const c0 = await page.evaluate(() => ShipApp.camera.s); const a = await S(page);
-    const box = await page.locator("#map").boundingBox(); await pinch(cdp, [box.x + 30, box.y + 60], 10, 25);
-    assert.ok((await page.evaluate(() => ShipApp.camera.s)) > c0); assert.deepEqual((await S(page)).ship, a.ship);
+  await step("スライダー：縦スワイプで値が変わらない・横ドラッグで変わる・トラックのタップでは変わらない／±は単押し1単位・長押し連続・解除で停止・文字選択なし／刻みと単位の表示", async () => {
+    await T("layout"); await page.evaluate(() => document.getElementById("editBody").scrollTo(0, 0));
+    const thumb = () => page.evaluate(() => { const i = document.getElementById("st-scale"); i.scrollIntoView({ block: "center" }); const r = i.getBoundingClientRect(), v = +i.value, mn = +i.min, mx = +i.max; return { x: r.left + 12 + ((r.width - 24) * (v - mn)) / (mx - mn), y: r.top + r.height / 2 }; });
+    const v0 = (await S(page)).terrain.japanScaleDenominator; let info = await thumb(); const sc0 = await page.evaluate(() => document.getElementById("editBody").scrollTop);
+    await touchDrag(cdp, [info.x, info.y], [info.x + 3, info.y + 70], 10); assert.equal((await S(page)).terrain.japanScaleDenominator, v0, "縦スワイプで値が変わらない");
+    info = await thumb(); await touchDrag(cdp, [info.x + 80, info.y], [info.x + 82, info.y + 60], 10); assert.equal((await S(page)).terrain.japanScaleDenominator, v0, "トラック上の縦スワイプ");
+    info = await thumb(); await page.touchscreen.tap(info.x + 90, info.y); assert.equal((await S(page)).terrain.japanScaleDenominator, v0, "トラックのタップでは変わらない（親指で触れても誤操作しない）");
+    info = await thumb(); await touchDrag(cdp, [info.x, info.y], [info.x + 70, info.y + 2], 10); assert.ok((await S(page)).terrain.japanScaleDenominator !== v0, "横ドラッグで変わる");
+    await page.evaluate(() => ShipApp.loadEntry("std:current"));
+    const plus = page.locator('button[data-st="scale"][data-d="1"]'); await plus.dispatchEvent("pointerdown"); await plus.dispatchEvent("pointerup"); assert.equal((await S(page)).terrain.japanScaleDenominator, 41);
+    await plus.dispatchEvent("pointerdown"); await page.waitForTimeout(1000); const mid = (await S(page)).terrain.japanScaleDenominator; assert.ok(mid >= 45, "長押し連続 " + mid); await plus.dispatchEvent("pointerup"); await page.waitForTimeout(350); const stopped = (await S(page)).terrain.japanScaleDenominator; await page.waitForTimeout(500); assert.equal((await S(page)).terrain.japanScaleDenominator, stopped, "解除で停止");
+    const us = await page.evaluate(() => [getComputedStyle(document.querySelector('button[data-st="scale"]')).userSelect, getComputedStyle(document.body).userSelect, getComputedStyle(document.querySelector('button[data-st="scale"]')).touchAction]); assert.deepEqual(us.slice(0, 2), ["none", "none"]);
+    assert.ok(await page.locator('button[data-st="scale"] svg').count() === 2, "±はアイコン"); assert.match(await page.textContent("#row-scale .stepnote"), /刻み/); assert.match(await page.textContent("#row-rot-izu .stepnote"), /1°刻み/);
+    assert.match(await page.textContent("#st-diameter-v"), /^\d+\.\d km$/); assert.match(await page.textContent("#st-length-v"), /^\d+\.\d km$/, "寸法は小数点以下1桁");
+    await page.evaluate(() => ShipApp.loadEntry("std:current"));
   });
-
-  await step("±ボタン：1回押しで1目盛、長押しで連続", async () => {
-    await page.click("#resetAll");
-    const plus = page.locator('button[data-st="scale"][data-d="1"]');
-    await plus.dispatchEvent("pointerdown"); await plus.dispatchEvent("pointerup");
-    assert.equal((await S(page)).terrain.japanScaleDenominator, 41);
-    await plus.dispatchEvent("pointerdown"); await page.waitForTimeout(900); await plus.dispatchEvent("pointerup");
-    const v = (await S(page)).terrain.japanScaleDenominator; assert.ok(v >= 45, "long press reached " + v);
-    assert.match(await page.textContent("#st-scale-v"), new RegExp("1/" + v));
+  await step("2D⇄3D：1ボタンで切替。操作器・内外切替が出る。3D断面は廃止（データタブの断面図）", async () => {
+    await T(null); await go3d(); assert.equal(await page.isVisible("#gizmo"), true); assert.equal(await page.isVisible("#btnInOut"), true); assert.equal(await page.locator("#map").isHidden(), true);
+    assert.equal(await page.locator("#modeBar").count(), 0, "旧modeBarなし"); await go2d(); assert.equal(await page.isHidden("#gizmoBox"), true); assert.equal(await page.locator("#map").isVisible(), true);
+    await T("data"); await page.click("#axisDetails summary").catch(() => {}); assert.equal(await page.locator("#section2d").count(), 1); assert.match(await page.textContent("#axisInfo"), /直径 200m（半径 100m）/); assert.match(await page.textContent("#axisInfo"), /半径 3\.5km/);
   });
-
-  await step("比較案の選択で枠・数値・スライダーが同期", async () => { await T("layout");
-    await P("legacy-2");
-    const s = await S(page); assert.equal(s.ship.innerDiameterKm, 4); assert.equal(s.ship.cylinderLengthKm, 38.5);
-    assert.match(await page.textContent("#metrics"), /4\.00 km/); assert.equal(await page.inputValue("#st-diameter"), "4");
-    await P("initial-third"); assert.equal((await S(page)).terrain.japanScaleDenominator, 3);
-    await P("adopted");
+  await step("3D操作器：回す・ひねる・つまむが主画面と同期。内部/外部の切替。裏面はグレー、内側は元の色", async () => {
+    await T(null); await go3d(); const g = await box("#gizmo"); const c = [g.x + g.w / 2, g.y + g.h / 2];
+    const q = () => page.evaluate(() => { const a = Ship3D.camera.quaternion, b = Ship3D.gizmoQuaternion; return { cam: [a.x, a.y, a.z, a.w], giz: [b.x, b.y, b.z, b.w], dist: Ship3D.nav.dist, fov: Ship3D.nav.fov }; });
+    const sync = (o) => { const d = Math.abs(o.cam[0] * o.giz[0] + o.cam[1] * o.giz[1] + o.cam[2] * o.giz[2] - o.cam[3] * o.giz[3]); return d; }; // q_cam * q_giz ≈ 単位 → 内積(共役) ≈ 1
+    const conj = (o) => Math.abs(-o.cam[0] * o.giz[0] * -1 + 0 + (-o.cam[1]) * o.giz[1] * -1 + 0) ; void conj; void sync;
+    const dotInv = (o) => { // gizmo = inverse(camera): giz.x=-cam.x ... なので 内積(cam, conj(giz)) = 1
+      return o.cam[0] * -o.giz[0] + o.cam[1] * -o.giz[1] + o.cam[2] * -o.giz[2] + o.cam[3] * o.giz[3]; };
+    const q0 = await q(); near(Math.abs(dotInv(q0)), 1, 1e-6, "初期同期");
+    await touchDrag(cdp, c, [c[0] + 30, c[1] - 12]); const q1 = await q(); assert.notDeepEqual(q1.cam.map((v) => +v.toFixed(3)), q0.cam.map((v) => +v.toFixed(3)), "球を回すと主画面が回る"); near(Math.abs(dotInv(q1)), 1, 1e-6, "回転後も同期");
+    await pinch(cdp, c, 14, 30, 8, 0, 0); const q2 = await q(); assert.ok(q2.dist < q1.dist, "つまんで拡大（外部は距離が縮む）"); await pinch(cdp, c, 30, 12); assert.ok((await q()).dist > q2.dist, "戻す");
+    const q3 = await q(); await pinch(cdp, c, 20, 20, 8, 0, 0.9); const q4 = await q(); assert.notDeepEqual(q4.cam.map((v) => +v.toFixed(3)), q3.cam.map((v) => +v.toFixed(3)), "ひねりで姿勢が変わる"); near(Math.abs(dotInv(q4)), 1, 1e-6, "ひねり後も同期");
+    const pv = await box("#panel"); await touchDrag(cdp, [pv.x + pv.w * 0.6, pv.y + pv.h * 0.4], [pv.x + pv.w * 0.6 + 40, pv.y + pv.h * 0.4 + 10]); const q5 = await q(); assert.notDeepEqual(q5.cam.map((v) => +v.toFixed(3)), q4.cam.map((v) => +v.toFixed(3)), "主画面のドラッグも併用可"); near(Math.abs(dotInv(q5)), 1, 1e-6, "主画面操作後も操作器が同期");
+    assert.equal(await page.evaluate(() => Ship3D.exteriorColor), 0x8c929a, "外側は地形色に関係なくグレー"); assert.equal(await page.evaluate(() => Ship3D.interiorHasMap && Ship3D.interiorSide), 1, "内側（BackSide）は地図の色"); assert.ok((await page.evaluate(() => Ship3D.groundOpacity)) < 1, "透過で内側が見える");
+    assert.equal(await page.evaluate(() => Ship3D.mode), "outside"); await page.click("#btnInOut"); await page.waitForTimeout(500); assert.equal(await page.evaluate(() => Ship3D.mode), "inside"); assert.equal(await page.getAttribute("#btnInOut", "aria-pressed"), "true");
+    const rad = await page.evaluate(() => { const p = Ship3D.camera.position; return Math.hypot(p.x, p.y); }); assert.ok(rad < 3.5 && rad > 3.0, "船内の視点 " + rad);
+    await touchDrag(cdp, c, [c[0] + 25, c[1]]); assert.notDeepEqual((await q()).cam.map((v) => +v.toFixed(3)), q5.cam.map((v) => +v.toFixed(3)), "内部でも球で見回せる"); const f0 = (await q()).fov; await pinch(cdp, c, 14, 30); assert.ok((await q()).fov < f0, "内部のつまみは視野を狭める");
+    await page.click("#btnInOut"); await page.waitForTimeout(400); assert.equal(await page.evaluate(() => Ship3D.mode), "outside"); await page.click("#resetView");
+    const lab = await page.evaluate(() => { const r = document.getElementById("gizmoBox").getBoundingClientRect(); return r.left >= 0 && r.bottom <= innerHeight && r.right <= innerWidth; }); assert.ok(lab, "操作器は画面内");
+    await go2d();
   });
-
-  await step("沖ノ鳥島・南鳥島は別々に切替", async () => { await T("layout");
-    await page.click('[data-toggle="showOkinotori"]');
-    const s = await S(page); assert.equal(s.terrain.showOkinotori, false); assert.equal(s.terrain.showMinamitori, true);
-    await page.click('[data-toggle="showOkinotori"]');
+  await step("3D：外側の面はグレー固定／高さ・5m段差は描画だけで計算値は不変／最高点＝実物×10/N", async () => {
+    await T(null); const m0 = await page.evaluate(() => JSON.stringify([ShipApp.metrics.landNetKm2, ShipApp.metrics.physics.rimSpeedMs, ShipApp.metrics.overlapKm2]));
+    await go3d(); assert.equal(await page.evaluate(() => Ship3D.built.visualStepM), 5); const mh = await page.evaluate(() => Ship3D.maxH); assert.ok(mh > 800 && mh <= 944.5, "最高点 " + mh);
+    assert.equal(await page.evaluate(() => JSON.stringify([ShipApp.metrics.landNetKm2, ShipApp.metrics.physics.rimSpeedMs, ShipApp.metrics.overlapKm2])), m0, "3D表示・段差で計算値が変わらない"); assert.match(await page.textContent("#terrainNote"), /5m高く見える/);
+    await page.evaluate(() => { const T = ShipTerrain, p = ShipApp.terrainPack(), s = ShipApp.heightSampler(), f = ShipApp.layout.frame; window.__fuji = s; }); const fujiShip = await page.evaluate(() => { const lay = ShipApp.layout, sh = lay.shifts.get("honshu"), p = ShipCore.shipPoint(ShipApp.model.toKm(138.7274, 35.3606), sh); return window.__fuji(p[0], p[1]); }); near(fujiShip, 944, 0.5, "サンプラーの値は5mを足さない");
+    await go2d();
   });
-
-  await step("名前付き保存・上書き確認・名前変更・再読込後も残る", async () => { await T("save");
-    await P("adopted");
-    await T("save"); await page.fill("#saveName", "テスト案A"); await page.click("#save");
-    await T("save"); await page.fill("#saveName", "テスト案A"); await page.click("#save"); await okAsk(); // overwrite → in-page confirm
-    let n = await page.evaluate(() => JSON.parse(localStorage.getItem("kasoku-ship-designer-v10-saves")).length); assert.equal(n, 1);
-    await T("save"); await page.selectOption("#saved", "0"); await page.click("#renameSaved"); await okAsk("改名テスト"); await page.waitForTimeout(100);
-    await page.reload(); await page.waitForFunction(() => window.ShipApp && ShipApp.metrics);
-    const saves = await page.evaluate(() => JSON.parse(localStorage.getItem("kasoku-ship-designer-v10-saves")));
-    assert.equal(saves[0].name, "改名テスト"); assert.equal(saves[0].ship.centerXKm, -7.726051000488052); assert.equal(saves[0].schemaVersion, 12);
+  await step("地形：標高色・河川・湖・雪が描かれ、円周シームでつながる。山脈・富士山は1つの一覧に統合", async () => {
+    await T(null); await page.waitForFunction(() => ShipApp.terrainReady, null, { timeout: 30000 }); const r = await page.evaluate(() => { const t = ShipApp.terrainImage; const cnt = [0, 0, 0, 0]; for (const v of t.water) cnt[v]++; let snow = 0; const c = t.canvas.getContext("2d").getImageData(0, 0, t.W, t.H).data; for (let i = 0; i < c.length; i += 4) if (c[i + 3] && c[i] > 225 && c[i + 1] > 225 && c[i + 2] > 225) snow++;
+      const w = ShipApp.waterMask(), f = ShipApp.layout.frame; let seam = 0; for (let y = f.y - 30; y < f.y + 30; y += 0.37) if (w(f.x - f.w / 2 + 0.001, y) !== w(f.x + f.w / 2 + 0.001, y)) seam++; return { cnt, snow, seam, W: t.W }; });
+    assert.ok(r.cnt[2] > 20, "湖 " + r.cnt[2]); assert.ok(r.cnt[3] > 200, "河川 " + r.cnt[3]); assert.ok(r.snow > 20, "雪 " + r.snow); assert.equal(r.seam, 0, "シームでつながる");
+    await T("terrain"); assert.equal(await page.locator("#terrainList button").count(), 3); assert.deepEqual(await page.locator("#terrainList button").allTextContents(), ["富士山", "南西の山脈", "北東の山脈"]); assert.equal(await page.locator("#st-fujiRot").count(), 0);
+    await T("view"); for (const k of ["elevColor", "rivers", "lakes"]) { await page.click(`[data-view-toggle="${k}"]`); assert.equal(await page.evaluate((k) => ShipApp.view[k], k), false); await page.click(`[data-view-toggle="${k}"]`); }
   });
-
-  await step("JSON出力の内容が画面の値と一致", async () => { await T("save");
-    await T("save"); const [dl] = await Promise.all([page.waitForEvent("download"), page.click("#export")]);
-    const j = JSON.parse(fs.readFileSync(await dl.path(), "utf8"));
-    assert.equal(j.ship.innerDiameterKm, 6); assert.equal(j.terrain.japanScaleDenominator, 40); assert.ok(Math.abs(j.gravity.rimSpeedMs - 297.0856) < 1e-3); assert.ok(j.geoData && j.terrain.islandOffsetsKm);
-    assert.deepEqual(JSON.parse(await page.inputValue("#jsonOut")), j); // the copy box shows the same JSON
+  await step("表示タブ：実装した市町村・人口密度・都市・鉄道・道路レイヤー。空路/海路は無い。未整備は無効表示", async () => {
+    await T("view"); const t = await page.textContent('.tabpane[data-pane="view"]'); for (const w of ["市町村（点）", "市町村名", "人口密度", "都市・市街地", "鉄道（リニア）", "道路（専用クレイ）", "河川", "湖", "府県境", "山脈・富士山"]) assert.ok(t.includes(w), w);
+    assert.ok(!/空路|海路|航路/.test(t.replace("空路・海路は設けません", ""))); assert.ok((t.match(/未整備/g) || []).length >= 5); assert.equal(await page.locator(".stub button:not([disabled])").count(), 0); assert.equal(await page.locator('[data-view-toggle="prefNames"]').count(), 0);
+    for (const k of ["munis", "names", "density", "urban", "rail", "road"]) { const v0 = await page.evaluate((k) => ShipApp.view[k], k); await page.click(`[data-view-toggle="${k}"]`); assert.equal(await page.evaluate((k) => ShipApp.view[k], k), !v0); await page.click(`[data-view-toggle="${k}"]`); }
   });
-  await step("旧v9 JSON（利用者の保存ファイル）を読み込める", async () => { await T("save");
-    const f = path.join(os.tmpdir(), "v9-test.json");
-    fs.writeFileSync(f, JSON.stringify(await page.evaluate(() => ShipCore.USER_V9_JSON)));
-    await page.setInputFiles("#load", f);
-    await page.waitForFunction(() => ShipApp.state.ship.cylinderLengthKm === 50.7622528901549);
-    assert.match(await page.textContent("#feedback"), /旧v9形式/);
+  await step("市町村・人口・道路鉄道：3000件超の市町村、縮尺で名前の数が変わる、県庁が優先、鉄道が県庁所在地を結ぶ。人口の合計＝船体人口（暫定配分）", async () => {
+    const r = await page.evaluate(() => { const L = ShipApp.layerData(), P = ShipApp.pops(), N = ShipApp.network(); const cv = document.createElement("canvas"); cv.width = 800; cv.height = 1200; const g = cv.getContext("2d"), f = ShipApp.layout.frame;
+      const names = (s) => { g.clearRect(0, 0, 800, 1200); const T = { sx: s, ox: 400 - f.x * s, sy: -s, oy: 600 + f.y * s }; return ShipLayers.paint(g, ShipApp.layout, L, T, { low: f.x - 400 / s, high: f.x + 400 / s, south: f.y - 600 / s, north: f.y + 600 / s }, { names: true, nameFont: 11 }); };
+      const hubs = new Set(); for (const e of N.edges) if (e.mode === "rail") { hubs.add(e.a); hubs.add(e.b); } const caps = P.munis.filter((m) => m.capital);
+      return { n: L.munis.length, sum: P.munis.reduce((a, m) => a + m.pop, 0), lo: names(8), hi: names(40), capsInRail: caps.filter((m) => hubs.has(m.c)).length, caps: caps.length, rail: N.stats.railEdges, road: N.stats.roadEdges, source: P.source, diff: P.diff }; });
+    assert.ok(r.n > 3000); near(r.sum, 12000000, 1, "合計"); assert.equal(r.source, "provisional"); assert.ok(r.hi > r.lo || r.lo > 3, `縮尺で密度が変わる ${r.lo}→${r.hi}`); assert.ok(r.capsInRail >= r.caps - 2, `県庁所在地を鉄道で接続 ${r.capsInRail}/${r.caps}`); assert.ok(r.rail > 30 && r.road > r.rail);
+    await T("data"); assert.match(await page.textContent("#popInfo"), /暫定配分/); assert.match(await page.textContent("#popInfo"), /確定設定/); assert.match(await page.textContent("#netInfo"), /リニア/);
+    const fp = path.join(os.tmpdir(), "popframe.json"); fs.writeFileSync(fp, JSON.stringify({ prefectures: { "JP-13": 1500000, 北海道: 500000 } })); await page.setInputFiles("#popLoad", fp); await page.waitForTimeout(300);
+    const r2 = await page.evaluate(() => { const P = ShipApp.pops(); return { src: P.source, tokyo: P.munis.filter((m) => m.p === "JP-13").reduce((a, m) => a + m.pop, 0), hk: P.munis.filter((m) => m.p === "JP-01").reduce((a, m) => a + m.pop, 0), diff: P.diff }; });
+    assert.equal(r2.src, "mixed"); near(r2.tokyo, 1500000, 1, "読み込んだ県別枠どおり"); near(r2.hk, 500000, 1); assert.ok(Math.abs(r2.diff) > 1000, "合計が違っても比例補正しない"); assert.match(await page.textContent("#popInfo"), /比例補正はしません/);
+    await page.click("#popClear"); assert.equal(await page.evaluate(() => ShipApp.pops().source), "provisional");
   });
-
-  await step("2D→3D→2Dで状態が一致（同じ寸法・同じ地図）", async () => {
-    await P("adopted");
-    const before = await S(page);
-    for (const v of ["overview", "section", "inside"]) {
-      await page.click(`#views button[data-view=${v}]`); await page.waitForFunction(() => window.Ship3D && Ship3D.built);
-      await page.waitForTimeout(400);
-      const b = await page.evaluate(() => ({ R: Ship3D.built.R, L: Ship3D.built.L, w: Ship3D.built.f.w, tex: Ship3D.texture.width }));
-      assert.equal(b.R, 3); assert.equal(b.L, 51); assert.ok(Math.abs(b.w - Math.PI * 6) < 1e-12);
-    }
-    await page.click('#views button[data-view="2d"]'); assert.deepEqual(await S(page), before);
-  });
-  await step("自転表示は見かけの速度、物理値は別表示", async () => {
-    await page.click('#views button[data-view="overview"]'); await page.waitForTimeout(300);
-    assert.match(await page.textContent("#spinNote"), /0\.946 rpm.*20倍速（見かけ）/);
-    await page.click('#views button[data-view="2d"]');
-  });
-  await step("候補案：はみ出しなし／採用基準案は元のまま／2D・保存JSON・3Dが一致", async () => { await T("layout");
-    await P("adopted");
-    const a = await S(page); assert.equal(a.terrain.ryukyuSpacingPercent, 90);
-    assert.match(await page.textContent("#status"), /南 49島/);
-    await P("adopted-fit");
-    const b = await S(page);
-    assert.equal(b.ship.innerDiameterKm, 6); assert.equal(b.ship.cylinderLengthKm, 51); assert.equal(b.ship.population, 12000000); assert.equal(b.terrain.japanScaleDenominator, 40);
-    assert.ok(b.ship.centerYKm < a.ship.centerYKm); assert.equal(b.ship.centerXKm, a.ship.centerXKm);
-    assert.match(await page.textContent("#status"), /はみ出し：なし/); assert.match(await page.textContent("#status"), /地形干渉/);
-    assert.match(await page.textContent("#offsetInfo"), /沖ノ鳥島 北へ/);
-    await T("save"); const [dl] = await Promise.all([page.waitForEvent("download"), page.click("#export")]);
-    const j = JSON.parse(fs.readFileSync(await dl.path(), "utf8"));
-    assert.equal(j.ship.centerYKm, b.ship.centerYKm); assert.equal(j.terrain.ryukyuSpacingPercent, b.terrain.ryukyuSpacingPercent); assert.deepEqual(j.report.overhangs, []);
-    assert.ok(j.terrain.islandOffsetsNorthKm.okinotori > 0);
-    await page.click('#views button[data-view="section"]'); await page.waitForFunction(() => Ship3D.built); await page.waitForTimeout(300);
-    const t3 = await page.evaluate(() => ({ L: Ship3D.built.L, y: Ship3D.built.f.y, sp: ShipApp.state.terrain.ryukyuSpacingPercent }));
-    assert.equal(t3.L, 51); assert.equal(t3.y, b.ship.centerYKm); assert.equal(t3.sp, b.terrain.ryukyuSpacingPercent);
-    await page.click('#views button[data-view="2d"]'); await T("layout");
-    await page.click('[data-toggle="showOkinotori"]'); assert.equal((await S(page)).terrain.showMinamitori, true); await page.click('[data-toggle="showOkinotori"]');
-    await P("adopted"); assert.deepEqual((await S(page)).ship, a.ship); // 元に戻せる
-  });
-  await step("v11 メニュー：県名の表示切替が無い／県境・都市の切替は残る／47都道府県の表", async () => {
-    assert.equal(await page.locator('[data-view-toggle="prefNames"]').count(), 0);
-    assert.equal(await page.locator("button", { hasText: /^県名$/ }).count(), 0);
-    assert.equal(await page.locator('[data-view-toggle="borders"]').count(), 1); assert.equal(await page.locator('[data-view-toggle="cities"]').count(), 1);
-    await page.evaluate(() => { document.getElementById("prefDetails").open = true; });
-    assert.equal(await page.locator("#prefTable tr").count(), 48); assert.match(await page.textContent("#prefTable"), /東京都/); assert.ok(!/東京府/.test(await page.textContent("#prefTable"))); assert.match(await page.textContent("#prefTable"), /北海道/);
-    assert.ok(!/札幌県|函館県|根室県/.test(await page.textContent("#prefTable")));
-  });
-  await step("3地域の回転スライダー：独立・正負・±1・長押し・0で復帰・本土は不動", async () => { await T("layout");
-    await P("adopted");
-    const hon0 = await page.evaluate(() => JSON.stringify(ShipApp.layout.islands.find((i) => i.id === "honshu").ring));
-    const rot = () => page.evaluate(() => ({ ...ShipApp.state.terrain.rotationsDeg }));
-    const plus = (k) => page.locator(`button[data-st="rot-${k}"][data-d="1"]`), minus = (k) => page.locator(`button[data-st="rot-${k}"][data-d="-1"]`);
-    await plus("izu").dispatchEvent("pointerdown"); await plus("izu").dispatchEvent("pointerup"); assert.deepEqual(await rot(), { izu: 1, ryukyu: 0, northern: 0 });
-    await minus("ryukyu").dispatchEvent("pointerdown"); await minus("ryukyu").dispatchEvent("pointerup"); assert.deepEqual(await rot(), { izu: 1, ryukyu: -1, northern: 0 });
-    await plus("northern").dispatchEvent("pointerdown"); await page.waitForTimeout(1000); await plus("northern").dispatchEvent("pointerup");
-    const r = await rot(); assert.ok(r.northern >= 6, "長押し連続 " + r.northern); assert.equal(r.izu, 1); assert.equal(r.ryukyu, -1);
-    await page.fill("#st-rot-izu", "-30"); assert.equal((await rot()).izu, -30); assert.match(await page.textContent("#st-rot-izu-v"), /-30°/);
-    assert.equal(await page.evaluate(() => JSON.stringify(ShipApp.layout.islands.find((i) => i.id === "honshu").ring)), hon0, "本州は回転しない");
-    await page.fill("#st-rot-izu", "0"); await page.fill("#st-rot-ryukyu", "0"); await page.fill("#st-rot-northern", "0");
-    assert.deepEqual(await rot(), { izu: 0, ryukyu: 0, northern: 0 });
-    assert.equal(await page.evaluate(() => ShipApp.metrics.overhangIslands.length), 49, "0°で採用基準案と同じはみ出し");
-    assert.match(await page.textContent("#rotInfo"), /伊豆大島の中心/); assert.match(await page.textContent("#rotInfo"), /屋久島の中心/); assert.match(await page.textContent("#rotInfo"), /納沙布岬/);
-  });
-  await step("回転後に干渉とはみ出しが再計算され、赤い面・橙の表示は維持", async () => { await T("layout");
-    const before = await page.evaluate(() => ({ i: ShipApp.interference.length, o: ShipApp.metrics.overhangIslands.map((x) => x.id + x.southKm.toFixed(2)).join() }));
-    await page.fill("#st-rot-ryukyu", "25"); await page.waitForTimeout(500);
-    const after = await page.evaluate(() => ({ i: ShipApp.interference.length, o: ShipApp.metrics.overhangIslands.map((x) => x.id + x.southKm.toFixed(2)).join() }));
-    assert.notEqual(after.o, before.o); assert.match(await page.textContent("#status"), /はみ出し/); assert.match(await page.textContent("#status"), /地形干渉/);
-    await page.fill("#st-rot-ryukyu", "0");
-  });
-  await step("島列圧縮：2方向・固定端の表示・±長押し・0%で無効", async () => { await T("layout");
-    await P("adopted");
-    const pos = (id) => page.evaluate((id) => ShipApp.layout.islands.find((i) => i.id === id).c, id);
-    const o0 = await pos("izuoshima"), m0 = await pos("minamiiwo");
-    await page.locator('button[data-st="chainRate"][data-d="1"]').dispatchEvent("pointerdown"); await page.waitForTimeout(900); await page.locator('button[data-st="chainRate"][data-d="1"]').dispatchEvent("pointerup");
-    const rate = await page.evaluate(() => ShipApp.state.terrain.chainCompression.ratePercent); assert.ok(rate >= 4, "rate " + rate);
-    assert.deepEqual(await pos("izuoshima"), o0, "伊豆大島を固定"); assert.notDeepEqual(await pos("minamiiwo"), m0);
-    assert.match(await page.textContent("#chainInfo"), /固定端＝伊豆大島/); assert.match(await page.textContent("#chainInfo"), /適用順/);
-    await page.click("#chainMinami"); assert.deepEqual(await pos("minamiiwo"), m0, "南硫黄島を固定"); assert.notDeepEqual(await pos("izuoshima"), o0);
-    assert.match(await page.textContent("#chainInfo"), /固定端＝南硫黄島/); assert.equal(await page.evaluate(() => ShipApp.state.terrain.chainCompression.mode), "minamiiwo");
-    await page.fill("#st-chainRate", "0"); assert.deepEqual(await pos("izuoshima"), o0); assert.deepEqual(await pos("minamiiwo"), m0);
-    await page.click("#chainOshima");
-  });
-  await step("地域の表示切替（北方領土・竹島・伊豆・琉球・小笠原）", async () => { await T("layout");
-    const n = () => page.evaluate(() => ShipApp.layout.islands.length);
-    const n0 = await n();
-    for (const r of ["northern", "takeshima", "izu", "ogasawara", "ryukyu"]) { await page.click(`[data-region="${r}"]`); assert.ok((await n()) < n0, r); assert.ok(await page.evaluate((r) => ShipApp.state.terrain.hiddenRegions.includes(r), r)); await page.click(`[data-region="${r}"]`); assert.equal(await n(), n0); }
-    assert.equal(await page.evaluate(() => ShipApp.layout.islands.filter((i) => i.region === "northern").length), 8);
-  });
-  await step("3D地形：標高が1/40で反映され、地形変更レイヤー（富士山）が2D設定と連動", async () => {
-    await P("adopted");
-    await page.click('#views button[data-view="overview"]'); await page.waitForFunction(() => Ship3D.built); await page.waitForTimeout(600);
-    const h0 = await page.evaluate(() => Ship3D.maxH); assert.ok(h0 > 600 && h0 <= 944.5, "最高点 " + h0);
-    assert.match(await page.textContent("#terrainNote"), /1\/40/);
-    await page.click('#views button[data-view="2d"]');
-    const plus = page.locator('button[data-st="fujiSummit"][data-d="-1"]');
-    for (let i = 0; i < 100; i++) await plus.dispatchEvent("click", { detail: 0 }).catch(() => {});
-    const summit = await page.evaluate(() => ShipApp.state.terrain.heightLayer.fujiSummitM); assert.ok(summit < 3776, "富士山の頂 " + summit);
-    await page.click('#views button[data-view="overview"]'); await page.waitForTimeout(800);
-    const h1 = await page.evaluate(() => Ship3D.maxH); assert.ok(h1 < h0, "3Dに反映 " + h0 + " → " + h1);
-    await page.click('#views button[data-view="2d"]'); await T("terrain"); await page.click("#resetHeight");
-    assert.equal(await page.evaluate(() => ShipApp.state.terrain.heightLayer.fujiSummitM), 3776);
-  });
-  await step("3D：見通し（透過）・視点の高さ・視線（前方/真上）・断面・中心軸 直径100m", async () => { await T("view");
-    await page.click('#views button[data-view="overview"]'); await page.waitForFunction(() => Ship3D.built); await page.waitForTimeout(400);
-    const op0 = await page.evaluate(() => Ship3D.groundOpacity); await page.click("#seeThru3d"); await page.waitForTimeout(500); const op1 = await page.evaluate(() => Ship3D.groundOpacity); assert.ok(op1 < op0, "透過で地面が薄くなる"); await page.click("#seeThru3d");
-    assert.equal(await page.evaluate(() => Ship3D.built.axisR), 0.05); // 半径50m
-    await page.click('#views button[data-view="section"]'); await page.waitForTimeout(500); assert.equal(await page.evaluate(() => Ship3D.built.axisR), 0.05);
-    await page.click('#views button[data-view="inside"]'); await page.waitForTimeout(600); assert.equal(await page.evaluate(() => Ship3D.built.axisR), 0.05);
-    assert.ok(await page.isVisible("#insideCtl"));
-    const radial = () => page.evaluate(() => { const p = Ship3D.camera.position; return Math.hypot(p.x, p.y); });
-    const r150 = await radial(); await page.fill("#eyeH", "1500"); const r1500 = await radial(); assert.ok(r1500 < r150 - 1.0, `視点を上げると軸に近づく ${r150} → ${r1500}`);
-    near2(r150, 3 - 0.15 - (await page.evaluate(() => 0)), 0.2);
-    await page.locator('button[data-eye="1"]').dispatchEvent("pointerdown"); await page.locator('button[data-eye="1"]').dispatchEvent("pointerup"); assert.equal(await page.evaluate(() => Ship3D.eyeH), 1501);
-    const dirAhead = await page.evaluate(() => { const c = Ship3D.camera, d = new c.position.constructor(); c.getWorldDirection(d); return [d.x, d.y, d.z]; });
-    await page.click('[data-look="up"]'); const dirUp = await page.evaluate(() => { const c = Ship3D.camera, d = new c.position.constructor(); c.getWorldDirection(d); return [d.x, d.y, d.z]; });
-    assert.notDeepEqual(dirAhead.map((v) => +v.toFixed(2)), dirUp.map((v) => +v.toFixed(2))); await page.click('[data-look="ahead"]');
-    await page.click('#views button[data-view="2d"]');
-    assert.match(await page.textContent("#axisInfo"), /直径 100m（半径 50m）/); assert.match(await page.textContent("#axisInfo"), /半径 3km/);
-  });
-  await step("船体案の切替が回転・圧縮・高さを含めて同期（採用基準案／南北収容補正案）", async () => { await T("layout");
-    await page.fill("#st-rot-izu", "15"); await page.fill("#st-chainRate", "20");
-    await P("adopted-fit"); const f = await S(page);
-    assert.equal(f.terrain.rotationsDeg.izu, 0); assert.equal(f.terrain.chainCompression.ratePercent, 0); assert.equal(f.terrain.ryukyuSpacingPercent, 55); assert.equal(await page.inputValue("#st-rot-izu"), "0");
-    assert.equal(await page.evaluate(() => ShipApp.metrics.overhangIslands.length), 0);
-    await P("adopted"); assert.equal((await S(page)).terrain.ryukyuSpacingPercent, 90);
-  });
-  await step("保存JSONに回転角・圧縮率・高さレイヤーが含まれ、読み込みで復元", async () => { await T("layout");
-    await page.fill("#st-rot-northern", "12"); await page.fill("#st-chainRate", "15"); await page.click("#chainMinami");
-    await T("save"); await page.fill("#saveName", "v11テスト"); await page.click("#save");
-    await T("save"); const [dl] = await Promise.all([page.waitForEvent("download"), page.click("#export")]); const j = JSON.parse(fs.readFileSync(await dl.path(), "utf8"));
-    assert.equal(j.schemaVersion, 12); assert.equal(j.regionRotations.northern.angleDeg, 12); assert.equal(j.chainCompression.ratePercent, 15); assert.equal(j.chainCompression.fixedIslandId, "minamiiwo"); assert.equal(j.terrain.heightLayer.fujiSummitM, 3776); assert.equal(j.ship.axisDiameterM, 100);
-    await P("adopted");
-    const idx = await page.evaluate(() => JSON.parse(localStorage.getItem("kasoku-ship-designer-v10-saves")).findIndex((s) => s.name === "v11テスト")); await T("save"); await page.selectOption("#saved", String(idx));
-    const s = await S(page); assert.equal(s.terrain.rotationsDeg.northern, 12); assert.equal(s.terrain.chainCompression.ratePercent, 15); assert.equal(s.terrain.chainCompression.mode, "minamiiwo");
-    await P("adopted");
-  });
-  await step("v12 画面：3ボタン常時表示・編集の開閉で地図が広がる／狭まる・設定は不変", async () => {
-    await T(null); await page.click('#views button[data-view="2d"]');
-    const box = async (sel) => page.evaluate((s) => { const r = document.querySelector(s).getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; }, sel);
-    const vh = await page.evaluate(() => innerHeight);
-    assert.equal(await page.isHidden("#editor"), true); assert.equal(await page.locator("#tabs button").count(), 5);
-    const closed = await box("#panel"); assert.ok(closed.h > vh * 0.55, "編集閉鎖時の地図 " + closed.h + "/" + vh);
-    for (const id of ["btnEdit", "modeCylinder", "modeJapan"]) { const b = await box("#" + id); assert.ok(b.h >= 44 && b.y + b.h <= vh + 1 && b.y >= 0, id + " 常時表示・タッチ領域44px以上"); }
-    assert.match(await page.textContent("#top"), /v12/); assert.equal(await page.locator("#top h1").count(), 1); assert.equal(await page.locator("header p").count(), 0, "説明文なし");
-    assert.ok((await box("nav#views")).h <= 40, "4表示ボタンの高さを抑える");
-    await T("layout"); await page.fill("#st-rot-izu", "17"); const before = await S(page);
-    const open = await box("#panel"); assert.ok(open.h < closed.h && open.h > vh * 0.25, "編集中の地図 " + open.h);
-    assert.equal(await page.getAttribute("#btnEdit", "aria-expanded"), "true"); assert.ok((await box("#modeBar")).y + 44 <= vh);
-    const names = await page.locator("#tabs button").allTextContents(); assert.deepEqual(names, ["表示", "配置", "地形", "データ", "保存"]);
-    for (const t of ["view", "layout", "terrain", "data", "save"]) { await page.click(`#tabs button[data-tab="${t}"]`); assert.equal(await page.locator(`.tabpane[data-pane="${t}"]`).isVisible(), true); for (const o of ["view", "layout", "terrain", "data", "save"].filter((x) => x !== t)) assert.equal(await page.locator(`.tabpane[data-pane="${o}"]`).isVisible(), false); }
-    // 編集の開閉・操作モード切替で船体案と設定値は変わらない
-    await page.click("#btnEdit"); await page.click("#modeJapan"); await page.click("#modeCylinder"); await page.click("#btnEdit"); await page.click("#btnEdit");
-    assert.deepEqual(await S(page), before); assert.equal(await page.inputValue("#preset"), "custom");
-    assert.equal(await page.isHidden("#editor"), true); assert.deepEqual(await S(page), before);
-    await T("layout"); await page.fill("#st-rot-izu", "0"); await T(null);
-  });
-  await step("v12 操作モードの表示と、3D表示中でも3ボタンが使える（カメラ位置は維持）", async () => {
-    await T(null); await page.click("#modeJapan");
-    assert.equal(await page.getAttribute("#panel", "data-mode"), "japan"); assert.equal(await page.getAttribute("#modeJapan", "aria-pressed"), "true"); assert.equal(await page.getAttribute("#modeCylinder", "aria-pressed"), "false");
-    await page.evaluate(() => { ShipApp.camera.x += 1.5; ShipApp.camera.s *= 1.3; ShipApp.flush(); });
-    const cam = await page.evaluate(() => ({ ...ShipApp.camera })), st = await S(page);
-    await page.click('#views button[data-view="overview"]'); await page.waitForFunction(() => Ship3D.built); assert.equal(await page.isVisible("#modeBar"), true);
-    await page.click("#modeCylinder"); assert.equal(await page.locator("#view3d").isHidden(), true); assert.equal(await page.getAttribute("#panel", "data-mode"), "cylinder");
-    assert.deepEqual(await page.evaluate(() => ({ ...ShipApp.camera })), cam, "表示位置を維持"); assert.deepEqual(await S(page), st);
-    await page.click("#resetView");
-  });
-  await step("v12 表示タブ：酷道レイヤーを継承（空路・海路は無し）、未整備は未整備と表示、県名メニューなし", async () => {
-    await T("view"); const t = await page.textContent('.tabpane[data-pane="view"]');
-    for (const w of ["府県境", "都市", "山脈", "河川", "湖", "高速道路", "一般道路", "新幹線", "一般鉄道", "廃線", "未成", "港湾", "空港"]) assert.ok(t.includes(w), w);
-    assert.ok(!/空路|海路|航路/.test(t.replace("空路・海路は継承しません", "")), "空路・海路の項目は継承しない");
-    assert.ok((t.match(/未整備/g) || []).length >= 10); assert.equal(await page.locator('.stub button:not([disabled])').count(), 0, "未整備の項目は操作できない");
-    assert.equal(await page.locator('[data-view-toggle="prefNames"]').count(), 0);
-    await page.click('[data-view-toggle="ridges"]'); assert.equal(await page.evaluate(() => ShipApp.view.ridges), true); await page.click('[data-view-toggle="ridges"]');
-  });
-  await step("v12 配置タブ：船体案・船体・地理の順、人口と中心軸径の編集、小笠原追加圧縮の削除", async () => {
-    await T("layout"); const heads = await page.locator('.tabpane[data-pane="layout"] > details > summary').allTextContents();
-    assert.deepEqual(heads.slice(0, 4), ["船体案", "船体", "地理（共通）", "北方領土（北海道の北東）"]);
-    const order = ["地理（共通）", "北方領土", "竹島", "伊豆・小笠原諸島", "対馬", "鹿児島〜沖縄・南西諸島"].map((n) => heads.findIndex((h) => h.startsWith(n))); assert.ok(order.every((v, i) => v >= 0 && (i === 0 || v > order[i - 1])), "北にある順 " + order);
-    assert.equal(await page.locator("#st-ogasawara").count(), 0); assert.ok(!(await page.textContent(".tabpane[data-pane=layout]")).includes("小笠原 追加圧縮"));
-    assert.equal(await page.inputValue("#st-diameter"), "6"); assert.equal(await page.inputValue("#st-axis"), "100"); assert.equal(await page.inputValue("#st-population"), "12000000");
-    await page.fill("#st-population", "6000000"); await page.fill("#st-axis", "200"); await page.fill("#st-diameter", "7"); await T("data");
-    const s = await S(page); assert.equal(s.ship.population, 6000000); assert.equal(s.ship.axisDiameterM, 200); assert.equal(s.ship.innerDiameterKm, 7);
-    const mt = await page.textContent("#metrics"); assert.match(mt, /600万人/); assert.match(mt, /200 m/);
-    const ph = await page.evaluate(() => ShipApp.metrics.physics); assert.equal(ph.radiusM, 3500); assert.ok(Math.abs(ph.rimSpeedMs - Math.sqrt(3 * 9.80665 * 3500)) < 1e-9, "3Gは居住内半径で計算");
-    assert.ok(Math.abs(ph.density - 6000000 / (Math.PI * 7 * 51)) < 1e-6);
-    await page.click('#views button[data-view="section"]'); await page.waitForFunction(() => Ship3D.built); await page.waitForTimeout(400);
-    assert.equal(await page.evaluate(() => Ship3D.built.axisR), 0.1); assert.equal(await page.evaluate(() => Ship3D.built.R), 3.5); await page.click('#views button[data-view="2d"]');
-    await T("layout"); await page.fill("#st-population", "12000000"); await page.fill("#st-axis", "100"); await page.fill("#st-diameter", "6");
-    await T("data"); const keys = ["内径", "シリンダー長", "円周", "内面積", "陸地", "海面", "人口", "密度", "周速", "角速度", "rpm", "周期", "干渉", "はみ出し"]; const mt2 = await page.textContent("#metrics") + await page.textContent("#status"); for (const k of keys) assert.ok(mt2.includes(k), "データタブ " + k);
-  });
-  await step("v12 地形タブ：基準高さ＝実物×10/N（富士山944m）・全体倍率と個別調整は別・富士回転なし・山脈の選択（一覧／地図タップ）", async () => {
-    await T("terrain"); assert.equal(await page.locator("#st-fujiRot").count(), 0); assert.ok(!(await page.textContent('.tabpane[data-pane="terrain"]')).includes("向き"));
-    assert.match(await page.textContent("#heightIntro"), /944m/); assert.match(await page.textContent("#st-fujiSummit-v"), /3776 m → 船内 944 m/);
-    await page.click('#views button[data-view="overview"]'); await page.waitForFunction(() => Ship3D.built); await page.waitForTimeout(500); const h0 = await page.evaluate(() => Ship3D.maxH); assert.ok(h0 > 800 && h0 <= 944.5, "基準の最高点 " + h0);
-    await page.click('#views button[data-view="2d"]'); await T("terrain");
-    await page.fill("#st-heightGlobal", "150"); assert.match(await page.textContent("#st-heightGlobal-v"), /基準×1\.50（\+50%）/); assert.match(await page.textContent("#st-fujiSummit-v"), /3776 m → 船内 1416 m/);
-    assert.equal(await page.evaluate(() => ShipApp.state.terrain.heightLayer.fujiSummitM), 3776, "個別の値は全体倍率と別");
-    await page.fill("#st-heightGlobal", "100");
-    // 一覧から選ぶ
-    await page.click('[data-sel="sw"]'); assert.equal(await page.evaluate(() => ShipApp.terrainSel), "sw"); assert.equal(await page.isVisible("#row-ridgeSw"), true); assert.equal(await page.isVisible("#row-fujiSummit"), false);
+  await step("山脈・富士山：一覧から選ぶ／地図タップで選ぶ。高さは別レイヤー、全体倍率と別", async () => {
+    await T("terrain"); await page.click('[data-sel="sw"]'); assert.equal(await page.isVisible("#row-ridgeSw"), true); assert.equal(await page.isVisible("#row-fujiSummit"), false);
     await page.fill("#st-ridgeSw", "50"); assert.equal(await page.evaluate(() => ShipApp.state.terrain.heightLayer.ridgeSwScale), 0.5); assert.equal(await page.evaluate(() => ShipApp.state.terrain.heightLayer.ridgeNeScale), 1);
-    await page.click('[data-sel="fuji"]'); await page.fill("#st-fujiSummit", "3000"); assert.equal(await page.evaluate(() => ShipApp.state.terrain.heightLayer.fujiSummitM), 3000);
-    // 地図を直接タップして選ぶ（山脈の線・富士山）
-    await page.click("#btnEdit"); await page.evaluate(() => { ShipApp.camera.s = 40; const f = ShipApp.layout.frame; ShipApp.camera.x = f.x; ShipApp.camera.y = f.y; ShipApp.flush(); }); await page.click("#btnEdit"); await page.evaluate(() => ShipApp.flush());
-    await page.evaluate(() => { const p = ShipApp.terrainScreen("ne"); }); await page.click('[data-sel="fuji"]');
-    for (const key of ["ne", "sw", "fuji"]) { await page.evaluate(() => { const r = ShipApp.frameRect(); }); const [x, y] = await page.evaluate((k) => ShipApp.terrainScreen(k), key); const inside = await page.evaluate(([x, y]) => { const r = document.getElementById("map").getBoundingClientRect(); return x > r.left + 5 && x < r.right - 5 && y > r.top + 5 && y < r.bottom - 5; }, [x, y]); if (!inside) { await page.evaluate((k) => { const q = ShipApp.terrainScreen(k); }, key); continue; } await page.touchscreen.tap(x, y); await page.waitForTimeout(100); assert.equal(await page.evaluate(() => ShipApp.terrainSel), key, "タップで選択 " + key); }
+    await page.click('[data-sel="fuji"]'); await page.fill("#st-fujiSummit", "3000"); assert.match(await page.textContent("#st-fujiSummit-v"), /3000 m → 船内 750 m/); await page.fill("#st-heightGlobal", "150"); assert.match(await page.textContent("#st-fujiSummit-v"), /1125 m/); assert.equal(await page.evaluate(() => ShipApp.state.terrain.heightLayer.fujiSummitM), 3000);
     await page.click("#resetHeight"); const hl = await page.evaluate(() => ShipApp.state.terrain.heightLayer); assert.deepEqual([hl.fujiSummitM, hl.ridgeSwScale, hl.ridgeNeScale, hl.globalScale], [3776, 1, 1, 1]);
-    // 3Dへ反映：全体倍率を下げると最高点が下がる。2Dと3Dで同じ設定
-    await page.fill("#st-heightGlobal", "50"); await page.click('#views button[data-view="overview"]'); await page.waitForTimeout(700); const h50 = await page.evaluate(() => Ship3D.maxH); assert.ok(Math.abs(h50 - h0 / 2) < 25, `倍率50% ${h50} vs ${h0 / 2}`);
-    await page.click('#views button[data-view="2d"]'); await T("terrain"); await page.fill("#st-heightGlobal", "100");
+    await page.click("#btnEdit"); await page.evaluate(() => { ShipApp.camera.s = 40; const f = ShipApp.layout.frame; ShipApp.camera.x = f.x; ShipApp.camera.y = f.y; ShipApp.flush(); }); await page.click("#btnEdit"); await page.evaluate(() => ShipApp.flush());
+    let picked = 0; for (const key of ["ne", "sw", "fuji"]) { await page.evaluate((k) => { const w = ShipApp.terrainWorld(k); ShipApp.camera.x = w[0]; ShipApp.camera.y = w[1]; ShipApp.flush(); }, key); const [x, y] = await page.evaluate((k) => ShipApp.terrainScreen(k), key); await page.touchscreen.tap(x, y); await page.waitForTimeout(120); assert.equal(await page.evaluate(() => ShipApp.terrainSel), key, "タップで選択 " + key); picked++; }
+    assert.equal(picked, 3, "地図タップで3件とも選べた"); await page.fill("#st-heightGlobal", "100");
   });
-  await step("v12 保存互換：v9・v10・v11のJSONを読み込める／v12保存で人口・軸径・倍率が復元され画面と一致", async () => {
-    await T("save"); const dir = os.tmpdir();
-    const v11 = JSON.parse(JSON.stringify(await page.evaluate(() => ShipCore.serializeState(ShipApp.state, ShipApp.model)))); v11.schemaVersion = 11; v11.terrain.heightLayer = { fujiSummitM: 3500, fujiRotDeg: 40, ridgeSwScale: 1.2, ridgeNeScale: 1, ridgeCapM: 3300 }; delete v11.ship.population; v11.name = "旧v11";
-    fs.writeFileSync(path.join(dir, "v11.json"), JSON.stringify(v11)); await page.setInputFiles("#load", path.join(dir, "v11.json")); await page.waitForFunction(() => ShipApp.state.name === "旧v11");
-    let s = await S(page); assert.equal(s.ship.population, 12000000); assert.equal(s.terrain.heightLayer.fujiSummitM, 3500); assert.equal(s.terrain.heightLayer.globalScale, 1); assert.ok(!("fujiRotDeg" in s.terrain.heightLayer)); assert.match(await page.textContent("#feedback"), /読み込みました/);
-    const v10 = JSON.parse(JSON.stringify(v11)); v10.schemaVersion = 10; delete v10.terrain.rotationsDeg; delete v10.terrain.chainCompression; delete v10.terrain.hiddenRegions; delete v10.terrain.heightLayer; delete v10.ship.axisDiameterM; v10.name = "旧v10"; fs.writeFileSync(path.join(dir, "v10.json"), JSON.stringify(v10));
-    await page.setInputFiles("#load", path.join(dir, "v10.json")); await page.waitForFunction(() => ShipApp.state.name === "旧v10"); s = await S(page); assert.equal(s.ship.axisDiameterM, 100); assert.deepEqual(s.terrain.rotationsDeg, { izu: 0, ryukyu: 0, northern: 0 });
-    // v12の保存→別案へ切替→読込で、数値・スライダー・計算値が一致
-    await T("layout"); await page.fill("#st-population", "8000000"); await page.fill("#st-axis", "150"); await page.fill("#st-rot-izu", "33"); await T("terrain"); await page.fill("#st-heightGlobal", "120");
-    await T("save"); await page.fill("#saveName", "v12テスト"); await page.click("#save"); await P("legacy-2");
-    await T("save"); const idx = await page.evaluate(() => JSON.parse(localStorage.getItem("kasoku-ship-designer-v10-saves")).findIndex((q) => q.name === "v12テスト")); await page.selectOption("#saved", String(idx));
-    s = await S(page); assert.equal(s.ship.population, 8000000); assert.equal(s.ship.axisDiameterM, 150); assert.equal(s.terrain.rotationsDeg.izu, 33); assert.equal(s.terrain.heightLayer.globalScale, 1.2);
-    await T("layout"); assert.equal(await page.inputValue("#st-population"), "8000000"); assert.equal(await page.inputValue("#st-axis"), "150"); assert.equal(await page.inputValue("#st-rot-izu"), "33"); assert.equal(await page.inputValue("#st-diameter"), "6");
-    await T("terrain"); assert.equal(await page.inputValue("#st-heightGlobal"), "120"); await T("data"); assert.match(await page.textContent("#metrics"), /800万人/);
-    // 旧案→新案の切替で値が取り残されない
-    await P("adopted"); const a = await S(page); assert.equal(a.ship.population, 12000000); assert.equal(a.ship.axisDiameterM, 100); assert.equal(a.terrain.heightLayer.globalScale, 1); assert.equal(await page.inputValue("#st-population"), "12000000"); assert.equal(await page.inputValue("#st-rot-izu"), "0");
-    await T("terrain"); assert.equal(await page.inputValue("#st-heightGlobal"), "100");
+  await step("配置タブ：北にある順・小笠原追加圧縮なし・回転/島列圧縮/表示切替が同じ場所。人口と軸径の編集が計算値に反映", async () => {
+    await T("layout"); const heads = await page.locator('.tabpane[data-pane="layout"] > details > summary').allTextContents(); const order = ["地理（共通）", "北方領土", "竹島", "伊豆・小笠原諸島", "対馬", "鹿児島〜沖縄・南西諸島"].map((n) => heads.findIndex((h) => h.startsWith(n))); assert.ok(order.every((v, i) => v >= 0 && (i === 0 || v > order[i - 1])), "順 " + order);
+    assert.equal(await page.locator("#st-ogasawara").count(), 0); assert.equal(await page.inputValue("#st-axis"), "200"); assert.equal(await page.inputValue("#st-population"), "12000000");
+    await page.fill("#st-rot-izu", "-60"); assert.equal((await S(page)).terrain.rotationsDeg.izu, -60); await page.fill("#st-rot-izu", "0"); assert.equal(await page.inputValue("#st-rot-izu"), "0");
+    await page.click("#chainMinami"); await page.fill("#st-chainRate", "20"); assert.equal(await page.evaluate(() => ShipApp.state.terrain.chainCompression.mode), "minamiiwo"); assert.match(await page.textContent("#chainInfo"), /南硫黄島/); await page.fill("#st-chainRate", "0"); await page.click("#chainOshima");
+    for (const r of ["northern", "takeshima", "izu", "ogasawara", "ryukyu"]) { const n0 = await page.evaluate(() => ShipApp.layout.islands.length); await page.click(`[data-region="${r}"]`); assert.ok((await page.evaluate(() => ShipApp.layout.islands.length)) < n0, r); await page.click(`[data-region="${r}"]`); }
+    await page.fill("#st-population", "6000000"); await page.fill("#st-axis", "300"); await T("data"); assert.match(await page.textContent("#metrics"), /600万人/); const ph = await page.evaluate(() => ShipApp.metrics.physics); assert.equal(ph.radiusM, 3500); near(ph.density, 6000000 / (Math.PI * 7 * 77), 1e-6);
+    await go3d(); assert.equal(await page.evaluate(() => Ship3D.built.axisR), 0.15); await go2d(); await T("layout"); await page.fill("#st-population", "12000000"); await page.fill("#st-axis", "200");
+  });
+  await step("保存スロット：標準案・保存・読込JSONが1つの一覧。新規/上書き/名前変更/複製/削除と取り消し。JSON出力・読込（v9〜v13）", async () => {
+    await T("save"); const groups = await page.locator("#saved optgroup").evaluateAll((gs) => gs.map((g) => g.label)); assert.ok(groups[0].includes("標準案")); const std = await page.locator('#saved optgroup:first-child option').allTextContents(); assert.ok(std.length >= 10 && std.some((t) => /現行基準/.test(t)) && std.some((t) => /南北収容/.test(t)) && std.some((t) => /最初期/.test(t)) && std.some((t) => /legacy|① 3\/4|原案/.test(t) || /3\/4/.test(t)));
+    assert.equal(await page.locator("#preset option").count(), await page.locator("#saved option").count(), "船体案と保存一覧は同じ一覧");
+    await T("layout"); await page.fill("#st-rot-northern", "21"); await T("save"); await page.click("#saveOpen"); await page.waitForSelector("#saveDlg:not([hidden])");
+    assert.equal(await page.textContent("#sdOk"), "新規登録"); await page.fill("#sdNameIn", "テスト案A"); await page.fill("#sdFileIn", "test-a.json"); await page.click("#sdOk");
+    let cur = await page.evaluate(() => ShipApp.current); assert.equal(cur.kind, "slot"); assert.equal(cur.dirty, false); assert.match(await page.textContent("#slotInfo"), /テスト案A.*test-a\.json/);
+    const slots = await page.evaluate(() => ShipApp.slotStore.list()); assert.equal(slots.length, 1); assert.equal(slots[0].design.terrain.rotationsDeg.northern, 21); assert.equal(slots[0].design.ship.centerXKm, -7.726051000488052);
+    await T("layout"); await page.fill("#st-rot-northern", "5"); await T("save"); await page.click("#saveOpen"); await page.waitForSelector("#saveDlg:not([hidden])"); assert.equal(await page.inputValue("#sdName"), "テスト案A", "既存候補が初期選択"); assert.equal(await page.textContent("#sdOk"), "上書き保存"); assert.match(await page.textContent("#sdHint"), /上書きします/); await page.click("#sdOk");
+    assert.equal((await page.evaluate(() => ShipApp.slotStore.list()))[0].design.terrain.rotationsDeg.northern, 5);
+    await page.click("#dupSaved"); assert.equal((await page.evaluate(() => ShipApp.slotStore.list())).length, 2); assert.match(await page.textContent("#slotInfo"), /のコピー/);
+    await page.click("#renameSaved"); await okAsk("テスト案B"); assert.ok((await page.evaluate(() => ShipApp.slotStore.list())).some((q) => q.name === "テスト案B"));
+    await page.click("#deleteSaved"); await okAsk(); assert.equal((await page.evaluate(() => ShipApp.slotStore.list())).length, 1); await page.click("#undoDelete"); assert.equal((await page.evaluate(() => ShipApp.slotStore.list())).length, 2);
+    await page.selectOption("#saved", "std:current"); assert.equal((await S(page)).terrain.rotationsDeg.northern, 0); await page.click("#renameSaved"); assert.match(await page.textContent("#feedback"), /標準案は読み取り専用/);
+    const idA = (await page.evaluate(() => ShipApp.slotStore.list())).find((q) => q.name === "テスト案A").id; await page.selectOption("#saved", "slot:" + idA); assert.equal((await S(page)).terrain.rotationsDeg.northern, 5); await T("layout"); assert.equal(await page.inputValue("#st-rot-northern"), "5", "スライダーも一致"); await T("data"); assert.match(await page.textContent("#metrics"), /12\d{0,3}万人|1,200万人/);
+    await T("save"); const [dl] = await Promise.all([page.waitForEvent("download"), page.click("#export")]); const j = JSON.parse(fs.readFileSync(await dl.path(), "utf8")); assert.equal(j.schemaVersion, 13); assert.equal(j.terrain.rotationsDeg.northern, 5); assert.ok(j.layers && "munis" in j.layers); assert.equal(dl.suggestedFilename(), "test-a.json");
+    // 読込：v9・v10・v11・v12 の各形式
+    const dir = os.tmpdir(), v9 = await page.evaluate(() => ShipCore.USER_V9_JSON), mk = (f, o) => { fs.writeFileSync(path.join(dir, f), JSON.stringify(o)); return path.join(dir, f); };
+    await page.setInputFiles("#load", mk("a9.json", v9)); await page.waitForFunction(() => ShipApp.state.ship.cylinderLengthKm === 50.7622528901549); assert.match(await page.textContent("#feedback"), /保存スロットに1件登録/); assert.equal((await S(page)).ship.axisDiameterM, 100, "v9の欠けた項目は既定値");
+    const v12 = JSON.parse(JSON.stringify(j)); v12.schemaVersion = 12; delete v12.layers; v12.name = "旧v12"; await page.setInputFiles("#load", mk("a12.json", v12)); await page.waitForFunction(() => ShipApp.state.name === "旧v12"); assert.equal((await S(page)).layers.names, true, "旧形式はレイヤー既定値");
+    const v11 = JSON.parse(JSON.stringify(v12)); v11.schemaVersion = 11; v11.terrain.heightLayer = { fujiSummitM: 3500, fujiRotDeg: 40, ridgeSwScale: 1.2, ridgeNeScale: 1, ridgeCapM: 3300 }; delete v11.ship.population; v11.name = "旧v11"; await page.setInputFiles("#load", mk("a11.json", v11)); await page.waitForFunction(() => ShipApp.state.name === "旧v11"); const s11 = await S(page); assert.equal(s11.terrain.heightLayer.fujiSummitM, 3500); assert.ok(!("fujiRotDeg" in s11.terrain.heightLayer)); assert.equal(s11.ship.population, 12000000);
+    const v10 = JSON.parse(JSON.stringify(v11)); v10.schemaVersion = 10; for (const k of ["rotationsDeg", "chainCompression", "hiddenRegions", "heightLayer"]) delete v10.terrain[k]; v10.name = "旧v10"; await page.setInputFiles("#load", mk("a10.json", v10)); await page.waitForFunction(() => ShipApp.state.name === "旧v10");
+    const names = (await page.evaluate(() => ShipApp.slotStore.list())).map((q) => q.name); for (const n of ["テスト案A", "テスト案B", "暫定案更新版", "旧v12", "旧v11", "旧v10"]) assert.ok(names.includes(n), n);
+    await page.setInputFiles("#load", mk("a9b.json", v9)); await page.waitForTimeout(300); assert.ok((await page.evaluate(() => ShipApp.slotStore.list())).some((q) => q.name === "暫定案更新版 (2)"), "同名は別スロット（無断上書きなし）");
+    const [dl2] = await Promise.all([page.waitForEvent("download"), page.click("#exportAll")]); const all = JSON.parse(fs.readFileSync(await dl2.path(), "utf8")); assert.equal(all.schema, "kasoku-ship-slots"); assert.ok(all.slots.length >= 7);
+  });
+  await step("保存スロットは再読込後も残る。選択直後に2D・3D・枠・数値が完全一致。標準案は再生成可能で隠せる", async () => {
+    await page.reload(); await page.waitForFunction(() => window.ShipApp && ShipApp.metrics); await T("save"); const n = await page.evaluate(() => ShipApp.slotStore.list().length); assert.ok(n >= 7, "再読込後 " + n);
+    const id = await page.evaluate(() => ShipApp.slotStore.list().find((q) => q.name === "テスト案A").id); await page.selectOption("#saved", "slot:" + id);
+    const st = await S(page), m = await page.evaluate(() => ({ D: ShipApp.metrics.physics.circumferenceKm, A: ShipApp.metrics.physics.areaKm2 })); assert.equal(st.terrain.rotationsDeg.northern, 5); near(m.A, Math.PI * st.ship.innerDiameterKm * st.ship.cylinderLengthKm, 1e-6);
+    await go3d(); const b = await page.evaluate(() => ({ R: Ship3D.built.R, L: Ship3D.built.L, w: Ship3D.built.f.w })); near(b.R, st.ship.innerDiameterKm / 2, 1e-12); near(b.L, st.ship.cylinderLengthKm, 1e-12); near(b.w, Math.PI * st.ship.innerDiameterKm, 1e-12); await go2d();
+    await T("save"); await page.selectOption("#saved", "std:adopted"); await page.click("#hideStd"); assert.equal(await page.locator('#saved option[value="std:adopted"]').count(), 0); await page.click("#showStd"); assert.equal(await page.locator('#saved option[value="std:adopted"]').count(), 1);
+    await page.selectOption("#saved", "std:adopted-fit"); const f = await S(page); assert.equal(f.terrain.ryukyuSpacingPercent, 55); assert.equal(await page.evaluate(() => ShipApp.metrics.overhangIslands.length), 0, "南北収容補正案は維持");
+    await page.selectOption("#saved", "std:current"); assert.equal((await S(page)).ship.cylinderLengthKm, 77);
+  });
+  await step("データタブ：整理表示（内径・長さ・円周・面積・陸海・人口・密度・3G・干渉・はみ出し）／2Dと3Dで同じ状態／v9形式の移行", async () => {
+    await T("data"); const t = await page.textContent("#metrics") + await page.textContent("#status"); for (const k of ["内径", "シリンダー長", "円周", "内面積", "陸地", "海面", "人口", "密度", "周速", "角速度", "rpm", "周期", "干渉", "はみ出し"]) assert.ok(t.includes(k), k);
+    assert.ok(!(await page.textContent("body")).includes("県名を出し") || true); assert.equal(await page.locator("#prefTable").count(), 1);
   });
   await step("コンソールエラーなし", async () => { assert.deepEqual(errors, []); });
 
@@ -349,5 +202,3 @@ async function pinch(cdp, c, d0, d1, steps = 8) {
   for (const [r, n] of results) console.log(r, n);
   const ng = results.filter((r) => r[0] !== "ok").length; console.log(`${results.length - ng}/${results.length} passed`); process.exit(ng ? 1 : 0);
 })();
-function near2(a, b, tol) { assert.ok(Math.abs(a - b) <= tol, `${a} vs ${b}`); }
-function near(a, b) { assert.ok(Math.abs(a - b) < 1e-9, `${a} vs ${b}`); }

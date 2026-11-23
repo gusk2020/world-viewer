@@ -332,7 +332,7 @@ test("適用順：回転 → 従来の琉球・小笠原間隔/硫黄島基準 �
 test("v11保存JSON：回転角・圧縮率・支点・対象島・地形変更レイヤー・軸径を含み、往復で一致", () => {
   const s = withT((t) => { t.rotationsDeg = { izu: 12, ryukyu: -7, northern: 33 }; t.chainCompression = { mode: "minamiiwo", ratePercent: 25 }; t.hiddenRegions = ["takeshima"]; t.heightLayer.fujiSummitM = 3000; t.heightLayer.ridgeSwScale = 1.2; t.heightLayer.globalScale = 1.1; });
   const j = JSON.parse(JSON.stringify(C.serializeState(s, model)));
-  assert.equal(j.schemaVersion, 12); assert.equal(j.ship.axisDiameterM, 100); assert.equal(j.ship.population, 12000000);
+  assert.equal(j.schemaVersion, 13); assert.equal(j.ship.axisDiameterM, 100); assert.equal(j.ship.population, 12000000);
   assert.equal(j.regionRotations.izu.angleDeg, 12); assert.equal(j.regionRotations.ryukyu.angleDeg, -7); assert.equal(j.regionRotations.northern.angleDeg, 33);
   assert.ok(j.regionRotations.izu.islandIds.includes("izuoshima") && j.regionRotations.northern.islandIds.includes("etorofu") && j.regionRotations.ryukyu.pivotName.includes("屋久島"));
   assert.deepEqual(j.chainCompression.fixedIslandId, "minamiiwo"); assert.equal(j.chainCompression.ratePercent, 25); assert.ok(j.chainCompression.order.length > 20);

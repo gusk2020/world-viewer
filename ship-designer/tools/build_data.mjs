@@ -286,13 +286,14 @@ prefectures.forEach((p, n) => {
   p.mainLandAreaKm2 = Math.round(cells[n + 1] * CELL * CELL);
   p.islandAreaKm2 = Math.round(islands.filter((s) => s.pref === p.id).reduce((a, s) => a + s.areaKmReal, 0));
   p.areaKm2 = p.mainLandAreaKm2 + p.islandAreaKm2;
+  { let hab = 0, tot = 0; for (let k = 0; k < N; k++) if (pref[k] === n + 1) { tot++; if (elev[k] < 400) hab++; } p.habitableFrac = tot ? +(hab / tot).toFixed(3) : 0.6; } // 可住面積の比率（標高400m未満の格子の割合。暫定指標）
   p.culture = null; // 受け皿のみ。文化・県民性は次の企画工程で決める。
 });
 
 // ---------------------------------------------------------------- cities
 const CITY_JA = { Kawasaki: "川崎市", Kawagoe: "川越市", Hachioji: "八王子市", Kitakyushu: "北九州市", Hamamatsu: "浜松市", Iwaki: "いわき市", Asahikawa: "旭川市", Koriyama: "郡山市", Shimonoseki: "下関市", Hachinohe: "八戸市", Sasebo: "佐世保市", Matsumoto: "松本市", Kushiro: "釧路市", Kure: "呉市", Nagaoka: "長岡市", Hirosaki: "弘前市", Tomakomai: "苫小牧市", Obihiro: "帯広市", Takaoka: "高岡市", Muroran: "室蘭市", Otaru: "小樽市", Kitami: "北見市" };
 const cities = [];
-for (const p of prefectures) cities.push({ id: "city.cap." + p.id, name: p.capital, kind: "capital", pref: p.id, geo: p.capitalGeo, source: p.capitalSource });
+for (const p of prefectures) { const ne = placeByAscii.get(CAPITAL_ASCII[p.capital]); cities.push({ id: "city.cap." + p.id, name: p.capital, kind: "capital", pref: p.id, geo: p.capitalGeo, source: p.capitalSource, pop: ne ? ne.pop_max : undefined }); }
 for (const lp of legacyPrefectures.filter((q) => HK_LEGACY.includes(q.id))) if (lp.capital !== "札幌市") cities.push({ id: "city.legacycap." + lp.id, name: lp.capital, kind: "city", pref: "JP-01", geo: lp.capitalGeo, source: "manual", legacyCapitalOf: lp.id });
 for (const pl of P) {
   const ja = CITY_JA[pl.nameascii]; if (!ja) continue;

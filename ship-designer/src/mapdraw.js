@@ -21,7 +21,7 @@
         ctx.beginPath();
         for (let i = 0; i < s.ring.length; i++) { const q = s.ring[i], X = px(q[0] + dx), Y = py(q[1]); if (i) ctx.lineTo(X, Y); else ctx.moveTo(X, Y); }
         ctx.closePath();
-        ctx.fillStyle = s.source === "schematic" ? COLORS.schematic : COLORS.land; ctx.fill();
+        if (opt.landFill !== false || s.source === "schematic" || s.areaKm2 < 0.6) { ctx.fillStyle = s.source === "schematic" ? COLORS.schematic : COLORS.land; ctx.fill(); }
         if (!tiny) { ctx.strokeStyle = COLORS.landEdge; ctx.lineWidth = opt.edgePx || 1; ctx.stroke(); }
         else if (opt.symbols) symbols.push([px(s.c[0] + dx), py(s.c[1])]);
       }

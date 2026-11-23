@@ -6,7 +6,7 @@
   "use strict";
   const G0 = 9.80665;
   const POPULATION = 12000000;
-  const SCHEMA_VERSION = 12;
+  const SCHEMA_VERSION = 13;
   const AXIS_DIAMETER_M = 100; // 中心軸（非回転）。半径50m。居住内径(6km)とは別物
   const ROT_LIMITS = { izu: 90, ryukyu: 45, northern: 90 }; // 回転スライダーの上下限(度)。0°で元配置
   const ROT_LABEL = { izu: "A 東京・伊豆小笠原諸島", ryukyu: "B 鹿児島〜沖縄・南西諸島", northern: "C 北方領土" };
@@ -49,7 +49,7 @@
   const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 
   // ------------------------------------------------------------------ model (source plane, computed once)
-  function buildModel(geo) {
+  function buildModel(geo, extra) {
     const P = geo.plane;
     const toKm = (lon, lat) => [(lon - P.refLon) * P.kmPerDegLon, (lat - P.refLat) * P.kmPerDegLat];
     const islands = geo.islands.map((s, index) => {
@@ -61,6 +61,9 @@
     const borders = geo.prefectureBorders.lines.map((b) => ({ island: b.island, line: b.line.map(([lo, la]) => toKm(lo, la)) }));
     const cities = geo.cities.map((c) => ({ ...c, km: toKm(c.geo[0], c.geo[1]) }));
     const prefectures = geo.prefectures.map((p) => ({ ...p, labelKm: toKm(p.labelGeo[0], p.labelGeo[1]), labelIsland: p.island }));
+    const E = extra || root.SHIP_EXTRA || null;
+    const munis = E ? E.munis.map((m) => ({ ...m, km: toKm(m.g[0], m.g[1]) })) : [];
+    const lakes = E ? E.lakes.map((l) => ({ ...l, ringKm: l.ring.map(([lo, la]) => toKm(lo, la)) })) : [];
     const anchorY = (ANCHOR_LAT - P.refLat) * P.kmPerDegLat;
     const mainLand = islands.filter((s) => s.group !== "bird" && s.region !== "northern" && s.region !== "takeshima"); // 旧プリセットの枠算出は従来どおり
     // 3地域の回転対象と支点（元の地理座標・source km）
@@ -77,11 +80,14 @@
       ryukyu: { ids: new Set(islands.filter((s) => s.region === "ryukyu" && yaku && s.c[1] < yaku.c[1] - 1e-9).map((s) => s.id)), pivot: yaku ? yaku.c : [0, 0], pivotName: "屋久島の中心" },
       northern: { ids: new Set(islands.filter((s) => s.region === "northern").map((s) => s.id)), pivot: toKm(NOSAPPU[0], NOSAPPU[1]), pivotName: "根室半島の先端（納沙布岬）" },
     };
-    return { geo, P, toKm, islands, byId, borders, cities, prefectures, anchorY, iwo: byId.get("iwo"), mainLand, chain, rot, dataVersion: { schema: geo.schema, version: geo.version, builtAt: geo.builtAt } };
+    return { geo, P, toKm, islands, byId, borders, cities, prefectures, munis, lakes, extra: E, anchorY, iwo: byId.get("iwo"), mainLand, chain, rot, dataVersion: { schema: geo.schema, version: geo.version, builtAt: geo.builtAt } };
   }
 
   // ------------------------------------------------------------------ design state
   const DEFAULT_HEIGHT_LAYER = { fujiSummitM: 3776, fujiRotDeg: 0, ridgeSwScale: 1, ridgeNeScale: 1, ridgeCapM: 3300 };
+  const LAYER_DEFAULTS = { elevColor: true, rivers: true, lakes: true, borders: true, cities: true, ridges: false, symbols: true, interference: true, overhang: true, munis: false, names: true, density: false, urban: true, rail: true, road: false };
+  function normLayers(l) { const o = Object.assign({}, LAYER_DEFAULTS); if (l && typeof l === "object") for (const k of Object.keys(LAYER_DEFAULTS)) if (typeof l[k] === "boolean") o[k] = l[k]; return o; }
+  function normPopFrame(f) { if (!f || typeof f !== "object") return null; const o = {}; let n = 0; for (const [k, v] of Object.entries(f)) if (Number.isFinite(Number(v)) && Number(v) >= 0) { o[k] = Number(v); n++; } return n ? o : null; }
   function normHeightLayer(l) { return root.ShipTerrain ? root.ShipTerrain.normalizeLayer(l) : Object.assign({}, DEFAULT_HEIGHT_LAYER, l || {}); }
   function defaultTerrain() {
     return { japanScaleDenominator: 40, ryukyuSpacingPercent: 90, tsushimaSouthKm: 1, ogasawaraCompressionPercent: 50, showOkinotori: true, showMinamitori: true,
@@ -128,6 +134,7 @@
         ogasawaraAnchor: "硫黄島", southIslandSharedSpacing: true, orientation: "true north toward bow",
         islandOffsetsKm: offsets, islandOffsetsNorthKm: northOff, rotationsDeg, chainCompression, hiddenRegions, heightLayer: normHeightLayer(t.heightLayer),
       },
+      layers: normLayers(s.layers), popFrame: normPopFrame(s.popFrame),
       sourcePreset: typeof s.sourcePreset === "string" ? s.sourcePreset : null,
     };
   }
@@ -139,7 +146,7 @@
     return Object.assign({
       schema: "kasoku-ship-design", schemaVersion: SCHEMA_VERSION, name: s.name, createdAt: s.createdAt || new Date().toISOString(),
       ship: Object.assign(s.ship, { circumferenceKm: Math.PI * s.ship.innerDiameterKm }),
-      terrain: s.terrain,
+      terrain: s.terrain, layers: s.layers, popFrame: s.popFrame || null,
       gravity: { targetG: s.ship.gravityG, g0: G0, radiusM: ph.radiusM, rimSpeedMs: ph.rimSpeedMs, omegaRadS: ph.omegaRadS, rpm: ph.rpm, periodS: ph.periodS },
       geoData: model ? model.dataVersion : null,
       heightScale: { horizontalDenominator: s.terrain.japanScaleDenominator, verticalFactor: 10, globalScale: s.terrain.heightLayer.globalScale, formula: "船内標高 = 実標高 × 10 / 縮尺分母 × 全体倍率（山脈・富士山の個別調整は別）", baseFujiShipM: 3776 * 10 / s.terrain.japanScaleDenominator, fujiSummitShipM: s.terrain.heightLayer.fujiSummitM * 10 / s.terrain.japanScaleDenominator * s.terrain.heightLayer.globalScale },
@@ -222,7 +229,9 @@
     const cities = model.cities.filter((c) => shifts.has(c.island) && isVisible(model.byId.get(c.island), t)).map((c) => ({ id: c.id, name: c.name, kind: c.kind, pref: c.pref, island: c.island, pos: shipPoint(c.km, shifts.get(c.island)) }));
     const denom = t.japanScaleDenominator;
     const prefectures = model.prefectures.map((p) => { const sh = shifts.get(p.island); return { id: p.id, name: p.name, capital: p.capital, pos: shipPoint(p.labelKm, sh), areaShipKm2: p.areaKm2 / (denom * denom), areaRealKm2: p.areaKm2, culture: p.culture }; });
-    return { islands, borders, cities, prefectures, shifts, frame: frameOf(state) };
+    const munisL = model.munis.filter((m) => m.i && shifts.has(m.i) && isVisible(model.byId.get(m.i), t)).map((m) => ({ c: m.c, p: m.p, n: m.n, k: m.k, island: m.i, pos: shipPoint(m.km, shifts.get(m.i)) }));
+    const lakesL = model.lakes.filter((l) => l.island && shifts.has(l.island) && isVisible(model.byId.get(l.island), t)).map((l) => { const sh = shifts.get(l.island), ring = l.ringKm.map((q) => shipPoint(q, sh)); return { name: l.name, kind: l.kind, island: l.island, ring, bb: bbox(ring) }; });
+    return { islands, borders, cities, prefectures, munis: munisL, lakes: lakesL, shifts, frame: frameOf(state) };
   }
   function frameOf(state) { const s = state.ship; return { x: s.centerXKm, y: s.centerYKm, w: Math.PI * s.innerDiameterKm, h: s.cylinderLengthKm }; }
   /** Fold x into the frame's circumference window [left, left+w). */
@@ -356,7 +365,8 @@
   }
   function presetList() {
     return [
-      { id: "adopted", name: "★採用基準案｜6.0km × 51.0km・1/40" },
+      { id: "current", name: "★現行基準｜内径7.0km × 長さ77.0km・軸200m・1/40" },
+      { id: "adopted", name: "採用基準案｜6.0km × 51.0km・1/40（旧）" },
       ...(root.SHIP_FIT_CANDIDATE ? [{ id: "adopted-fit", name: "候補｜南北収容補正案（採用基準案から派生）" }] : []),
       { id: "user-v9", name: "利用者調整 原値（2026-11-22 JSON）" },
       ...LEGACY.map((p) => ({ id: p.id, name: p.name })),
@@ -367,6 +377,10 @@
   function presetState(model, id) {
     const base = (ship, terrain, name) => normalizeState({ name, ship, terrain, sourcePreset: name }, model);
     const nm = (presetList().find((p) => p.id === id) || {}).name || id;
+    if (id === "current") { // v13の現行基準。寸法だけ 7.0×77.0・軸200m。中心座標・島の補正・高さ設定は採用基準案（利用者のJSON）のまま。座標は丸めない
+      const a = presetState(model, "adopted"); a.ship.innerDiameterKm = 7.0; a.ship.cylinderLengthKm = 77.0; a.ship.axisDiameterM = 200;
+      a.name = "現行基準"; a.sourcePreset = nm; return a;
+    }
     if (id === "adopted") {
       const s = normalizeState(USER_V9_JSON, model);
       s.ship.innerDiameterKm = 6.0; s.ship.cylinderLengthKm = 51.0; // 表示・初期設定のみ丸める。中心座標は原値のまま。
@@ -399,7 +413,7 @@
     return [-r * Math.sin(th), -r * Math.cos(th), y - frame.y];
   }
 
-  const api = { G0, POPULATION, SCHEMA_VERSION, buildModel, defaultTerrain, normalizeState, serializeState, physics, layout, wrapX, interference, islandConflicts, resolveRyukyu, metrics, overhangs, computeShifts, shipPoint, unshipPoint, ROT_LIMITS, ROT_LABEL, CHAIN_MAX_PERCENT, REGIONS, AXIS_DIAMETER_M,
+  const api = { G0, POPULATION, SCHEMA_VERSION, buildModel, defaultTerrain, normalizeState, serializeState, physics, layout, wrapX, interference, islandConflicts, resolveRyukyu, metrics, overhangs, LAYER_DEFAULTS, computeShifts, shipPoint, unshipPoint, ROT_LIMITS, ROT_LABEL, CHAIN_MAX_PERCENT, REGIONS, AXIS_DIAMETER_M,
     presetList, presetState, landBounds, toCylinder, frameOf, USER_V9_JSON, ringArea, bandArea, pointInRing, pairOverlap, isVisible, cloneState };
   root.ShipCore = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
