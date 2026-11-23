@@ -6,8 +6,11 @@
 (function (root) {
   "use strict";
   const FUJI = { lon: 138.7274, lat: 35.3606, summitM: 3776, baseRadiusKm: 20 };
-  const DEFAULT_LAYER = { fujiSummitM: 3776, fujiRotDeg: 0, ridgeSwScale: 1, ridgeNeScale: 1, ridgeCapM: 3300 };
-  const LAYER_LIMITS = { fujiSummitM: [0, 6000], fujiRotDeg: [-180, 180], ridgeSwScale: [0, 2], ridgeNeScale: [0, 2], ridgeCapM: [500, 6000] };
+  // v12: 標高の基本値 = 実標高 × 10 / 縮尺分母（1/40なら実物の1/4。富士山3776m→944m）。globalScale はこの基準からの増減（1=基準）。
+  // 山脈・富士山の個別調整（ridge*/fujiSummitM）は globalScale とは別の値。富士山の回転操作は v12 で廃止（固定）。
+  const VERTICAL_FACTOR = 10;
+  const DEFAULT_LAYER = { globalScale: 1, fujiSummitM: 3776, ridgeSwScale: 1, ridgeNeScale: 1, ridgeCapM: 3300 };
+  const LAYER_LIMITS = { globalScale: [0, 3], fujiSummitM: [0, 6000], ridgeSwScale: [0, 2], ridgeNeScale: [0, 2], ridgeCapM: [500, 6000] };
   const COAST_CLEARANCE_KM = 1, AREA_CHECK_FACTOR = 1.2, SEED = 1;
 
   // ---- noise (kudo rng.ts) ----
@@ -122,7 +125,7 @@
       }
     }
     if (isl.id === "honshu") { // 富士山
-      const c = model.toKm(FUJI.lon, FUJI.lat), a0 = (layer.fujiRotDeg * Math.PI) / 180, r0 = FUJI.baseRadiusKm * 1.25, top = layer.fujiSummitM;
+      const c = model.toKm(FUJI.lon, FUJI.lat), a0 = 0, r0 = FUJI.baseRadiusKm * 1.25, top = layer.fujiSummitM;
       for (let j = Math.max(0, Math.floor((c[1] - r0 - y0) / cell)); j <= Math.min(ny - 1, Math.ceil((c[1] + r0 - y0) / cell)); j++)
         for (let i = Math.max(0, Math.floor((c[0] - r0 - x0) / cell)); i <= Math.min(nx - 1, Math.ceil((c[0] + r0 - x0) / cell)); i++) {
           const k = j * nx + i; if (!land[k]) continue;
@@ -153,14 +156,14 @@
   /** 富士山の範囲制約（酷道 featureInside: 面積1.2倍の外形が本州の中に海岸から1km以上離れて収まる） */
   function checkFuji(model, layer) {
     const hon = model.byId.get("honshu"); if (!hon) return { ok: true };
-    const c = model.toKm(FUJI.lon, FUJI.lat), k = Math.sqrt(AREA_CHECK_FACTOR), shape = fujiShape(layer ? layer.fujiRotDeg : 0).map((q) => [c[0] + q[0] * k, c[1] + q[1] * k]);
+    const c = model.toKm(FUJI.lon, FUJI.lat), k = Math.sqrt(AREA_CHECK_FACTOR), shape = fujiShape(layer ? 0 : 0).map((q) => [c[0] + q[0] * k, c[1] + q[1] * k]);
     let inside = true, minClear = Infinity;
     for (const p of shape) { if (!pointIn(p[0], p[1], hon.ring)) inside = false; for (let i = 0, j = hon.ring.length - 1; i < hon.ring.length; j = i++) minClear = Math.min(minClear, segDist(p, hon.ring[j], hon.ring[i])); }
     return { ok: inside && minClear >= COAST_CLEARANCE_KM, inside, minClearanceKm: minClear };
   }
   /** 船体座標(x,y)の地面の高さ（船内m）。島ごとの剛体移動の逆変換で元の標高グリッドを引く。周回コピーも見る。 */
   function makeShipSampler(core, lay, grids, model, layerIn) {
-    const f = lay.frame, w = f.w, left = f.x - w / 2, layer = normalizeLayer(layerIn), fc = model ? model.toKm(FUJI.lon, FUJI.lat) : null, a0 = (layer.fujiRotDeg * Math.PI) / 180;
+    const f = lay.frame, w = f.w, left = f.x - w / 2, layer = normalizeLayer(layerIn), fc = model ? model.toKm(FUJI.lon, FUJI.lat) : null, a0 = 0;
     // 富士山頂は格子(2.5km)の中心に無いので、頂上付近は解析式で直接引く（山頂が正確に summit になる）
     const fujiAt = (q) => { const dx = q[0] - fc[0], dy = q[1] - fc[1], d = Math.hypot(dx, dy); if (d >= FUJI.baseRadiusKm * 1.25) return 0; const th = Math.atan2(dy, dx) - a0, R = FUJI.baseRadiusKm * (1 + 0.1 * Math.sin(3 * th + 1) + 0.06 * Math.sin(5 * th + 2)); return d < R ? 250 + (layer.fujiSummitM - 250) * Math.pow(1 - d / R, 1.5) : 0; };
     const items = lay.islands.map((i) => ({ i, sh: lay.shifts.get(i.id), g: grids.get(i.id) })).filter((q) => q.g);
@@ -169,11 +172,11 @@
       for (const { i, sh, g } of items) {
         if (y < i.bb.by - 0.01 || y > i.bb.ty + 0.01) continue;
         const k0 = Math.ceil((i.bb.lx - 0.01 - xw) / w), k1 = Math.floor((i.bb.rx + 0.01 - xw) / w);
-        for (let k = k0; k <= k1; k++) { const q = core.unshipPoint([xw + k * w, y], sh); let hgt = gridHeight(g, q[0], q[1]); if (fc && i.id === "honshu" && Number.isFinite(hgt)) hgt = Math.max(hgt, fujiAt(q)); if (hgt > best) best = hgt / sh.denom; }
+        for (let k = k0; k <= k1; k++) { const q = core.unshipPoint([xw + k * w, y], sh); let hgt = gridHeight(g, q[0], q[1]); if (fc && i.id === "honshu" && Number.isFinite(hgt)) hgt = Math.max(hgt, fujiAt(q)); const hs = (hgt * VERTICAL_FACTOR * layer.globalScale) / sh.denom; if (hs > best) best = hs; }
       }
       return best;
     };
   }
-  const api = { makeShipSampler, FUJI, DEFAULT_LAYER, LAYER_LIMITS, decodeDem, sampleDem, suggestRidge, fujiShape, normalizeLayer, buildGrids, gridHeight, checkFuji, fbm };
+  const api = { VERTICAL_FACTOR, makeShipSampler, FUJI, DEFAULT_LAYER, LAYER_LIMITS, decodeDem, sampleDem, suggestRidge, fujiShape, normalizeLayer, buildGrids, gridHeight, checkFuji, fbm };
   root.ShipTerrain = api; if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof window !== "undefined" ? window : globalThis);

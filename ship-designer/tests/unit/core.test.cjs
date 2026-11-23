@@ -289,9 +289,10 @@ test("島列圧縮：対象は伊豆大島〜南硫黄島だけ・固定端・�
   const chain = model.chain; assert.equal(chain.first, "izuoshima"); assert.equal(chain.last, "minamiiwo"); assert.ok(chain.ids.length > 20);
   assert.equal(chain.ids[0], "izuoshima"); assert.equal(chain.ids[chain.ids.length - 1], "minamiiwo");
   assert.ok(chain.ids.every((id) => ["izu", "ogasawara"].includes(model.byId.get(id).region)));
-  const L0 = C.layout(model, adopted());
+  const legacyOff = (f) => withT((t) => { t.ogasawaraCompressionPercent = 0; f(t); }); // 旧・小笠原追加圧縮は島列圧縮が有効な間は適用されない
+  const L0 = C.layout(model, legacyOff(() => {}));
   for (const mode of ["oshima", "minamiiwo"]) {
-    const s = withT((t) => { t.chainCompression = { mode, ratePercent: 40 }; }), L1 = C.layout(model, s), k = 0.6;
+    const s = legacyOff((t) => { t.chainCompression = { mode, ratePercent: 40 }; }), L1 = C.layout(model, s), k = 0.6;
     const fixed = mode === "oshima" ? chain.first : chain.last, other = mode === "oshima" ? chain.last : chain.first;
     assert.deepEqual(ctr(L1, fixed), ctr(L0, fixed), "固定端は動かない");
     const o = ctr(L0, chain.first), p1 = ctr(L0, chain.last), Lc = dist(o, p1), u = [(p1[0] - o[0]) / Lc, (p1[1] - o[1]) / Lc];
@@ -307,8 +308,8 @@ test("島列圧縮：対象は伊豆大島〜南硫黄島だけ・固定端・�
     near(Math.abs(t(L1, other) - t(L1, fixed)), k * Math.abs(t(L0, other) - t(L0, fixed)), 1e-9);
   }
   // 0%は無変化。2方向で固定端が違う
-  const z = withT((t) => { t.chainCompression = { mode: "minamiiwo", ratePercent: 0 }; }); assert.deepEqual(ring0(C.layout(model, z), "iwo"), ring0(L0, "iwo"));
-  const a = C.layout(model, withT((t) => { t.chainCompression = { mode: "oshima", ratePercent: 40 }; })), b = C.layout(model, withT((t) => { t.chainCompression = { mode: "minamiiwo", ratePercent: 40 }; }));
+  const z = legacyOff((t) => { t.chainCompression = { mode: "minamiiwo", ratePercent: 0 }; }); assert.deepEqual(ring0(C.layout(model, z), "iwo"), ring0(L0, "iwo"));
+  const a = C.layout(model, legacyOff((t) => { t.chainCompression = { mode: "oshima", ratePercent: 40 }; })), b = C.layout(model, legacyOff((t) => { t.chainCompression = { mode: "minamiiwo", ratePercent: 40 }; }));
   assert.notDeepEqual(ctr(a, "minamiiwo"), ctr(b, "minamiiwo"));
 });
 
@@ -318,6 +319,9 @@ test("適用順：回転 → 従来の琉球・小笠原間隔/硫黄島基準 �
   // 圧縮率0に戻せば「回転＋従来の補正」だけの配置と完全一致（従来の補正は圧縮と無関係に1回だけ）
   const s0 = C.cloneState(s); s0.terrain.chainCompression.ratePercent = 0; const L0 = C.layout(model, s0);
   for (const i of Lrot.islands) assert.deepEqual(i.ring, ring0(L0, i.id));
+  // 二重圧縮の防止：島列圧縮が有効な間は旧・小笠原追加圧縮（50%）を適用しない
+  const chichiId = model.islands.find((i) => i.name === "父島").id, with50 = C.layout(model, s), no50 = C.layout(model, (() => { const q = C.cloneState(s); q.terrain.ogasawaraCompressionPercent = 0; return q; })());
+  assert.deepEqual(ring0(with50, chichiId), ring0(no50, chichiId), "圧縮有効時は旧追加圧縮の値が配置に影響しない");
   // 従来の小笠原追加圧縮の設定を変えても、固定端（伊豆大島：回転支点＝従来補正の対象外）は動かない
   const s2 = C.cloneState(s); s2.terrain.ogasawaraCompressionPercent = 0; assert.deepEqual(ctr(C.layout(model, s2), "izuoshima"), ctr(L1, "izuoshima"));
   // 旧v10保存相当（新項目なし）は二重圧縮なし：小笠原の位置が従来式のまま
@@ -326,13 +330,13 @@ test("適用順：回転 → 従来の琉球・小笠原間隔/硫黄島基準 �
 });
 
 test("v11保存JSON：回転角・圧縮率・支点・対象島・地形変更レイヤー・軸径を含み、往復で一致", () => {
-  const s = withT((t) => { t.rotationsDeg = { izu: 12, ryukyu: -7, northern: 33 }; t.chainCompression = { mode: "minamiiwo", ratePercent: 25 }; t.hiddenRegions = ["takeshima"]; t.heightLayer.fujiSummitM = 3000; t.heightLayer.ridgeSwScale = 1.2; });
+  const s = withT((t) => { t.rotationsDeg = { izu: 12, ryukyu: -7, northern: 33 }; t.chainCompression = { mode: "minamiiwo", ratePercent: 25 }; t.hiddenRegions = ["takeshima"]; t.heightLayer.fujiSummitM = 3000; t.heightLayer.ridgeSwScale = 1.2; t.heightLayer.globalScale = 1.1; });
   const j = JSON.parse(JSON.stringify(C.serializeState(s, model)));
-  assert.equal(j.schemaVersion, 11); assert.equal(j.ship.axisDiameterM, 100);
+  assert.equal(j.schemaVersion, 12); assert.equal(j.ship.axisDiameterM, 100); assert.equal(j.ship.population, 12000000);
   assert.equal(j.regionRotations.izu.angleDeg, 12); assert.equal(j.regionRotations.ryukyu.angleDeg, -7); assert.equal(j.regionRotations.northern.angleDeg, 33);
   assert.ok(j.regionRotations.izu.islandIds.includes("izuoshima") && j.regionRotations.northern.islandIds.includes("etorofu") && j.regionRotations.ryukyu.pivotName.includes("屋久島"));
   assert.deepEqual(j.chainCompression.fixedIslandId, "minamiiwo"); assert.equal(j.chainCompression.ratePercent, 25); assert.ok(j.chainCompression.order.length > 20);
-  assert.equal(j.heightScale.horizontalDenominator, j.heightScale.verticalDenominator); near(j.heightScale.fujiSummitShipM, 75, 1e-9);
+  near(j.heightScale.fujiSummitShipM, 825, 1e-9); assert.equal(j.heightScale.verticalFactor, 10); near(j.heightScale.baseFujiShipM, 944, 1e-9);
   const back = C.normalizeState(j, model); assert.deepEqual(back.terrain, s.terrain); assert.deepEqual(back.ship, s.ship);
   assert.deepEqual(C.layout(model, back).islands.map((i) => i.ring), C.layout(model, s).islands.map((i) => i.ring));
   const bad = C.normalizeState({ ship: s.ship, terrain: { ...s.terrain, rotationsDeg: { izu: 999, ryukyu: "x" }, chainCompression: { ratePercent: 500, mode: "?" }, hiddenRegions: ["x", "izu"] } }, model);
@@ -361,25 +365,28 @@ test("地域の表示切替（伊豆・琉球・小笠原・北方領土・竹�
 test("3D標高：水平も標高も 1/N（富士山 3776m → 94.4m）、元DEMは不変、地形変更レイヤー、回転追従", () => {
   const a = adopted(), L = C.layout(model, a), G = T.buildGrids(model, demPack, a.terrain.heightLayer), S = T.makeShipSampler(C, L, G.grids, model, a.terrain.heightLayer);
   const fp = C.shipPoint(model.toKm(138.7274, 35.3606), L.shifts.get("honshu"));
-  near(S(fp[0], fp[1]), 94.4, 0.01, "富士山 3776/40"); near(S(fp[0] + L.frame.w, fp[1]), 94.4, 0.01, "周回コピーでも同じ");
+  near(S(fp[0], fp[1]), 944, 0.1, "富士山 3776×10/40 = 944m（新基準）"); near(S(fp[0] + L.frame.w, fp[1]), 944, 0.1, "周回コピーでも同じ");
   const a20 = C.cloneState(a); a20.terrain.japanScaleDenominator = 20; const L20 = C.layout(model, a20), S20 = T.makeShipSampler(C, L20, G.grids, model, a20.terrain.heightLayer), fp20 = C.shipPoint(model.toKm(138.7274, 35.3606), L20.shifts.get("honshu"));
-  near(S20(fp20[0], fp20[1]), 188.8, 0.02, "1/20 なら 188.8m（水平と同じ縮尺）");
+  near(S20(fp20[0], fp20[1]), 1888, 0.2, "1/20 なら 1888m（10/N）");
   const h0 = G.grids.get("honshu").h.slice(); const hash = require("crypto").createHash("md5").update(Buffer.from(demPack.data.buffer, demPack.data.byteOffset, demPack.data.byteLength)).digest("hex");
   const lay2 = { ...a.terrain.heightLayer, fujiSummitM: 3000, ridgeSwScale: 0, ridgeNeScale: 0 }, G2 = T.buildGrids(model, demPack, lay2), S2 = T.makeShipSampler(C, L, G2.grids, model, lay2);
-  near(S2(fp[0], fp[1]), 75, 0.01, "地形変更レイヤー：富士山3000m→75m");
+  near(S2(fp[0], fp[1]), 750, 0.1, "地形変更レイヤー：富士山3000m→750m");
+  const lay3 = { ...a.terrain.heightLayer, globalScale: 1.5 }, G3 = T.buildGrids(model, demPack, lay3), S3 = T.makeShipSampler(C, L, G3.grids, model, lay3);
+  near(S3(fp[0], fp[1]), 944 * 1.5, 0.2, "全体倍率は基準からの増減（別の値）");
+  const lay4 = { ...lay3, fujiSummitM: 3776 / 1.5 }, G4 = T.buildGrids(model, demPack, lay4), S4 = T.makeShipSampler(C, L, G4.grids, model, lay4); near(S4(fp[0], fp[1]), 944, 0.2, "全体倍率と富士山の個別調整は別々に掛かる");
   const mxOf = (a) => { let m = 0; for (const v of a) if (v > m) m = v; return m; };
   assert.ok(mxOf(G2.grids.get("honshu").h) < mxOf(h0), "山脈の盛り上げを0にすると本州の最高点が下がる");
   assert.equal(require("crypto").createHash("md5").update(Buffer.from(demPack.data.buffer, demPack.data.byteOffset, demPack.data.byteLength)).digest("hex"), hash, "元DEMは変更されない");
-  assert.equal(T.DEFAULT_LAYER.fujiSummitM, 3776); assert.ok(!("verticalDenominator" in a.terrain) && !("heightRatio" in a.terrain), "独立した高さ縮尺は無い");
+  assert.equal(T.DEFAULT_LAYER.fujiSummitM, 3776); assert.ok(!("verticalDenominator" in a.terrain) && !("heightRatio" in a.terrain), "独立した高さ縮尺(1/5〜1/10)は無い"); assert.equal(T.VERTICAL_FACTOR, 10); assert.ok(!("fujiRotDeg" in T.DEFAULT_LAYER), "富士山の回転は廃止");
   // 回転した島の標高は島に追従する（西表島の山）
   const r = withT((t) => { t.rotationsDeg.ryukyu = 30; }), Lr = C.layout(model, r), Sr = T.makeShipSampler(C, Lr, G.grids, model, r.terrain.heightLayer);
   const peakAt = (Lx, S0, id) => { const isl = Lx.islands.find((i) => i.id === id); let best = 0, bp = null; for (let x = isl.bb.lx; x <= isl.bb.rx; x += 0.02) for (let y = isl.bb.by; y <= isl.bb.ty; y += 0.02) { const h = S0(x, y); if (h > best) { best = h; bp = [x, y]; } } return { best, bp }; };
   const p0 = peakAt(L, S, "okinawa"), p1 = peakAt(Lr, Sr, "okinawa");
-  near(p1.best, p0.best, 1.0, "沖縄本島の最高点の高さ"); assert.ok(dist(p0.bp, p1.bp) > 0.01, "最高点の位置は島と一緒に回る");
+  near(p1.best, p0.best, 10, "沖縄本島の最高点の高さ"); assert.ok(dist(p0.bp, p1.bp) > 0.01, "最高点の位置は島と一緒に回る");
   // 継ぎ目：xとx+円周で同じ高さ
   for (const [x, y] of [[-10, 3], [0.5, -4], [-16, 12]]) near(S(x, y), S(x + L.frame.w, y), 1e-9);
   // 最高点 ≤ 富士山、全体の最高が約94m
-  let mx = 0; for (let x = L.frame.x - L.frame.w / 2; x < L.frame.x + L.frame.w / 2; x += 0.1) for (let y = L.frame.y - 25; y < L.frame.y + 25; y += 0.1) mx = Math.max(mx, S(x, y)); assert.ok(mx <= 94.41 && mx > 70, "max " + mx);
+  let mx = 0; for (let x = L.frame.x - L.frame.w / 2; x < L.frame.x + L.frame.w / 2; x += 0.1) for (let y = L.frame.y - 25; y < L.frame.y + 25; y += 0.1) mx = Math.max(mx, S(x, y)); assert.ok(mx <= 944.1 && mx > 700, "max " + mx);
   assert.ok(T.checkFuji(model, a.terrain.heightLayer).ok);
 });
 
