@@ -155,6 +155,7 @@
     const pp = pops(), nt = network(), top = pp.munis.slice().sort((a, b) => b.pop - a.pop).slice(0, 8), pf = [...pp.prefFrame].sort((a, b) => b[1] - a[1]).slice(0, 5), pn = (id) => model.prefectures.find((q) => q.id === id).name;
     $("popInfo").innerHTML = `<div><b>${pp.source === "provisional" ? "暫定配分" : pp.source === "imported" ? "読み込んだ県別人口枠" : "一部のみ読込（残りは暫定）"}</b>：${pp.params.status}</div><div>県別枠の合計 ${(pp.frameTotal / 10000).toLocaleString(undefined, { maximumFractionDigits: 0 })}万人／船体人口 ${(state.ship.population / 10000).toLocaleString()}万人／差 ${(pp.diff / 10000).toFixed(1)}万人（比例補正はしません）</div><div>県内配分＝市町村の面積×可住面積比×種別係数×拠点都市ブースト（暫定値）。確定設定の県別人口枠のJSONを読み込むと置き換わります。</div>`;
     $("popTop").innerHTML = `<table>${pf.map(([id, v]) => `<tr><td>${pn(id)}</td><td></td><td>${(v / 10000).toFixed(0)}万人</td></tr>`).join("")}${top.map((m) => `<tr><td>${m.n}</td><td>${pn(m.p)}</td><td>${(m.pop / 10000).toFixed(0)}万人</td></tr>`).join("")}</table>`;
+    { const g = ShipGrid.convert(t.japanScaleDenominator), fz = ShipGrid.pointData(state.ship, t.heightLayer.fujiSummitM * 10 / t.japanScaleDenominator * t.heightLayer.globalScale); $("gridInfo").innerHTML = `酷道の最小マス＝地形5km（標高・河川・府県・都市）／内部メッシュ3km／標高元データ約9.8km／面積の単位0.5km²（寸法ではない）。1/${t.japanScaleDenominator}では 5km＝${g.terrainCellShipM.toFixed(0)}m、3km＝${g.demSplatStepShipM.toFixed(0)}m。光・昼夜・季節・雲・風・雨・雪は格子単位で後から設定できる拡張点を保持（寸法・制御則は未確定）。<br>富士山頂（共通点データ）：高さ${fz.shipHeightM.toFixed(0)}m・回転軸から${fz.radiusM.toFixed(0)}m・局所重力${fz.localGravityG.toFixed(3)}G・軸照明まで${fz.light.distanceFromAxisSurfaceM.toFixed(0)}m。`; }
     $("netInfo").innerHTML = `鉄道（リニア）：${nt.stats.railEdges}区間・実距離${nt.stats.railKm.toFixed(0)}km（船内 ${(nt.stats.railKm / t.japanScaleDenominator).toFixed(1)}km）／道路：${nt.stats.roadEdges}区間（幹線 ${nt.stats.trunkKm.toFixed(0)}km・地方 ${nt.stats.localKm.toFixed(0)}km）／拠点 ${nt.stats.hubs}（県庁＋大都市）。人口配分を変えると自動で再設計されます。`;
     $("legacyNote").textContent = t.ogasawaraCompressionPercent > 0 ? `旧・小笠原追加圧縮 ${t.ogasawaraCompressionPercent}%（硫黄島基準）は保存データの互換のため保持。伊豆・小笠原の島列圧縮が0%の間だけ適用され、島列圧縮を使うと置き換わります（二重圧縮なし）。` : "";
   }
@@ -412,7 +413,7 @@
       const fill = (sel, vals) => { sel.innerHTML = ""; sel.appendChild(new Option("新規（自由に名付ける）", "")); for (const v of vals) sel.appendChild(new Option(v, v)); };
       fill(sn, slots.map((q) => q.name)); fill(sf, slots.map((q) => q.fileName));
       const base = cur.kind === "slot" ? store.get(cur.id) : null; sn.value = base ? base.name : ""; sf.value = base ? base.fileName : "";
-      ni.value = base ? "" : store.uniqueName(entryName() + " 改"); fi.value = store.defaultFileName(ni.value || entryName());
+      const shortName = entryName().split("｜")[0].replace("★", "").trim(); ni.value = base ? "" : store.uniqueName(shortName + " 改"); fi.value = store.defaultFileName(ni.value || shortName);
       const sync = () => { ni.hidden = sn.value !== ""; fi.hidden = sf.value !== ""; const ow = sn.value !== ""; ok.textContent = ow ? "上書き保存" : "新規登録"; hint.textContent = ow ? `「${sn.value}」を上書きします（以前の内容は戻せません。必要ならJSON出力でバックアップ）。` : "新しいスロットとして登録します（既存の案は変わりません）。"; hint.className = ow ? "warning" : "muted"; };
       sn.onchange = () => { if (sn.value === "") { fi.value = store.defaultFileName(ni.value || "design"); } else { const q = slots.find((x) => x.name === sn.value); sf.value = q ? q.fileName : ""; } sync(); }; sf.onchange = sync; ni.oninput = () => { if (sf.value === "") fi.value = store.defaultFileName(ni.value); };
       sync(); $("saveDlg").hidden = false; ni.focus();
@@ -479,7 +480,7 @@
       model.prefectures.map((p) => `<tr><td>${p.name}</td><td>${p.capital}</td><td>${p.areaKm2.toLocaleString()}</td><td>${(p.areaKm2 / (d * d)).toFixed(2)}</td></tr>`).join("") + "</table>";
   }
   $("prefDetails").addEventListener("toggle", prefTable);
-  $("sources").innerHTML = SHIP_GEO.sources.map((s) => `<div>・${s.use}：${s.name}（${s.license}）</div>`).join("") +
+  $("sources").innerHTML = (window.SHIP_EXTRA ? SHIP_EXTRA.sources.map((s) => `<div>・${s.use}：${s.name}（${s.license}）</div>`).join("") : "") + SHIP_GEO.sources.map((s) => `<div>・${s.use}：${s.name}（${s.license}）</div>`).join("") +
     `<div>・府県境：${SHIP_GEO.prefectureBorders.method}。実在の県境ではなく酷道世界の府県（北海道は3県を1つに再統合した47都道府県）。北方領土・竹島の輪郭はNatural Earthの日本側視点データで、領有判断を意味しない。</div><div>・小島${model.islands.filter((s) => s.source === "schematic").length}島は位置のみの模式形（実形状データなし）。沖ノ鳥島も模式形。</div><div>・データ版：${SHIP_GEO.schema} v${SHIP_GEO.version}（${SHIP_GEO.builtAt}）</div>`;
 
   // ------------------------------------------------------------ view switching (2D / 3D)

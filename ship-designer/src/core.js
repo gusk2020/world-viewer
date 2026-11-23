@@ -7,6 +7,7 @@
   const G0 = 9.80665;
   const POPULATION = 12000000;
   const SCHEMA_VERSION = 13;
+  const BODY_SCALE_DEFAULT = 65 / 170; // サシンクト身長65cm ÷ 現代人170cm
   const AXIS_DIAMETER_M = 100; // 中心軸（非回転）。半径50m。居住内径(6km)とは別物
   const ROT_LIMITS = { izu: 90, ryukyu: 45, northern: 90 }; // 回転スライダーの上下限(度)。0°で元配置
   const ROT_LABEL = { izu: "A 東京・伊豆小笠原諸島", ryukyu: "B 鹿児島〜沖縄・南西諸島", northern: "C 北方領土" };
@@ -121,6 +122,7 @@
         innerDiameterKm: D, cylinderLengthKm: L,
         centerXKm: Number.isFinite(Number(s.ship.centerXKm)) ? Number(s.ship.centerXKm) : 0,
         centerYKm: Number.isFinite(Number(s.ship.centerYKm)) ? Number(s.ship.centerYKm) : 0,
+        bodyScaleRatio: clamp(Number.isFinite(Number(s.ship.bodyScaleRatio)) ? Number(s.ship.bodyScaleRatio) : BODY_SCALE_DEFAULT, 0.05, 1), // 体格縮小率（身長65cm/170cm）。地図縮尺・高さ倍率・重力とは別の値
         axisDiameterM: clamp(Number.isFinite(Number(s.ship.axisDiameterM)) ? Number(s.ship.axisDiameterM) : AXIS_DIAMETER_M, 1, 2000),
         population: clamp(Number.isFinite(Number(s.ship.population)) ? Number(s.ship.population) : POPULATION, 10000, 1000000000), // 既定1200万人（編集可）
         gravityG: pickNum(s.ship.gravityG, 3, 0.1, 10),
@@ -149,6 +151,7 @@
       terrain: s.terrain, layers: s.layers, popFrame: s.popFrame || null,
       gravity: { targetG: s.ship.gravityG, g0: G0, radiusM: ph.radiusM, rimSpeedMs: ph.rimSpeedMs, omegaRadS: ph.omegaRadS, rpm: ph.rpm, periodS: ph.periodS },
       geoData: model ? model.dataVersion : null,
+      extensions: { weatherGrid: null, note: "気象・光の格子は未確定。共通点データ(gridspec.js)を保持", bodyScale: { ratio: s.ship.bodyScaleRatio, note: "体格縮小率（身長65cm/170cm）。地図縮尺1/N・高さ倍率・人工重力とは別の値" }, fuji: root.ShipGrid ? root.ShipGrid.pointData(s.ship, s.terrain.heightLayer.fujiSummitM * 10 / s.terrain.japanScaleDenominator * s.terrain.heightLayer.globalScale) : null },
       heightScale: { horizontalDenominator: s.terrain.japanScaleDenominator, verticalFactor: 10, globalScale: s.terrain.heightLayer.globalScale, formula: "船内標高 = 実標高 × 10 / 縮尺分母 × 全体倍率（山脈・富士山の個別調整は別）", baseFujiShipM: 3776 * 10 / s.terrain.japanScaleDenominator, fujiSummitShipM: s.terrain.heightLayer.fujiSummitM * 10 / s.terrain.japanScaleDenominator * s.terrain.heightLayer.globalScale },
       regionRotations: model ? regionRotationReport(model, s.terrain) : null,
       chainCompression: model ? chainReport(model, s.terrain) : null,
@@ -413,7 +416,7 @@
     return [-r * Math.sin(th), -r * Math.cos(th), y - frame.y];
   }
 
-  const api = { G0, POPULATION, SCHEMA_VERSION, buildModel, defaultTerrain, normalizeState, serializeState, physics, layout, wrapX, interference, islandConflicts, resolveRyukyu, metrics, overhangs, LAYER_DEFAULTS, computeShifts, shipPoint, unshipPoint, ROT_LIMITS, ROT_LABEL, CHAIN_MAX_PERCENT, REGIONS, AXIS_DIAMETER_M,
+  const api = { G0, POPULATION, SCHEMA_VERSION, buildModel, defaultTerrain, normalizeState, serializeState, physics, layout, wrapX, interference, islandConflicts, resolveRyukyu, metrics, overhangs, BODY_SCALE_DEFAULT, LAYER_DEFAULTS, computeShifts, shipPoint, unshipPoint, ROT_LIMITS, ROT_LABEL, CHAIN_MAX_PERCENT, REGIONS, AXIS_DIAMETER_M,
     presetList, presetState, landBounds, toCylinder, frameOf, USER_V9_JSON, ringArea, bandArea, pointInRing, pairOverlap, isVisible, cloneState };
   root.ShipCore = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
