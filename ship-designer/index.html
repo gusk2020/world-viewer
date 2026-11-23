@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>過速世界 船体設計台帳</title>
+<link rel="stylesheet" href="src/style.css">
+</head>
+<body>
+<header id="top"><h1>過速世界｜船体設計台帳 v13</h1></header>
+<div id="panel" data-mode="cylinder">
+  <canvas id="map" aria-label="2D展開図"></canvas>
+  <div id="view3d" hidden></div>
+  <div id="labels3d" hidden></div>
+  <div id="gizmoBox" hidden>
+    <canvas id="gizmo" aria-label="3D視点操作器（球を回す・ひねる・つまむ）"></canvas>
+    <button id="btnInOut" aria-pressed="false" aria-label="外部と内部の視点を切り替え" title="外部／内部"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3.2" fill="currentColor"/></svg></button>
+  </div>
+  <div id="loading3d" hidden>3D準備中…</div>
+</div>
+<div id="ctl">
+  <button id="btnView" aria-pressed="false">2D ⇄ 3D</button><button id="modeJapan" aria-pressed="false">列島操作</button><button id="modeCylinder" aria-pressed="true">船体操作</button>
+  <button id="btnEdit" aria-expanded="false" aria-controls="editor">編集</button><button id="fit">列島全表示</button><button id="resetView">船体全表示</button>
+</div>
+<section id="editor" hidden>
+  <div id="tabs" role="tablist"><button data-tab="view" aria-selected="true">表示</button><button data-tab="layout" aria-selected="false">配置</button><button data-tab="terrain" aria-selected="false">地形</button><button data-tab="data" aria-selected="false">データ</button><button data-tab="save" aria-selected="false">保存</button></div>
+  <div id="editBody">
+
+    <!-- ① 表示 -->
+    <div class="tabpane" data-pane="view">
+      <details open class="grp"><summary>地形・水・境界</summary>
+        <div class="layerList">
+          <button class="tg" data-view-toggle="elevColor">標高色・陰影・雪</button>
+          <button class="tg" data-view-toggle="rivers">河川</button>
+          <button class="tg" data-view-toggle="lakes">湖</button>
+          <button class="tg" data-view-toggle="borders">府県境</button>
+          <button class="tg" data-view-toggle="ridges">山脈・富士山</button>
+          <button class="tg" data-view-toggle="symbols">小島記号</button>
+          <button class="tg" data-view-toggle="interference">干渉面（赤）</button>
+          <button class="tg" data-view-toggle="overhang">はみ出し（橙）</button>
+        </div>
+        <small class="muted">河川・湖・標高は酷道の方式（標高から作る河川／OSMの湖）。川幅は見やすさ用の表示幅で、実寸の地形とは別です。県名は地図に表示しません（県名・県ID・県境は内部データとして保持）。</small>
+      </details>
+      <details open class="grp"><summary>都市・市町村・人口</summary>
+        <div class="layerList">
+          <button class="tg" data-view-toggle="cities">県庁所在地</button>
+          <button class="tg" data-view-toggle="munis">市町村（点）</button>
+          <button class="tg" data-view-toggle="names">市町村名</button>
+          <button class="tg" data-view-toggle="density">人口密度</button>
+          <button class="tg" data-view-toggle="urban">都市・市街地</button>
+        </div>
+        <small class="muted">市町村名は縮尺に応じて表示数が変わります（人口の多い順・県庁優先）。人口は暫定配分です（データタブ参照）。</small>
+      </details>
+      <details open class="grp"><summary>交通（船内用に新規設計）</summary>
+        <div class="layerList">
+          <button class="tg" data-view-toggle="rail">鉄道（リニア）</button>
+          <button class="tg" data-view-toggle="road">道路（専用クレイ）</button>
+        </div>
+        <div class="stub" id="stubTraffic"></div>
+        <small class="muted">電動のみ。リニア鉄道と、非接触・局部磁場グリップの専用クレイ道路。空路・海路は設けません。酷道の線形は使わず、県庁所在地・市町村・人口から新規設計しています。島の間の連絡は未設計です。</small>
+      </details>
+      <details open class="grp" id="grp3d"><summary>3Dの見え方</summary>
+        <div class="row"><strong>自転表示</strong><div class="seg"><button data-spin="0" aria-pressed="false">停止</button><button data-spin="1" aria-pressed="false">実速度</button><button data-spin="20" aria-pressed="true">20倍</button></div></div>
+        <small id="spinNote" class="muted"></small>
+        <div class="row"><strong>描画</strong><div class="seg"><button id="q3d" aria-pressed="false">高精細</button><button id="layers3d" aria-pressed="true">区画</button></div></div>
+        <div class="row"><strong>3D地形</strong><div class="seg"><button id="terrain3d" aria-pressed="true">高さあり</button><button id="seeThru3d" aria-pressed="false">透過</button></div></div>
+        <div id="insideCtl" hidden>
+          <div class="row"><strong>視線</strong><div class="seg"><button data-look="ahead" aria-pressed="true">前方</button><button data-look="up" aria-pressed="false">真上（反対側）</button></div></div>
+          <div class="row"><label for="eyeH">視点の高さ（地表から）</label><b id="eyeHv"></b></div>
+          <div class="stepper"><button data-eye="-1" aria-label="視点を下げる">−</button><input id="eyeH" type="range" min="2" max="2950" step="1" value="150"><button data-eye="1" aria-label="視点を上げる">＋</button></div>
+        </div>
+        <small id="terrainNote" class="muted"></small>
+      </details>
+    </div>
+
+    <!-- ② 配置 -->
+    <div class="tabpane" data-pane="layout" hidden>
+      <details open class="grp"><summary>船体案</summary>
+        <div class="row"><label for="preset">案を選ぶと即反映</label><b id="presetState"></b></div>
+        <select id="preset"></select>
+      </details>
+      <details open class="grp"><summary>船体</summary>
+        <div id="st-grp-hull"></div>
+        <small class="muted">3Gの周速・角速度・rpm・周期は居住シリンダーの内半径で計算します（中心軸の半径は使いません）。</small>
+      </details>
+      <details open class="grp"><summary>地理（共通）</summary>
+        <div id="st-grp-common"></div>
+      </details>
+      <details open class="grp"><summary>北方領土（北海道の北東）</summary>
+        <div id="st-grp-north"></div>
+        <div class="toggles"><button class="tg" data-region="northern">北方領土を表示</button></div>
+        <small class="muted">根室岬先端（納沙布岬）を支点に4島を一体で回転。北海道本島は回転しません。＋は反時計回り。</small>
+      </details>
+      <details open class="grp"><summary>竹島</summary>
+        <div class="toggles"><button class="tg" data-region="takeshima">竹島を表示</button></div>
+      </details>
+      <details open class="grp"><summary>伊豆・小笠原諸島</summary>
+        <div id="st-grp-izu"></div>
+        <div class="row"><strong>圧縮で固定する端</strong><div class="seg"><button id="chainOshima" aria-pressed="true">伊豆大島</button><button id="chainMinami" aria-pressed="false">南硫黄島</button></div></div>
+        <div class="toggles"><button class="tg" data-region="izu">伊豆諸島を表示</button><button class="tg" data-region="ogasawara">小笠原諸島を表示</button></div>
+        <small id="chainInfo" class="muted"></small>
+        <small class="muted">伊豆大島を支点に島列を回転（東京都本土は回転しない）。圧縮は島の形を変えず、島列沿いの間隔だけを同じ倍率で縮めます。</small>
+      </details>
+      <details open class="grp"><summary>対馬</summary>
+        <div id="st-grp-tsushima"></div>
+      </details>
+      <details open class="grp"><summary>鹿児島〜沖縄・南西諸島</summary>
+        <div id="st-grp-kago"></div>
+        <div class="toggles"><button class="tg" data-region="ryukyu">琉球諸島を表示</button></div>
+        <small class="muted">屋久島を支点に屋久島より南の島列を回転（九州本土は回転しない）。共通南北間隔は小笠原・鳥島群にも掛かります。</small>
+      </details>
+      <details open class="grp"><summary>沖ノ鳥島・南鳥島</summary>
+        <div class="toggles"><button class="tg" data-toggle="showOkinotori">沖ノ鳥島を表示</button><button class="tg" data-toggle="showMinamitori">南鳥島を表示</button></div>
+      </details>
+      <details open class="grp"><summary>南北収容・個別補正</summary>
+        <div class="buttons tight"><button id="fixRyukyu">南西諸島の重なりを自動解消</button><button id="clearOffsets">個別補正を消す</button></div>
+        <small id="offsetInfo" class="muted"></small>
+        <small id="legacyNote" class="muted"></small>
+        <small id="rotInfo" class="muted"></small>
+      </details>
+    </div>
+
+    <!-- ③ 地形 -->
+    <div class="tabpane" data-pane="terrain" hidden>
+      <details open class="grp"><summary>全体の高さ</summary>
+        <small id="heightIntro" class="muted"></small>
+        <div id="st-grp-height"></div>
+      </details>
+      <details open class="grp"><summary>山脈・富士山の個別調整</summary>
+        <div class="row"><strong>選択</strong><span id="terrainSelName" class="muted"></span></div>
+        <div id="terrainList" class="seg wrap"><button data-sel="fuji" aria-pressed="true">富士山</button><button data-sel="sw" aria-pressed="false">南西の山脈</button><button data-sel="ne" aria-pressed="false">北東の山脈</button></div>
+        <small class="muted">一覧から選ぶか、2D地図で山脈の線・富士山を直接タップして選びます（酷道と同じ選び方）。</small>
+        <div id="st-grp-sel"></div>
+        <div class="buttons tight"><button id="resetHeight">高さの変更を元に戻す</button></div>
+        <small id="heightInfo" class="muted"></small>
+      </details>
+    </div>
+
+    <!-- ④ データ -->
+    <div class="tabpane" data-pane="data" hidden>
+      <div id="status" aria-live="polite"></div>
+      <div id="metrics"></div>
+      <div id="overList"></div>
+      <details class="grp" open><summary>人口配分（県別枠・市町村）</summary><div id="popInfo" class="muted"></div><div class="buttons tight"><label class="file">県別人口枠JSON読込<input id="popLoad" type="file" accept="application/json,.json"></label><button id="popClear">暫定配分に戻す</button></div><div id="popTop"></div></details>
+      <details class="grp"><summary>道路・鉄道（新規設計の集計）</summary><div id="netInfo" class="muted"></div></details>
+      <details class="grp"><summary>格子の寸法と気象・光の拡張点</summary><div id="gridInfo" class="muted"></div></details>
+      <details class="grp" id="axisDetails"><summary>中心軸と断面図</summary>
+        <canvas id="section2d" width="260" height="260" aria-label="断面図"></canvas>
+        <div id="axisInfo" class="muted"></div>
+      </details>
+      <details class="grp" id="prefDetails"><summary>都道府県（47）の面積・県庁</summary><div id="prefTable"></div></details>
+      <details class="grp"><summary>データの出典と精度</summary><div id="sources" class="muted"></div></details>
+    </div>
+
+    <!-- ⑤ 保存 -->
+    <div class="tabpane" data-pane="save" hidden>
+      <small class="muted">「保存スロット」＝このブラウザ内に残す保存先。標準案・名前付き保存・読み込んだJSONを同じ一覧から呼び出せます。「JSON出力」はファイルとして端末へ書き出す外部バックアップです（スロットとは別）。</small>
+      <div class="row"><strong>保存スロットを呼び出す</strong><b id="slotState"></b></div>
+      <select id="saved"></select>
+      <div class="buttons tight"><button id="saveOpen">保存…</button><button id="dupSaved">複製</button><button id="renameSaved">名前変更</button><button id="deleteSaved">削除</button><button id="undoDelete">削除を取り消す</button></div>
+      <div class="buttons tight"><button id="export">JSON出力（現在の案）</button><button id="exportAll">全スロットを一括出力</button><label class="file">JSON読込<input id="load" type="file" accept="application/json,.json"></label></div>
+      <div class="buttons tight"><button id="hideStd">選択中の標準案を一覧から隠す</button><button id="showStd">隠した標準案を戻す</button></div>
+      <small id="slotInfo" class="muted"></small>
+      <small id="feedback" class="muted" aria-live="polite"></small>
+      <div id="jsonBox" hidden><div class="row"><small id="jsonName" class="muted"></small><span class="seg"><button id="copyJson">コピー</button><button id="closeJson">閉じる</button></span></div><textarea id="jsonOut" rows="6" readonly></textarea></div>
+    </div>
+  </div>
+</section>
+<div id="saveDlg" hidden role="dialog" aria-modal="true"><div class="askBox"><p><b>保存スロットに保存</b></p>
+  <label class="dl">表示名</label><select id="sdName"></select><input id="sdNameIn" maxlength="60" placeholder="新しい表示名">
+  <label class="dl">ファイル名（JSON出力時）</label><select id="sdFile"></select><input id="sdFileIn" maxlength="80" placeholder="ファイル名.json">
+  <small id="sdHint" class="muted"></small>
+  <div class="buttons tight"><button id="sdCancel">やめる</button><button id="sdOk">新規登録</button></div></div></div>
+<div id="ask" hidden role="dialog" aria-modal="true"><div class="askBox"><p id="askMsg"></p><input id="askInput" hidden maxlength="60"><div class="buttons tight"><button id="askCancel">やめる</button><button id="askOk">OK</button></div></div></div>
+<script src="src/data.js"></script>
+<script src="src/dem.js"></script>
+<script src="src/terrain.js"></script>
+<script src="src/extra.js"></script>
+<script src="src/popmodel.js"></script>
+<script src="src/slots.js"></script>
+<script src="src/gridspec.js"></script>
+<script src="src/network.js"></script>
+<script src="src/terrainimg.js"></script>
+<script src="src/adopted-offsets.js"></script>
+<script src="src/fit-candidate.js"></script>
+<script src="src/core.js"></script>
+<script src="src/mapdraw.js"></script>
+<script src="src/layers.js"></script>
+<script src="vendor/three.min.js" defer></script>
+<script src="src/view3d.js" defer></script>
+<script src="src/app.js" defer></script>
+</body>
+</html>

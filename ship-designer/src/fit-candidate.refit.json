@@ -1,0 +1,11 @@
+{
+ "centerYKm": 3.796506200000011,
+ "ryukyuSpacingPercent": 54,
+ "islandOffsetsNorthKm": {
+  "okinotori": 5.3381
+ },
+ "islandOffsetsKm": {
+  "ne12926_2813": -0.42163,
+  "sc12528_2493": -0.02642
+ }
+}
