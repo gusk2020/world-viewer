@@ -100,9 +100,9 @@
       addLabel(anchor(fixedGroup, 0, -R * 1.6, -L / 2 - R * 0.8), "後部 工業・推進区画（非回転）", "#fdba74");
     }
     // 軸上照明（非回転）
-    const AX = C.AXIS_DIAMETER_M / 2000; // 100m直径 = 半径50m。2D断面・3D・船内視点で共通
+    const AX = st.ship.axisDiameterM / 2000; // 中心軸の半径(km)。既定は直径100m=半径50m。2D断面・3D・船内視点で共通
     const rod = cylinder(AX, L * 1.02, 24, new THREE.MeshBasicMaterial({ color: 0xfffbeb }), false); fixedGroup.add(rod);
-    addLabel(anchor(fixedGroup, 0, R * 0.08, L * 0.18), "中心軸 直径100m・軸上照明（非回転）", "#fef08a");
+    addLabel(anchor(fixedGroup, 0, R * 0.08, L * 0.18), `中心軸 直径${st.ship.axisDiameterM}m・軸上照明（非回転）`, "#fef08a");
     addLabel(anchor(fixedGroup, 0, 0, L / 2 + R * 2.4), "▲ 船首・北（進行方向）", "#7dd3fc");
     addLabel(anchor(fixedGroup, 0, 0, -L / 2 - R * 2.3), "▼ 船尾・南", "#7dd3fc");
     // city labels on the rotating surface: a handful of anchors (capitals of the largest prefectures)
@@ -113,7 +113,7 @@
     }
     for (const grp of [spinGroup, fixedGroup]) grp.traverse((n) => { if (n.material) n.material.clippingPlanes = clipPlanes; });
     built = { R, L, f, maxH, axisR: AX };
-    $("terrainNote").textContent = terrain3d ? `地形：水平も標高も実世界の1/${st.terrain.japanScaleDenominator}。最高点 ${maxH.toFixed(1)}m（半径${R * 1000}mの円筒では起伏はごく低い）。中心軸は直径${C.AXIS_DIAMETER_M}m。` : "地形の高さを切っています（平らな表示）。";
+    $("terrainNote").textContent = terrain3d ? `地形：水平は1/${st.terrain.japanScaleDenominator}、標高は10/${st.terrain.japanScaleDenominator}×倍率${st.terrain.heightLayer.globalScale.toFixed(2)}。最高点 ${maxH.toFixed(0)}m（居住内半径${R * 1000}m）。中心軸は直径${st.ship.axisDiameterM}m。` : "地形の高さを切っています（平らな表示）。";
     ShipApp.clean3d();
     updateSpinNote();
   }
@@ -180,5 +180,5 @@
   $("q3d").addEventListener("click", () => { hiQ = !hiQ; $("q3d").setAttribute("aria-pressed", String(hiQ)); if (renderer) build(); });
   $("layers3d").addEventListener("click", () => { showLayers = !showLayers; $("layers3d").setAttribute("aria-pressed", String(showLayers)); if (renderer) build(); });
 
-  window.Ship3D = { show, pause, setView: (v) => setView(v), get built() { return built; }, get maxH() { return maxH; }, get camera() { return camera; }, get groundOpacity() { return groundMat && groundMat.opacity; }, get eyeH() { return eyeH; }, get renderer() { return renderer; }, get texture() { return texCanvas; }, get spin() { return spinGroup && spinGroup.rotation.z; } };
+  window.Ship3D = { show, pause, setView: (v) => setView(v), resize: () => resize(), get built() { return built; }, get maxH() { return maxH; }, get camera() { return camera; }, get groundOpacity() { return groundMat && groundMat.opacity; }, get eyeH() { return eyeH; }, get renderer() { return renderer; }, get texture() { return texCanvas; }, get spin() { return spinGroup && spinGroup.rotation.z; } };
 })();

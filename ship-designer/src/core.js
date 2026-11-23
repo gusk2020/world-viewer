@@ -6,9 +6,9 @@
   "use strict";
   const G0 = 9.80665;
   const POPULATION = 12000000;
-  const SCHEMA_VERSION = 11;
+  const SCHEMA_VERSION = 12;
   const AXIS_DIAMETER_M = 100; // 中心軸（非回転）。半径50m。居住内径(6km)とは別物
-  const ROT_LIMITS = { izu: 45, ryukyu: 45, northern: 90 }; // 回転スライダーの上下限(度)。0°で元配置
+  const ROT_LIMITS = { izu: 90, ryukyu: 45, northern: 90 }; // 回転スライダーの上下限(度)。0°で元配置
   const ROT_LABEL = { izu: "A 東京・伊豆小笠原諸島", ryukyu: "B 鹿児島〜沖縄・南西諸島", northern: "C 北方領土" };
   const CHAIN_MAX_PERCENT = 80;
   const REGIONS = ["izu", "ogasawara", "ryukyu", "northern", "takeshima"];
@@ -115,8 +115,8 @@
         innerDiameterKm: D, cylinderLengthKm: L,
         centerXKm: Number.isFinite(Number(s.ship.centerXKm)) ? Number(s.ship.centerXKm) : 0,
         centerYKm: Number.isFinite(Number(s.ship.centerYKm)) ? Number(s.ship.centerYKm) : 0,
-        axisDiameterM: AXIS_DIAMETER_M,
-        population: POPULATION, // 正史固定
+        axisDiameterM: clamp(Number.isFinite(Number(s.ship.axisDiameterM)) ? Number(s.ship.axisDiameterM) : AXIS_DIAMETER_M, 1, 2000),
+        population: clamp(Number.isFinite(Number(s.ship.population)) ? Number(s.ship.population) : POPULATION, 10000, 1000000000), // 既定1200万人（編集可）
         gravityG: pickNum(s.ship.gravityG, 3, 0.1, 10),
       },
       terrain: {
@@ -142,7 +142,7 @@
       terrain: s.terrain,
       gravity: { targetG: s.ship.gravityG, g0: G0, radiusM: ph.radiusM, rimSpeedMs: ph.rimSpeedMs, omegaRadS: ph.omegaRadS, rpm: ph.rpm, periodS: ph.periodS },
       geoData: model ? model.dataVersion : null,
-      heightScale: { horizontalDenominator: s.terrain.japanScaleDenominator, verticalDenominator: s.terrain.japanScaleDenominator, note: "水平も標高も同じ1/N。山脈高さの独立縮尺は使わない", fujiSummitShipM: s.terrain.heightLayer.fujiSummitM / s.terrain.japanScaleDenominator },
+      heightScale: { horizontalDenominator: s.terrain.japanScaleDenominator, verticalFactor: 10, globalScale: s.terrain.heightLayer.globalScale, formula: "船内標高 = 実標高 × 10 / 縮尺分母 × 全体倍率（山脈・富士山の個別調整は別）", baseFujiShipM: 3776 * 10 / s.terrain.japanScaleDenominator, fujiSummitShipM: s.terrain.heightLayer.fujiSummitM * 10 / s.terrain.japanScaleDenominator * s.terrain.heightLayer.globalScale },
       regionRotations: model ? regionRotationReport(model, s.terrain) : null,
       chainCompression: model ? chainReport(model, s.terrain) : null,
       sourcePreset: s.sourcePreset,
@@ -160,7 +160,7 @@
     const radiusM = (ship.innerDiameterKm / 2) * 1000, a = (ship.gravityG ?? 3) * G0;
     const omegaRadS = Math.sqrt(a / radiusM), rimSpeedMs = Math.sqrt(a * radiusM), rpm = (omegaRadS * 60) / (2 * Math.PI), periodS = (2 * Math.PI) / omegaRadS;
     const areaKm2 = Math.PI * ship.innerDiameterKm * ship.cylinderLengthKm;
-    return { radiusM, accel: a, omegaRadS, rimSpeedMs, rpm, periodS, areaKm2, circumferenceKm: Math.PI * ship.innerDiameterKm, density: POPULATION / areaKm2 };
+    return { radiusM, accel: a, omegaRadS, rimSpeedMs, rpm, periodS, areaKm2, circumferenceKm: Math.PI * ship.innerDiameterKm, density: (ship.population || POPULATION) / areaKm2 };
   }
 
   // ------------------------------------------------------------------ island adjustment
@@ -188,7 +188,8 @@
       const cy = cen.get(s.id)[1]; let ty = 0;
       if (ADJUST_GROUPS.has(s.group)) ty = (model.anchorY - cy) * (1 - sp);
       if (s.group === "tsushima") ty -= terrain.tsushimaSouthKm * denom;
-      if (s.group === "oga" && model.iwo && s !== model.iwo) { const iwoY = model.anchorY + (iwoC[1] - model.anchorY) * sp, yy = cy + ty; if (yy > iwoY) ty += (iwoY - yy) * terrain.ogasawaraCompressionPercent / 100; }
+      const chainOn = terrain.chainCompression && terrain.chainCompression.ratePercent > 0; // 島列圧縮を使う間は旧・小笠原追加圧縮を適用しない（二重圧縮の防止）
+      if (!chainOn && s.group === "oga" && model.iwo && s !== model.iwo) { const iwoY = model.anchorY + (iwoC[1] - model.anchorY) * sp, yy = cy + ty; if (yy > iwoY) ty += (iwoY - yy) * terrain.ogasawaraCompressionPercent / 100; }
       out.set(s.id, { rot: rotFor(s.id), tx: 0, ty, denom, ox: (terrain.islandOffsetsKm && terrain.islandOffsetsKm[s.id]) || 0, oyExtra: (terrain.islandOffsetsNorthKm && terrain.islandOffsetsNorthKm[s.id]) || 0 });
     }
     const cc = terrain.chainCompression, ch = model.chain;
@@ -324,7 +325,7 @@
     return {
       physics: ph, landTotalKm2: landTotal, landInFrameKm2: landInFrame, overlapKm2: overlap, landNetKm2: landNet,
       seaKm2: Math.max(0, ph.areaKm2 - landNet), landShare: landNet / ph.areaKm2,
-      densityPerLandKm2: landNet > 0 ? POPULATION / landNet : Infinity,
+      densityPerLandKm2: landNet > 0 ? (state.ship.population || POPULATION) / landNet : Infinity,
       overhangNorthKm: Math.max(0, ymax - north), overhangSouthKm: Math.max(0, south - ymin), interferenceCount: inter.length, overhangIslands: overhangs(lay),
     };
   }
