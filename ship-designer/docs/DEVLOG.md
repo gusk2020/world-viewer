@@ -65,7 +65,7 @@
 ## 4c. v11（2026-11-22）
 ### 重要な前提・未確認
 - **指示にあった添付画像（白い矢印）はこの作業環境では見えなかった**。そのため回転の向きと初期値は指定できず、**3地域とも初期0°（元配置）**とし、符号は「＋＝反時計回り（地図上で北が西へ傾く）」と定めた。上下限は A・B が ±45°、C が ±90°（`ROT_LIMITS`）。画像の希望方向があれば、スライダーでその方向へ動かすだけでよい（プリセットは未作成）。
-- GitHub Pages：world-viewer の公開サイト（https://gusk2020.github.io/world-viewer/）は **ブランチ `climate-v1-stable-ui` のルートを配信（Actions なし）**。内容が一致することをブランチ総当たりの md5 で確認した。既存ファイルを上書きしない方法は「同ブランチに新規フォルダ `ship-designer/` を追加」だけ。**他ブランチへのpushは許可が要るため、公開は利用者の許可待ち**（未公開）。
+- GitHub Pages：world-viewer の公開サイト（https://gusk2020.github.io/world-viewer/）は **ブランチ `climate-v1-stable-ui` のルートを配信（Actions なし）**。内容が一致することをブランチ総当たりの md5 で確認した。既存ファイルを上書きしない方法は「同ブランチに新規フォルダ `ship-designer/` を追加」だけ。利用者の許可を得て、`climate-v1-stable-ui` に `ship-designer/` を**追加のみ**で push（commit c030bdf、既存ファイル変更0・既存トップページのmd5不変）。**公開URL：https://gusk2020.github.io/world-viewer/ship-designer/**（Pixel 7 エミュレーションで実URLを開き、2D描画・3D描画・コンソールエラー0を確認。実機Pixel 7aは未確認）。更新する場合は同ブランチの `ship-designer/` へ同じ手順でコピーする（開発の正本は `ccr-2bdf1ec2-w2o65c`）。
 ### 追加・変更点
 - データ：Natural Earth の日本側視点ファイルに切替え、北方領土4島（択捉・国後・色丹・志発）と竹島を追加。歯舞群島は志発島（NE収録）＋水晶・勇留・秋勇留・多楽（模式・位置概略）の**複数の島**。島に `region`（izu/ogasawara/ryukyu/northern/takeshima/okinotori/minamitori/main）を付与。南鳥島は NE で2ポリゴンのため lon>150 を鳥島群に（旧データでは片方が小笠原扱いになっていた不具合を修正）。
 - 北海道3県→1つ、東京府→東京都、県名は地図に出さない（切替も削除）。規則は `docs/PREFECTURE_CONVERSION.md`。
