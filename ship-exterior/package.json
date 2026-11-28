@@ -1,0 +1,11 @@
+{
+  "name": "dtdt-ship-exterior",
+  "private": true,
+  "type": "module",
+  "description": "dT/dt過速世界 恒星間宇宙船の外観3Dモデル(手続き生成)",
+  "scripts": {
+    "glb": "node export_glb.mjs",
+    "cover": "node cover_test.mjs"
+  },
+  "dependencies": { "three": "0.185.1" }
+}

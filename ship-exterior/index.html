@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+</head>
+<body style="margin:0">
+<title>dT/dt 恒星間宇宙船</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* layout: a full-width 3D stage first, a control strip under it, then the image sheets */
+:root {
+  --bg: #07090c;          /* deep space */
+  --panel: #10151a;
+  --line: #243038;
+  --fg: #dfe5e2;
+  --muted: #8c9893;
+  --scale: #8f9a86;       /* the hull's grey-green */
+  --accent: #c7b48a;      /* pale repair-scar tone */
+  --font-body: "Noto Sans JP", system-ui, sans-serif;
+  --font-num: "IBM Plex Mono", ui-monospace, monospace;
+  color-scheme: dark;
+}
+html, body { background: var(--bg); color: var(--fg); }
+body { font-family: var(--font-body); font-size: 15px; line-height: 1.6; }
+.wrap { max-width: 1100px; margin: 0 auto; padding-block: 16px 40px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 18px; }
+h1 { font-size: 1.25rem; margin: 0; letter-spacing: .02em; text-wrap: balance; }
+h2 { font-size: 1.02rem; margin: 0 0 8px; color: var(--scale); letter-spacing: .04em; }
+p { margin: 0; }
+.muted { color: var(--muted); font-size: .88rem; }
+.stage { position: relative; width: 100%; aspect-ratio: 16 / 10; max-height: 72vh; min-height: 300px;
+  border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--bg); touch-action: none; }
+.stage canvas { display: block; width: 100%; height: 100%; }
+.status { position: absolute; left: 10px; top: 8px; font-size: .8rem; color: var(--muted); font-family: var(--font-num); pointer-events: none; }
+.readout { position: absolute; right: 10px; bottom: 8px; font-size: .78rem; color: var(--muted); font-family: var(--font-num); text-align: right; pointer-events: none; font-variant-numeric: tabular-nums; }
+.controls { display: flex; flex-direction: column; gap: 10px; }
+.row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.row .label { font-size: .8rem; color: var(--muted); min-width: 3.5em; }
+button { font: inherit; font-size: .9rem; color: var(--fg); background: var(--panel); border: 1px solid var(--line);
+  border-radius: 6px; padding: 7px 12px; cursor: pointer; min-height: 38px; }
+button[aria-pressed="true"] { border-color: var(--scale); background: #1a221d; color: #fff; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.gallery { display: grid; grid-template-columns: 1fr; gap: 14px; }
+figure { margin: 0; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+figure img { width: 100%; height: auto; border-radius: 6px; border: 1px solid var(--line); background: #000; }
+figcaption { font-size: .85rem; color: var(--muted); }
+.tag { display: inline-block; font-size: .72rem; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--accent); margin-right: 6px; }
+.ortho { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+table { border-collapse: collapse; width: 100%; font-size: .86rem; }
+td, th { border-bottom: 1px solid var(--line); padding: 6px 8px; text-align: left; vertical-align: top; }
+th { color: var(--muted); font-weight: 500; white-space: nowrap; }
+.tablewrap { overflow-x: auto; }
+@media (min-width: 760px) { .gallery.two { grid-template-columns: 1fr 1fr; } }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>dT/dt過速世界 恒星間宇宙船</h1>
+    <p class="muted">指1本で回転、2本でズームと移動。全長は約109 km（居住区円筒77 km、直径約7.6 km）。船尾の稼働中推進器は、内部で核融合パルスが光ります。</p>
+  </header>
+
+  <section class="stage" id="stage" aria-label="3Dモデル">
+    <div class="status" id="status">モデルを生成中…</div>
+    <div class="readout" id="readout"></div>
+  </section>
+
+  <section class="controls">
+    <div class="row" role="group" aria-label="形態">
+      <span class="label">形態</span>
+      <button id="m-cruise" data-mode="cruise" aria-pressed="true">巡航（閉）</button>
+      <button id="m-open" data-mode="open" aria-pressed="false">シールド展開</button>
+      <button id="m-decel" data-mode="decel" aria-pressed="false">減速時</button>
+    </div>
+    <div class="row" role="group" aria-label="視点">
+      <span class="label">視点</span>
+      <button id="v-34" data-view="34">斜め</button>
+      <button id="v-side" data-view="side">側面</button>
+      <button id="v-front" data-view="front">船首正面</button>
+      <button id="v-rear" data-view="rear">船尾背面</button>
+      <button id="v-bow" data-view="bow">船首拡大</button>
+      <button id="v-joint" data-view="joint">接続部</button>
+      <button id="v-stern" data-view="stern">船尾拡大</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>3Dモデルの拡大</h2>
+    <div class="gallery two">
+      <figure><img src="img/stern3d.jpg" alt="船尾推進区画（3Dモデル）" loading="lazy">
+        <figcaption><span class="tag">3Dモデル</span>船尾。最大級コブ10個を正十角形に配置し、1つおきの5個に稼働中の円錐形推進器を20基ずつ（計100基）。その前方の小さめのコブには、建造中・解体中の推進器の穴。</figcaption></figure>
+      <figure><img src="img/bow_joint.jpg" alt="船首側の接続部（3Dモデル）" loading="lazy">
+        <figcaption><span class="tag">3Dモデル</span>円筒と船首シールドをつなぐ構造帯。溝つきの帯、継ぎ目、太い首。</figcaption></figure>
+      <figure><img src="img/open_bow.jpg" alt="装甲葉の展開（3Dモデル）" loading="lazy">
+        <figcaption><span class="tag">3Dモデル</span>装甲葉の展開（径151%）。並びをランダムにしたうえで、前方から見て隙間がないことを計算で確認済み。</figcaption></figure>
+      <figure><img src="img/open_front.jpg" alt="展開時の前方投影（3Dモデル）" loading="lazy">
+        <figcaption><span class="tag">3Dモデル</span>展開時を真正面から見た図。</figcaption></figure>
+    </div>
+  </section>
+
+  <section>
+    <h2>写実イメージ（前回版）</h2>
+    <p class="muted" style="margin-bottom:8px">接続部・推進器・質感を変更する前の3Dモデルから作った画像です。</p>
+    <div class="gallery two">
+      <figure><img src="img/main.jpg" alt="巡航形態の全景（写実化）" loading="lazy">
+        <figcaption><span class="tag">AI写実化</span>巡航形態の全景。3Dモデルの画像をもとに写実化。船首シールドの装甲葉の重なりは、写実化で一部失われています。</figcaption></figure>
+      <figure><img src="img/stern.jpg" alt="船尾推進区画の拡大（写実化）" loading="lazy">
+        <figcaption><span class="tag">AI写実化</span>船尾推進区画。前方に小さなコブ、後方ほど大きなコブ。</figcaption></figure>
+      <figure><img src="img/decel.jpg" alt="減速時形態（写実化）" loading="lazy">
+        <figcaption><span class="tag">AI写実化</span>減速時。船首シールドを円筒径の約6倍に増設。</figcaption></figure>
+    </div>
+  </section>
+
+  <section>
+    <h2>設定図（3Dモデルからの正投影）</h2>
+    <figure><img src="img/ortho_side.jpg" alt="側面図" loading="lazy"><figcaption>側面（左が船尾、右が船首）</figcaption></figure>
+    <div class="ortho" style="margin-top:10px">
+      <figure><img src="img/ortho_rear.jpg" alt="船尾背面図" loading="lazy"><figcaption>船尾背面（大型コブ10個、稼働中推進器100基）</figcaption></figure>
+      <figure><img src="img/open_front.jpg" alt="展開時の船首正面図" loading="lazy"><figcaption>船首正面（装甲葉展開時）</figcaption></figure>
+    </div>
+  </section>
+
+  <section>
+    <h2>既定設定と仮設定</h2>
+    <div class="tablewrap"><table>
+      <tr><th>項目</th><th>値</th><th>区分</th></tr>
+      <tr><td>居住区円筒</td><td>内径7.0 km、長さ77.0 km</td><td>既定</td></tr>
+      <tr><td>中心軸</td><td>直径約200 m、非回転</td><td>既定</td></tr>
+      <tr><td>巡航時シールド径</td><td>円筒径の120%（展開時150%）</td><td>既定</td></tr>
+      <tr><td>減速時シールド径</td><td>円筒径の6倍（既定は5〜7倍）</td><td>仮</td></tr>
+      <tr><td>稼働中の推進器</td><td>円錐形100基。大型コブ10個のうち1つおきの5個に20基ずつ（中心1＋環6＋環13）</td><td>既定（配置は仮）</td></tr>
+      <tr><td>建造中・解体中の推進器</td><td>穴のみ。各100個。稼働中コブの前方に小さめのコブを2個ずつ（建造中・解体中）置き、1個に20穴</td><td>ご指示の解釈（仮）</td></tr>
+      <tr><td>質感</td><td>側面：灰緑のスケイル／シールド：やや白銀のざらついた面／推進器：漆黒の重金属、内部に核融合パルスの発光</td><td>既定</td></tr>
+      <tr><td>接続部の構造帯</td><td>溝つきの帯（長さ2.6 km）＋継ぎ目＋首（外殻径の84%）</td><td>仮</td></tr>
+      <tr><td>展開時の装甲葉</td><td>並びはランダム。前方投影で隙間なし（計算で確認）</td><td>既定</td></tr>
+      <tr><td>外殻の厚さ</td><td>300 m（外径約7.6 km）</td><td>仮</td></tr>
+      <tr><td>シールドの長さ</td><td>14 km</td><td>仮</td></tr>
+      <tr><td>船尾推進区画の長さ</td><td>16 km</td><td>仮</td></tr>
+      <tr><td>回転部と非回転部の隙間</td><td>0.8 km</td><td>仮</td></tr>
+      <tr><td>くびれ・節</td><td>6か所、不規則な間隔</td><td>仮</td></tr>
+      <tr><td>ヒダ</td><td>40本、ゆるいねじれ</td><td>仮</td></tr>
+      <tr><td>減速時の推進器</td><td>船首シールド前面に推進コブ群を移設</td><td>仮（移設先の位置）</td></tr>
+    </table></div>
+  </section>
+</div>
+
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.185.1/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { buildShip } from './ship.js';
+
+const stage = document.getElementById('stage');
+const statusEl = document.getElementById('status');
+const readout = document.getElementById('readout');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+stage.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x07090c);
+const camera = new THREE.PerspectiveCamera(40, 1, 0.05, 4000);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.minDistance = 4;
+controls.maxDistance = 600;
+controls.screenSpacePanning = true;
+
+scene.add(new THREE.AmbientLight(0x9aa4b0, 0.85));
+const key = new THREE.DirectionalLight(0xfff1dc, 3.4); key.position.set(30, 60, 45); scene.add(key);
+const rim = new THREE.DirectionalLight(0x9db4d0, 1.1); rim.position.set(-60, -10, -40); scene.add(rim);
+{
+  const g = new THREE.BufferGeometry(); const n = 2500; const a = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) { const v = new THREE.Vector3().randomDirection().multiplyScalar(1500); a.set([v.x, v.y, v.z], i * 3); }
+  g.setAttribute('position', new THREE.BufferAttribute(a, 3));
+  scene.add(new THREE.Points(g, new THREE.PointsMaterial({ color: 0x8890a0, size: 1.3, sizeAttenuation: false })));
+}
+
+const VIEWS = {
+  '34': { pos: [28, 22, 92], target: [-1, 0, 0] },
+  side: { pos: [0, 0, 150], target: [0, 0, 0] },
+  front: { pos: [150, 0, 0.01], target: [0, 0, 0] },
+  rear: { pos: [-150, 0, 0.01], target: [0, 0, 0] },
+  bow: { pos: [70, 16, 27], target: [45, 0, 0] },
+  joint: { pos: [44, 9, 16], target: [38, 0, 0] },
+  stern: { pos: [-64, 15, 30], target: [-50, 0, 0] },
+};
+const DECEL_VIEWS = { '34': { pos: [100, 46, 100], target: [2, 0, 0] }, front: { pos: [200, 0, 0.01], target: [0, 0, 0] }, rear: { pos: [-200, 0, 0.01], target: [0, 0, 0] } };
+let mode = 'cruise';
+function setView(name) {
+  const v = (mode === 'decel' && DECEL_VIEWS[name]) || VIEWS[name];
+  camera.position.set(...v.pos);
+  controls.target.set(...v.target);
+  controls.update();
+}
+
+const cache = {};
+let glowMats = [];
+let current = null;
+async function showMode(m) {
+  mode = m;
+  document.querySelectorAll('[data-mode]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
+  if (!cache[m]) {
+    statusEl.textContent = 'モデルを生成中…';
+    await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 30)));
+    cache[m] = buildShip(m);
+  }
+  if (current) scene.remove(current);
+  current = cache[m];
+  scene.add(current);
+  const u = current.userData;
+  const thr = m === 'decel' ? `稼働中推進器${u.activeThrusters}基（船首前面に移設）` : `稼働中推進器${u.activeThrusters}基・穴${u.holes}個（船尾）`;
+  glowMats = [];
+  current.traverse((o) => { if (o.isMesh && o.material.name === 'fusion_glow') glowMats.push(o.material); });
+  readout.textContent = `全長 約${u.lengthKm.toFixed(0)} km ／ ${thr}`;
+  statusEl.textContent = '';
+}
+
+document.querySelectorAll('[data-mode]').forEach((b) => b.addEventListener('click', async () => { await showMode(b.dataset.mode); setView('34'); }));
+document.querySelectorAll('[data-view]').forEach((b) => b.addEventListener('click', () => setView(b.dataset.view)));
+
+function resize() {
+  const w = stage.clientWidth, h = stage.clientHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe(stage);
+resize();
+const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+renderer.setAnimationLoop((t) => {
+  // 核融合パルス: 短い明滅をくり返す
+  const pulse = reduceMotion ? 0.6 : Math.pow(Math.max(0, Math.sin(t * 0.012)), 6);
+  for (const m of glowMats) m.emissiveIntensity = 1.2 + 4.5 * pulse;
+  controls.update();
+  renderer.render(scene, camera);
+});
+
+try {
+  await showMode('cruise');
+  setView('34');
+} catch (e) {
+  statusEl.textContent = '3Dモデルを表示できませんでした: ' + e.message;
+}
+</script>
+
+</body>
+</html>

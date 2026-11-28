@@ -1,0 +1,38 @@
+<!doctype html><html><head><meta charset="utf-8">
+<script type="importmap">{"imports":{"three":"./node_modules/three/build/three.module.js","three/addons/":"./node_modules/three/examples/jsm/"}}</script>
+<style>html,body{margin:0;background:#05070a}</style></head><body>
+<script type="module">
+import * as THREE from 'three';
+import { buildShip } from './ship.js';
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1);
+document.body.appendChild(renderer.domElement);
+const cache = {};
+function stars(scene) {
+  const g = new THREE.BufferGeometry(); const n = 3000; const a = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) { const v = new THREE.Vector3().randomDirection().multiplyScalar(900); a.set([v.x, v.y, v.z], i * 3); }
+  g.setAttribute('position', new THREE.BufferAttribute(a, 3));
+  scene.add(new THREE.Points(g, new THREE.PointsMaterial({ color: 0x8890a0, size: 1.2, sizeAttenuation: false })));
+}
+window.renderView = (opt) => {
+  const { mode, w, h, ortho, pos, target, span, bg = 0x05070a } = opt;
+  renderer.setSize(w, h);
+  const scene = new THREE.Scene(); scene.background = new THREE.Color(bg);
+  if (!cache[mode]) cache[mode] = buildShip(mode);
+  scene.add(cache[mode]);
+  if (opt.stars !== false) stars(scene);
+  scene.add(new THREE.AmbientLight(0x9aa4b0, 0.85));
+  const key = new THREE.DirectionalLight(0xfff1dc, 3.4); key.position.set(30, 60, 45); scene.add(key);
+  const rim = new THREE.DirectionalLight(0x9db4d0, 1.1); rim.position.set(-60, -10, -40); scene.add(rim);
+  let cam;
+  if (ortho) {
+    const aspect = w / h; const half = span / 2;
+    cam = new THREE.OrthographicCamera(-half, half, half / aspect, -half / aspect, 0.1, 2000);
+  } else cam = new THREE.PerspectiveCamera(opt.fov || 30, w / h, 0.05, 3000);
+  cam.position.set(...pos); cam.lookAt(new THREE.Vector3(...target));
+  renderer.render(scene, cam);
+  scene.remove(cache[mode]);
+  return renderer.domElement.toDataURL('image/png');
+};
+window.ready = true;
+</script></body></html>
